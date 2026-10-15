@@ -340,10 +340,15 @@ remote.add_interface(MOD, {
         if payload.current then
             local technology = force.technologies[payload.current]
             if technology and not technology.researched then
-                force.current_research = technology
-                if payload.progress then
+                -- current_research is read only in 2.1 ("is read only" is the
+                -- error an assignment gets), so a research is started through
+                -- add_research. It can also refuse a technology that is not
+                -- available yet, which is not an error worth failing the sync over.
+                local ok = pcall(function() force.add_research(technology) end)
+                if ok and payload.progress then
                     force.research_progress = payload.progress
                 end
+                applied = applied + 1
             end
         end
 

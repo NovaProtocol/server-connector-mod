@@ -1,4 +1,13 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.5.0
+Date: 2026-10-15
+  Fixed:
+    - Applying a research in progress did nothing. LuaForce::current_research is read
+      only in 2.1 -- assigning to it fails with "is read only" -- so the shared
+      research was never actually started on the receiving server. It now goes through
+      force.add_research, which is the supported path, and a technology that is not
+      available yet is skipped rather than failing the whole sync.
+---------------------------------------------------------------------------------------------------
 Version: 0.4.0
 Date: 2026-10-15
   Features:
