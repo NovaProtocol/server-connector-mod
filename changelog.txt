@@ -1,4 +1,13 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.3.0
+Date: 2026-10-15
+  Features:
+    - The mod reports the in-game events it cannot avoid seeing -- joins and surface
+      changes -- as a bounded queue the node drains with drain_events. The manager
+      cannot observe either for itself, and only the game can witness them, so this
+      is the half of "an interface to Lua" that was missing.
+    - The queue is capped at 64 entries: a queue nobody reads must not grow.
+---------------------------------------------------------------------------------------------------
 Version: 0.2.0
 Date: 2026-10-15
   Changes:

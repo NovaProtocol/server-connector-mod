@@ -81,6 +81,29 @@ end
 -- the trigger
 --------------------------------------------------------------------------------
 
+-- Record what happened, for the manager to read.
+--
+-- The mod cannot push: it has no network, and it only runs when the game calls
+-- it. So the in-game events it cannot avoid seeing are queued here, and the node
+-- drains them over RCON. This is the half of "an interface to Lua" that would
+-- otherwise be missing -- without it the manager cannot know a player joined or
+-- looked somewhere.
+--
+-- Bounded on purpose: a queue nobody reads must not grow without limit.
+local function note(kind, player, surface)
+    storage.events = storage.events or {}
+    storage.events[#storage.events + 1] = {
+        kind = kind,
+        player = player.name,
+        surface = surface or (player.surface and player.surface.name) or nil,
+        body = storage.body[player.name],
+        tick = game.tick,
+    }
+    while #storage.events > 64 do
+        table.remove(storage.events, 1)
+    end
+end
+
 -- Fires after the player changes surfaces, including a change of what they are
 -- viewing in remote view. If they have looked at a surface another server owns,
 -- this is the moment to hand them over.
@@ -90,6 +113,8 @@ end
 -- until it gives up, with nothing logged anywhere.
 local function route_if_elsewhere(player)
     local viewed = player.surface
+    note("surface", player, viewed and viewed.name or nil)
+
     local target = destination_for(viewed)
 
     if not target then
@@ -166,6 +191,7 @@ end)
 script.on_event(defines.events.on_player_joined_game, function(event)
     local player = game.get_player(event.player_index)
     if player then
+        note("joined", player)
         apply_join_rule(player)
     end
 end)
@@ -229,6 +255,15 @@ remote.add_interface(MOD, {
             apply_join_rule(player)
         end
         return {name = name, body = storage.body[name] or instance()}
+    end,
+
+    -- Everything the game has told this mod since the last drain, so the manager
+    -- can act on joins and surface changes it cannot see for itself.
+    drain_events = function()
+        ensure_storage()
+        local events = storage.events or {}
+        storage.events = {}
+        return events
     end,
 
     -- One poll's worth of state, for the manager's health board.
