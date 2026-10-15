@@ -1,4 +1,19 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.4.0
+Date: 2026-10-15
+  Features:
+    - research_state reports this server's tech tree: what is researched, what is in
+      progress and how far along.
+    - apply_research takes the shared tree back: technologies to mark done, and where
+      the research in progress stands. The manager merges every server and sends the
+      result, because no server can see another's tree.
+    - on_research_finished and on_research_started are queued as events, so the
+      manager learns about research without waiting for a poll to notice.
+  Note:
+    - Every server in the stack has exactly one surface, so each one has its own copy
+      of the tech tree and they drift apart the moment anybody researches anything.
+      This is what stops that.
+---------------------------------------------------------------------------------------------------
 Version: 0.3.0
 Date: 2026-10-15
   Features:

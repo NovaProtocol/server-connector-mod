@@ -197,6 +197,61 @@ script.on_event(defines.events.on_player_joined_game, function(event)
 end)
 
 --------------------------------------------------------------------------------
+-- research
+--------------------------------------------------------------------------------
+
+-- The tech tree is one tree in Space Age, but this stack runs one save per planet,
+-- so every server has its own copy of it and they drift apart immediately. The
+-- manager owns the shared state; the mod reports what it has and applies what it
+-- is told, which is the same split as everything else here.
+
+local function main_force()
+    return game.forces.player or game.forces[1]
+end
+
+local function research_state()
+    local force = main_force()
+    local researched = {}
+    for name, technology in pairs(force.technologies) do
+        if technology.researched then
+            researched[#researched + 1] = name
+        end
+    end
+    table.sort(researched)
+
+    return {
+        instance = instance(),
+        researched = researched,
+        current = force.current_research and force.current_research.name or nil,
+        progress = force.research_progress,
+        tick = game.tick,
+    }
+end
+
+local function note_research(kind, name)
+    if not name then
+        return
+    end
+    storage.events = storage.events or {}
+    storage.events[#storage.events + 1] = {
+        kind = kind,
+        tech = name,
+        tick = game.tick,
+    }
+    while #storage.events > 64 do
+        table.remove(storage.events, 1)
+    end
+end
+
+script.on_event(defines.events.on_research_finished, function(event)
+    note_research("researched", event.research and event.research.name)
+end)
+
+script.on_event(defines.events.on_research_started, function(event)
+    note_research("research-started", event.research and event.research.name)
+end)
+
+--------------------------------------------------------------------------------
 -- commands
 --------------------------------------------------------------------------------
 
@@ -255,6 +310,44 @@ remote.add_interface(MOD, {
             apply_join_rule(player)
         end
         return {name = name, body = storage.body[name] or instance()}
+    end,
+
+    -- What this server's tech tree looks like, for the manager to merge with the
+    -- others.
+    research_state = function()
+        ensure_storage()
+        return research_state()
+    end,
+
+    -- Apply the shared research: technologies to mark done, and where the research
+    -- in progress stands. The manager sends this, because no server can know what
+    -- the others have researched.
+    apply_research = function(payload)
+        ensure_storage()
+        payload = payload or {}
+
+        local force = main_force()
+        local applied = 0
+
+        for _, name in ipairs(payload.researched or {}) do
+            local technology = force.technologies[name]
+            if technology and not technology.researched then
+                technology.researched = true
+                applied = applied + 1
+            end
+        end
+
+        if payload.current then
+            local technology = force.technologies[payload.current]
+            if technology and not technology.researched then
+                force.current_research = technology
+                if payload.progress then
+                    force.research_progress = payload.progress
+                end
+            end
+        end
+
+        return {instance = instance(), applied = applied}
     end,
 
     -- Everything the game has told this mod since the last drain, so the manager
