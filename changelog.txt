@@ -1,15 +1,31 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.2.0
+Date: 2026-10-15
+  Changes:
+    - The trigger is the game's own remote view. on_player_changed_surface fires when
+      the surface being *viewed* changes, including a click onto another planet in
+      remote view, and this mod routes on it -- so the picker is the interface the game
+      already has.
+    - Removed the custom travel menu, its top-bar button and the server-connector-travel
+      command. They were the wrong idea: a menu this mod drew instead of using remote
+      view.
+  Features:
+    - Routing now keys off the viewed surface rather than a menu: a planet surface maps
+      to the server named after it, and any platform surface maps to the space server.
+    - A routed guard keeps the handler from re-firing on a destination it has already
+      acted on.
+    - report includes viewing_surface, so the manager can see what a player is looking
+      at and not only where their body is.
+---------------------------------------------------------------------------------------------------
 Version: 0.1.0
 Date: 2026-10-15
   Features:
-    - Routes a player to another server with connect_to_server, from a menu or the
-      server-connector-travel command.
-    - Knows which planet (or the space platforms) this server handles, from the
-      server-connector-instance startup setting.
-    - Takes the rest of the topology over RCON via remote.call, so the manager can
-      change the destination set without restarting anything.
+    - Routes a player to another server with connect_to_server.
+    - Knows which planet (or the space platforms) this server handles, pushed over RCON.
+    - Takes the rest of the topology over RCON, so the manager can change the destination
+      set without restarting anything.
     - Puts a player whose body is on another server into the remote controller, with
       leaving it disabled so they cannot drop into free build.
-    - Reports identity, tick, speed and connected players as JSON for the manager's
-      health page.
+    - Reports identity, tick, speed and connected players as JSON for the health board.
 ---------------------------------------------------------------------------------------------------
+

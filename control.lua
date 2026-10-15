@@ -1,26 +1,25 @@
 -- server-connector-mod: routing for a Factorio world split across servers.
 --
--- This server handles exactly one planet (or the space platforms). Everything
--- outside it -- where each player's body is, and what the other servers are --
--- belongs to the manager, because a mod cannot see past its own save.
+-- The trigger is the game's own remote view, not a menu this mod draws. Opening
+-- remote view onto another planet and clicking it changes the surface the player
+-- is *viewing*, and that fires on_player_changed_surface even though the body
+-- never moved. So the picker is the interface the game already has, and this mod
+-- only has to notice where the player looked and send them there.
 --
--- Two channels carry that in:
+-- Everything outside this server -- where each player's body is, and what the
+-- other servers are -- comes from the manager, because a mod cannot see past its
+-- own save. It is an interface to Lua: it holds no policy of its own.
 --
---   identity  a startup setting, written into config/mod-settings.json by the
---             manager before launch. Known from on_init, survives restarts, no
---             race with a server that has not finished starting.
---   topology  remote.call("server-connector", "set_topology", ...) over RCON
---             once this server is up. Runtime, so the set can change without
---             restarting anything. Absent means "no destinations", never a
---             guess at an address.
+--   identity  remote.call("server-connector","set_instance", ...), pushed by the
+--             node once this server is up. A headless server does not import
+--             mod-settings.json, so a startup setting never arrives.
+--   topology  remote.call("server-connector","set_topology", ...), pushed by the
+--             manager: the other servers' ids, names and client addresses.
 --
 -- Nothing here is a script command, so using it never stops achievements.
 
 local MOD = "server-connector"
-local SCHEMA = 1
-
-local GUI_TOP_BUTTON = MOD .. "-open"
-local GUI_FRAME = MOD .. "-menu"
+local SCHEMA = 2
 
 --------------------------------------------------------------------------------
 -- storage
@@ -30,7 +29,8 @@ local function ensure_storage()
     storage.schema = storage.schema or SCHEMA
     storage.topology = storage.topology or {}   -- instance id -> {name, address}
     storage.body = storage.body or {}           -- player name -> instance id
-    storage.viewing = storage.viewing or {}     -- player name -> true, for §4.1
+    storage.viewing = storage.viewing or {}     -- player name -> true, for the join rule
+    storage.routed = storage.routed or {}       -- player name -> last surface routed from
 end
 
 --------------------------------------------------------------------------------
@@ -40,9 +40,8 @@ end
 -- Identity is a property of the container. The startup setting is the intended
 -- carrier, but a headless server does not import mod-settings.json: it compiles
 -- mod-settings.dat from defaults and ignores the .json beside it, so the setting
--- never arrives. The manager therefore pushes the instance over the same RCON
--- channel as the topology, and the setting is kept as the fallback for anyone
--- who sets it by hand in the game.
+-- never arrives. The node therefore pushes it, and the setting is kept as the
+-- fallback for anyone who sets it by hand in the game.
 local function instance()
     if storage and storage.instance then
         return storage.instance
@@ -62,6 +61,57 @@ local function destinations()
     return out
 end
 
+-- Which server owns a surface the player is looking at.
+--
+-- A planet surface is named after its planet, so the instance id and the surface
+-- name are the same string for the five planets, and the topology lookup finds it
+-- directly. Anything with a platform is the space server, because every platform
+-- lives there regardless of which one the player picked.
+local function destination_for(surface)
+    if not surface then
+        return nil
+    end
+    if surface.platform then
+        return storage.topology["space"] and "space" or nil
+    end
+    return storage.topology[surface.name] and surface.name or nil
+end
+
+--------------------------------------------------------------------------------
+-- the trigger
+--------------------------------------------------------------------------------
+
+-- Fires after the player changes surfaces, including a change of what they are
+-- viewing in remote view. If they have looked at a surface another server owns,
+-- this is the moment to hand them over.
+--
+-- The address is the one a *client* dials. Pointing a player at an RCON port
+-- produces a prompt that reads correctly and a client that sits at "connecting"
+-- until it gives up, with nothing logged anywhere.
+local function route_if_elsewhere(player)
+    local viewed = player.surface
+    local target = destination_for(viewed)
+
+    if not target then
+        storage.routed[player.name] = nil
+        return
+    end
+
+    -- Already looking at where we would send them: nothing to do, and this is
+    -- what stops the handler from bouncing a player every time it fires.
+    if storage.routed[player.name] == target then
+        return
+    end
+
+    local entry = storage.topology[target]
+    storage.routed[player.name] = target
+
+    log(string.format("[%s] %s looked at %s, sending them to %s",
+        instance(), player.name, viewed.name, entry.name or target))
+
+    player.connect_to_server{address = entry.address, name = entry.name or target}
+end
+
 --------------------------------------------------------------------------------
 -- the join rule
 --------------------------------------------------------------------------------
@@ -72,8 +122,7 @@ end
 --
 -- The remote controller is an *overlay* on a physical one, so leaving it returns
 -- the player to that -- and a bodyless player's physical controller is god mode.
--- toggle_menu_leaves_remote_view = false is therefore load-bearing, not a
--- nicety: without it the spectator can drop into free build and generate chunks.
+-- toggle_menu_leaves_remote_view = false is therefore load-bearing, not a nicety.
 local function apply_join_rule(player)
     local here = storage.body[player.name]
     if not here or here == instance() then
@@ -91,120 +140,33 @@ local function apply_join_rule(player)
     }
     player.toggle_menu_leaves_remote_view = false
     player.disable_space_map = true
-    player.print("Your body is on another server. Looking only: no walking, no items. Blueprints place as ghosts.")
-end
-
---------------------------------------------------------------------------------
--- the menu
---------------------------------------------------------------------------------
-
-local function close_menu(player)
-    local frame = player.gui.screen[GUI_FRAME]
-    if frame and frame.valid then
-        frame.destroy()
-    end
-end
-
-local function build_menu(player)
-    close_menu(player)
-
-    local frame = player.gui.screen.add{
-        type = "frame",
-        name = GUI_FRAME,
-        direction = "vertical",
-        caption = "Travel",
-    }
-    frame.auto_center = true
-
-    frame.add{
-        type = "label",
-        caption = "This server is " .. instance() .. ". Your body is on " ..
-            (storage.body[player.name] or "an unknown server") .. ".",
-    }
-
-    local list = destinations()
-    if #list == 0 then
-        -- No topology yet. Say so plainly rather than offering nothing.
-        frame.add{
-            type = "label",
-            caption = "No destinations configured yet. The manager has not sent the topology.",
-        }
-    else
-        for _, destination in ipairs(list) do
-            local row = frame.add{type = "flow", name = MOD .. "-row-" .. destination.id, direction = "horizontal"}
-            row.add{
-                type = "button",
-                name = MOD .. "-go-" .. destination.id,
-                caption = destination.name,
-                style = "button",
-            }
-            row.add{type = "label", caption = destination.address}
-        end
-    end
-
-    frame.add{type = "button", name = MOD .. "-close", caption = "Close"}
 end
 
 --------------------------------------------------------------------------------
 -- events
 --------------------------------------------------------------------------------
 
-local function on_init()
+script.on_init(function()
     ensure_storage()
     log("[" .. MOD .. "] instance=" .. instance())
-end
+end)
 
-script.on_init(on_init)
-
-script.on_configuration_changed(function(data)
+script.on_configuration_changed(function()
     ensure_storage()
     storage.schema = SCHEMA
+end)
+
+script.on_event(defines.events.on_player_changed_surface, function(event)
+    local player = game.get_player(event.player_index)
+    if player then
+        route_if_elsewhere(player)
+    end
 end)
 
 script.on_event(defines.events.on_player_joined_game, function(event)
     local player = game.get_player(event.player_index)
     if player then
         apply_join_rule(player)
-        build_menu(player) -- rebuild so the caption reflects the current topology
-    end
-end)
-
-script.on_event(defines.events.on_player_created, function(event)
-    local player = game.get_player(event.player_index)
-    if player and not player.gui.top[GUI_TOP_BUTTON] then
-        player.gui.top.add{type = "button", name = GUI_TOP_BUTTON, caption = "Travel"}
-    end
-end)
-
-script.on_event(defines.events.on_gui_click, function(event)
-    local element = event.element
-    if not element or not element.valid then
-        return
-    end
-
-    local player = game.get_player(event.player_index)
-    if not player then
-        return
-    end
-
-    if element.name == GUI_TOP_BUTTON then
-        build_menu(player)
-        return
-    end
-
-    if element.name == MOD .. "-close" then
-        close_menu(player)
-        return
-    end
-
-    local target = element.name:match("^" .. MOD .. "%-go%-(.+)$")
-    if target and storage.topology[target] then
-        local entry = storage.topology[target]
-        -- The address must be the address a *client* dials. Pointing a player at
-        -- an RCON port produces a prompt that looks right and a client that sits
-        -- at "connecting" forever, with nothing logged anywhere.
-        player.connect_to_server{address = entry.address, name = entry.name or target}
-        close_menu(player)
     end
 end)
 
@@ -213,67 +175,42 @@ end)
 --------------------------------------------------------------------------------
 
 commands.add_command(
-    MOD .. "-travel",
-    "Open the travel menu.",
-    function(event)
-        local player = event.player_index and game.get_player(event.player_index)
-        if player then
-            build_menu(player)
-        elseif rcon then
-            rcon.print("run this from in-game, or use remote.call('" .. MOD .. "', 'open_menu', <player>)")
-        end
-    end
-)
-
-commands.add_command(
     MOD .. "-status",
-    "Report this server's identity, topology size, and connected players as JSON.",
+    "Report this server's identity, its topology size and its connected players as JSON.",
     function(event)
         local text = helpers.table_to_json(remote.call(MOD, "report"))
-        if event.player_index then
-            local player = game.get_player(event.player_index)
-            if player then
-                player.print(text)
-                return
-            end
-        end
-        if rcon then
+        if event.player_index and game.get_player(event.player_index) then
+            game.get_player(event.player_index).print(text)
+        elseif rcon then
             rcon.print(text)
         end
     end
 )
 
 --------------------------------------------------------------------------------
--- what the manager drives over RCON
+-- what the node and the manager drive over RCON
 --------------------------------------------------------------------------------
 
 remote.add_interface(MOD, {
-    -- Which server this is. Pushed by the manager at startup, because the
+    -- Which server this is. Pushed by the node at startup, because the
     -- mod-settings.json route is not read on a headless server (see instance()).
     set_instance = function(id)
         ensure_storage()
         storage.instance = id
-        storage.body = storage.body or {}
         -- Anything recorded against the old identity is meaningless now.
         storage.body = {}
         log("[" .. MOD .. "] instance=" .. tostring(id))
         return {instance = instance()}
     end,
 
-    -- Replace the whole destination table. Idempotent: sending the same set
-    -- twice changes nothing, so a retried push is harmless.
+    -- Replace the whole destination table. Idempotent: sending the same set twice
+    -- changes nothing, so a retried push is harmless.
     set_topology = function(topology)
         ensure_storage()
         storage.topology = {}
         for id, entry in pairs(topology or {}) do
             if type(entry) == "table" and entry.address then
                 storage.topology[id] = {name = entry.name or id, address = entry.address}
-            end
-        end
-        -- Refresh any open menu so it shows the new set immediately.
-        for _, player in pairs(game.connected_players) do
-            if player.gui.screen[GUI_FRAME] then
-                build_menu(player)
             end
         end
         return {instance = instance(), destinations = #destinations()}
@@ -294,16 +231,7 @@ remote.add_interface(MOD, {
         return {name = name, body = storage.body[name] or instance()}
     end,
 
-    open_menu = function(name)
-        local player = game.get_player(name)
-        if not player then
-            return {error = "no player named " .. tostring(name) .. " on this server"}
-        end
-        build_menu(player)
-        return {ok = true}
-    end,
-
-    -- One poll's worth of state, for the manager's health page.
+    -- One poll's worth of state, for the manager's health board.
     report = function()
         local players = {}
         for _, player in pairs(game.connected_players) do
@@ -311,6 +239,7 @@ remote.add_interface(MOD, {
                 name = player.name,
                 admin = player.admin,
                 viewing = storage.viewing[player.name] == true,
+                viewing_surface = player.surface and player.surface.name or nil,
             }
         end
         return {
