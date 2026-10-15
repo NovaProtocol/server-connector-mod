@@ -1,0 +1,15 @@
+---------------------------------------------------------------------------------------------------
+Version: 0.1.0
+Date: 2026-10-15
+  Features:
+    - Routes a player to another server with connect_to_server, from a menu or the
+      server-connector-travel command.
+    - Knows which planet (or the space platforms) this server handles, from the
+      server-connector-instance startup setting.
+    - Takes the rest of the topology over RCON via remote.call, so the manager can
+      change the destination set without restarting anything.
+    - Puts a player whose body is on another server into the remote controller, with
+      leaving it disabled so they cannot drop into free build.
+    - Reports identity, tick, speed and connected players as JSON for the manager's
+      health page.
+---------------------------------------------------------------------------------------------------

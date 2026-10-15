@@ -1,0 +1,13 @@
+{
+  "name": "server-connector-mod",
+  "version": "0.1.0",
+  "title": "Server Connector",
+  "author": "NovaProtocol",
+  "contact": "https://github.com/NovaProtocol/server-connector-mod",
+  "homepage": "https://github.com/NovaProtocol/server-connector-mod",
+  "description": "Routes players between the servers of a split Factorio world. This server handles one planet (or the space platforms); the manager tells it what the others are.",
+  "factorio_version": "2.1",
+  "dependencies": [
+    "base >= 2.0"
+  ]
+}
