@@ -22,7 +22,9 @@ import os
 import subprocess
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
+import uuid
 import zipfile
 from pathlib import Path
 
@@ -108,11 +110,72 @@ def publish(zip_path, stem, repo, tag, token):
     return asset["browser_download_url"]
 
 
+MOD_PORTAL = "https://mods.factorio.com"
+
+
+def portal_init(name, key, publish):
+    """Ask the portal for an upload URL. init_publish creates the mod page;
+    init_upload adds a release to a page that already exists."""
+    endpoint = "/api/v2/mods/init_publish" if publish else "/api/v2/mods/releases/init_upload"
+
+    body = urllib.parse.urlencode({"mod": name}).encode()
+    request = urllib.request.Request(MOD_PORTAL + endpoint, data=body, method="POST")
+    request.add_header("Authorization", f"Bearer {key}")
+    request.add_header("Content-Type", "application/x-www-form-urlencoded")
+
+    try:
+        with urllib.request.urlopen(request) as response:
+            return json.loads(response.read())["upload_url"]
+    except urllib.error.HTTPError as error:
+        detail = error.read().decode(errors="replace")
+        raise SystemExit(f"portal {endpoint} failed: {error.code} {detail}") from None
+
+
+def portal_send(upload_url, zip_path, key):
+    """POST the zip as multipart form data. urllib has no encoder for that, so the
+    body is built by hand -- small, and it keeps the script dependency-free."""
+    boundary = "----server-connector" + uuid.uuid4().hex
+    content = zip_path.read_bytes()
+
+    body = b"".join([
+        f"--{boundary}\r\n".encode(),
+        f'Content-Disposition: form-data; name="file"; filename="{zip_path.name}"\r\n'.encode(),
+        b"Content-Type: application/zip\r\n\r\n",
+        content,
+        b"\r\n",
+        f"--{boundary}--\r\n".encode(),
+    ])
+
+    if not upload_url.startswith("http"):
+        upload_url = MOD_PORTAL + upload_url
+
+    request = urllib.request.Request(upload_url, data=body, method="POST")
+    request.add_header("Authorization", f"Bearer {key}")
+    request.add_header("Content-Type", f"multipart/form-data; boundary={boundary}")
+
+    try:
+        with urllib.request.urlopen(request) as response:
+            return json.loads(response.read())
+    except urllib.error.HTTPError as error:
+        detail = error.read().decode(errors="replace")
+        raise SystemExit(f"portal upload failed: {error.code} {detail}") from None
+
+
+def publish_to_portal(zip_path, info, key, create):
+    upload_url = portal_init(info["name"], key, create)
+    result = portal_send(upload_url, zip_path, key)
+    print(f"portal: uploaded {info['name']} {info['version']} -> {result.get('url', result)}")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--tag", help="create and publish a release at this tag, e.g. v0.1.0")
     parser.add_argument("--repo", default=DEFAULT_REPO)
     parser.add_argument("--commit", action="store_true", help="commit the package change first")
+    parser.add_argument("--portal", action="store_true",
+                        help="also upload to the mod portal (needs MOD_PORTAL_KEY)")
+    parser.add_argument("--create-page", action="store_true",
+                        help="with --portal, create the mod page first; only valid once")
     args = parser.parse_args()
 
     info = read_info()
@@ -137,6 +200,14 @@ def main():
 
     url = publish(zip_path, stem, args.repo, args.tag, token)
     print(f"manager can fetch it from {url}")
+
+    if args.portal:
+        key = os.environ.get("MOD_PORTAL_KEY")
+        if not key:
+            print("MOD_PORTAL_KEY is required for --portal", file=sys.stderr)
+            return 2
+        publish_to_portal(zip_path, info, key, args.create_page)
+
     return 0
 
 

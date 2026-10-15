@@ -1,4 +1,14 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.6.0
+Date: 2026-10-15
+  Changed:
+    - The node reaches the mod through one plain command, server-connector-call, instead
+      of `/c remote.call(...)`. `/c` is a script command, so every poll permanently
+      marked the save as cheated, and it echoed into the chat -- a manager polling every
+      few seconds filled the screen of anyone playing. A mod's own command does neither.
+    - The call surface is one command name taking {"fn": ..., "args": [...]}, so the node
+      depends on one thing that does not move as the interface grows.
+---------------------------------------------------------------------------------------------------
 Version: 0.5.0
 Date: 2026-10-15
   Fixed:

@@ -272,7 +272,15 @@ commands.add_command(
 -- what the node and the manager drive over RCON
 --------------------------------------------------------------------------------
 
-remote.add_interface(MOD, {
+-- The calls the node makes, registered both as a remote interface and as one plain
+-- command -- and the node uses the command.
+--
+-- The obvious route is `/c remote.call(...)`, and that is what this started as.
+-- It is wrong twice over: `/c` is a *script* command, which permanently marks the
+-- save as cheated, and it echoes into the chat, so a manager polling every few
+-- seconds fills the screen a player is trying to play on. A mod's own command does
+-- neither, which is the whole reason the companion mod did it this way.
+local calls = {
     -- Which server this is. Pushed by the node at startup, because the
     -- mod-settings.json route is not read on a headless server (see instance()).
     set_instance = function(id)
@@ -384,4 +392,37 @@ remote.add_interface(MOD, {
             schema = storage.schema,
         }
     end,
-})
+}
+
+remote.add_interface(MOD, calls)
+
+-- One entry point for everything above: the node sends {"fn": "...", "args": [...]}
+-- and gets the result back as JSON. A single command rather than one per call, so
+-- the surface the node depends on is one name that does not move.
+commands.add_command(
+    MOD .. "-call",
+    "Internal: how the node reaches this mod's interface. Not for use by players.",
+    function(event)
+        local out = {ok = false}
+
+        local decodedOk, payload = pcall(function()
+            return helpers.json_to_table(event.parameter)
+        end)
+
+        if decodedOk and type(payload) == "table" and type(payload.fn) == "string" and calls[payload.fn] then
+            local called, result = pcall(calls[payload.fn], table.unpack(payload.args or {}))
+            if called then
+                out = result or {ok = true}
+            else
+                out = {ok = false, error = tostring(result)}
+            end
+        else
+            out = {ok = false, error = "unknown call"}
+        end
+
+        -- rcon.print reaches the RCON client and nobody else, which is the point.
+        if rcon then
+            rcon.print(helpers.table_to_json(out))
+        end
+    end
+)
