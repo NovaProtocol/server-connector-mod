@@ -1,4 +1,18 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.8.0
+Date: 2026-10-16
+  Fixed:
+    - A technology the fleet had outgrown could not be marked researched. Setting the flag
+      while the game was researching that technology was dropped and the research kept
+      running, so a research the manager had started could never be finished by it, and a
+      fleet could sit on the same technology for good. The research is cancelled first --
+      the supported way to abandon one -- and the call now reports what actually took
+      rather than what it asked for.
+  Note:
+    - Found by driving the shared research against a running six-server stack: two
+      planets contributing at once, a planet falling behind, a research finishing, and a
+      planet that was stopped while it finished.
+---------------------------------------------------------------------------------------------------
 Version: 0.7.0
 Date: 2026-10-16
   Changed:

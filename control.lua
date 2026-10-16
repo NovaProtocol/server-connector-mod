@@ -374,8 +374,22 @@ local calls = {
         for _, name in ipairs(payload.researched or {}) do
             local technology = force.technologies[name]
             if technology and not technology.researched then
+                -- A technology the game is currently researching cannot be marked done
+                -- directly: the assignment is dropped and the research keeps running, so
+                -- a fleet could never finish anything it had started. Cancelling the
+                -- research first is the supported way to abandon it, and the technology
+                -- takes the flag once nothing is running.
+                if force.current_research == technology then
+                    pcall(function() force.cancel_current_research() end)
+                end
+
                 technology.researched = true
-                applied = applied + 1
+
+                -- Counted only when it took. Reporting a change the game refused is how
+                -- the manager comes to believe a server has something it does not.
+                if technology.researched then
+                    applied = applied + 1
+                end
             end
         end
 
