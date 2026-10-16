@@ -1,4 +1,15 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.16.0
+Date: 2026-10-16
+  Added:
+    - create_surfaces: make every planet the fleet knows about and report what the world
+      holds. A save converted from a world that was made before a planet existed needs it
+      before anything is stripped, or that server ends up with no surface of its own.
+  Changed:
+    - strip_surfaces reports the surfaces it removed as a comma-joined string. An empty Lua
+      table leaves JSON as an object rather than an array, and a reply whose shape changes
+      is one the reader has to guess at.
+---------------------------------------------------------------------------------------------------
 Version: 0.15.0
 Date: 2026-10-16
   Fixed:

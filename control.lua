@@ -704,7 +704,29 @@ local calls = {
             return count
         end)()))
 
-        return {instance = instance(), removed = removed, emptied = emptied, surfaces = surfaces}
+        -- joined with commas rather than left as a list: an empty Lua table leaves JSON as
+        -- an object, not an array, and a reply whose shape changes is a reply somebody has
+        -- to guess at.
+        return {instance = instance(), removed = table.concat(removed, ","),
+                emptied = emptied, surfaces = surfaces}
+    end,
+
+    -- Make every planet this fleet knows about, and say what the world holds afterwards.
+    --
+    -- A conversion needs this before it strips anything: a save made before a planet existed
+    -- holds only what it was made with, and every server has to hold every planet or the
+    -- fleet is not one world -- the missing surface is exactly the thing nobody should ever
+    -- run into.
+    create_surfaces = function()
+        ensure_surfaces()
+
+        local out = {}
+        for name, _ in pairs(game.surfaces) do
+            out[#out + 1] = name
+        end
+        table.sort(out)
+
+        return {instance = instance(), surfaces = out}
     end,
 
     -- One poll's worth of state, for the manager's health board.
