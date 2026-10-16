@@ -52,6 +52,19 @@ local function instance()
     return setting and setting.value or "unconfigured"
 end
 
+-- Whether the node has told this server what it is yet.
+--
+-- This mod is a driver. It reaches into the game's own components -- surfaces, players, the
+-- scenario -- and the node decides what is done with them; the order comes in over stdin
+-- and the event goes out over stdout, and neither happens without the other end being
+-- there. That division is also what makes it safe to have loaded at all: a server that
+-- never hears from a node -- somebody's own save, a server that has nothing to do with this
+-- fleet -- never gets an identity, and every action in this file does nothing. Installing
+-- it changes nothing.
+local function known()
+    return storage ~= nil and storage.instance ~= nil
+end
+
 local function destinations()
     local out = {}
     for id, entry in pairs(storage.topology) do
@@ -113,6 +126,9 @@ end
 -- The call is made on load as well as at world creation, so a world made before this
 -- existed is not left with the wreckage either.
 local function disable_crash_site()
+    if not known() then
+        return
+    end
     if not remote.interfaces.freeplay then
         -- Something else is running the world: a sandbox, a tutorial, a scenario of its
         -- own. Nothing here to switch off.
@@ -141,6 +157,9 @@ end
 -- It runs whenever the topology arrives, whenever this server learns which one it is, and
 -- on load, so a server that is told anything late still ends up with all of them.
 local function ensure_surfaces()
+    if not known() then
+        return
+    end
     local unclassified = {}
     local force = main_force()
 
@@ -226,6 +245,9 @@ end
 -- server does not own, and there is nowhere to send them, because every other server's
 -- planet exists here as an empty duplicate nobody should be standing on at all.
 local function enforce_surface(player)
+    if not known() then
+        return
+    end
     -- A remote viewer is looking at this server from wherever they really are. Their body
     -- is not here and moving them would be moving somebody else's character.
     if storage.viewing[player.name] then
@@ -344,6 +366,9 @@ end
 -- Nothing is deleted from a surface this server owns, and nothing is deleted at all unless
 -- there is something to delete.
 local function clear_foreign_surfaces()
+    if not known() then
+        return
+    end
     local cleared = {}
 
     for name, surface in pairs(game.surfaces) do
@@ -371,6 +396,9 @@ local function clear_foreign_surfaces()
 end
 
 local function spawn_on_owned_surface()
+    if not known() then
+        return
+    end
     local home = game.surfaces[instance()]
     if not home then
         return false
@@ -423,6 +451,9 @@ end
 -- produces a prompt that reads correctly and a client that sits at "connecting"
 -- until it gives up, with nothing logged anywhere.
 local function route_if_elsewhere(player)
+    if not known() then
+        return
+    end
     local viewed = player.surface
     note("surface", player, viewed and viewed.name or nil)
 
@@ -463,6 +494,9 @@ end
 -- the player to that -- and a bodyless player's physical controller is god mode.
 -- toggle_menu_leaves_remote_view = false is therefore load-bearing, not a nicety.
 local function apply_join_rule(player)
+    if not known() then
+        return
+    end
     local here = storage.body[player.name]
     if not here or here == instance() then
         storage.viewing[player.name] = nil

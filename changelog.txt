@@ -1,4 +1,15 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.19.0
+Date: 2026-10-16
+  Changed:
+    - The mod does nothing at all until a node tells it what it is. It is a driver: it
+      reaches into the game's components and the node decides what is done with them, the
+      order coming in over stdin and the event going out over stdout. A server that never
+      hears from a node -- somebody's own save, a server with nothing to do with this fleet
+      -- never gets an identity, and now every action in the file does nothing: no surfaces
+      created, no players moved, no chunks cleared, no scenario touched. Loading it changes
+      nothing.
+---------------------------------------------------------------------------------------------------
 Version: 0.18.4
 Date: 2026-10-16
   Fixed:
