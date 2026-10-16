@@ -201,6 +201,16 @@ script.on_event(defines.events.on_player_changed_surface, function(event)
     end
 end)
 
+-- Entering or leaving remote view changes what a player is looking at without changing
+-- which surface their body is on, and entering a space platform goes through the
+-- controller too, so the routing decision is taken again here.
+script.on_event(defines.events.on_player_controller_changed, function(event)
+    local player = game.get_player(event.player_index)
+    if player then
+        route_if_elsewhere(player)
+    end
+end)
+
 script.on_event(defines.events.on_player_joined_game, function(event)
     local player = game.get_player(event.player_index)
     if player then
@@ -237,12 +247,49 @@ local function note_research(kind, name)
     end
 end
 
-script.on_event(defines.events.on_research_finished, function(event)
-    note_research("researched", event.research and event.research.name)
+-- Which research this server is on, right now.
+--
+-- Read from the force rather than from the event: a technology can be cancelled, reversed
+-- or replaced, and the event's own name is then the one that *was* being researched. What
+-- the manager needs is what this server is on afterwards.
+local function current_name()
+    local research = main_force().current_research
+    return research and research.name or nil
+end
+
+-- A research changes by more routes than labs finishing.
+--
+-- A player picks one, a script sets one, a technology is reversed, a queue is reordered,
+-- and any of those is a decision the fleet has to hear about -- because the manager
+-- learns the fleet's research from the games rather than inferring it from a poll. Every
+-- one of the six events is reported, named, for that reason.
+script.on_event(defines.events.on_research_started, function(event)
+    note_research("research-started",
+        (event.research and event.research.name) or current_name())
 end)
 
-script.on_event(defines.events.on_research_started, function(event)
-    note_research("research-started", event.research and event.research.name)
+script.on_event(defines.events.on_research_finished, function(event)
+    note_research("researched", event.research and event.research.name)
+    -- Whatever the game moved on to, if anything was queued behind it.
+    note_research("research-started", current_name())
+end)
+
+script.on_event(defines.events.on_research_cancelled, function(event)
+    note_research("research-cancelled",
+        (event.research and event.research.name) or current_name())
+end)
+
+script.on_event(defines.events.on_research_reversed, function(event)
+    note_research("research-reversed", event.research and event.research.name)
+end)
+
+script.on_event(defines.events.on_research_queued, function(event)
+    note_research("research-queued",
+        (event.research and event.research.name) or current_name())
+end)
+
+script.on_event(defines.events.on_research_moved, function(event)
+    note_research("research-moved", event.research and event.research.name)
 end)
 
 --------------------------------------------------------------------------------
@@ -356,6 +403,10 @@ local calls = {
             count = count,
             total = total,
             current = force.current_research and force.current_research.name or nil,
+            -- An infinite research keeps its name as it levels, and its bar restarts each
+            -- time. Without the level, one level's progress is indistinguishable from the
+            -- next and the manager cannot tell a level-up from a bar going backwards.
+            level = force.current_research and force.current_research.level or 0,
             progress = force.research_progress,
             tick = game.tick,
         }

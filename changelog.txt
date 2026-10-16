@@ -1,4 +1,21 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.10.0
+Date: 2026-10-16
+  Added:
+    - Every route a research can change by is reported, not just the two labs produce:
+      started, finished, cancelled, reversed, queued and moved. A research a script or an
+      action changed now reaches the manager for the same reason a player's choice does.
+    - The current research's level is reported with its state. An infinite research keeps
+      its name as it levels and its bar restarts, so without the level one level's progress
+      is indistinguishable from the next.
+    - The routing decision is taken again when a player's controller changes, which covers
+      entering or leaving remote view and entering a space platform, where the surface does
+      not change.
+  Note:
+    - Nothing here draws anything: the mod has no GUI, and the only two commands it
+      registers are the manager's call interface and a status report, both for the console
+      and RCON.
+---------------------------------------------------------------------------------------------------
 Version: 0.9.0
 Date: 2026-10-16
   Fixed:
