@@ -396,14 +396,25 @@ local calls = {
         if payload.current then
             local technology = force.technologies[payload.current]
             if technology and not technology.researched then
-                -- current_research is read only in 2.1 ("is read only" is the
-                -- error an assignment gets), so a research is started through
-                -- add_research. It can also refuse a technology that is not
-                -- available yet, which is not an error worth failing the sync over.
-                local ok = pcall(function() force.add_research(technology) end)
-                if ok and payload.progress then
+                -- current_research is read only in 2.1 ("is read only" is the error an
+                -- assignment gets), so a research is started through add_research.
+                --
+                -- add_research puts a technology at the *back of the queue*, so with
+                -- something already running it is only queued behind it and never becomes
+                -- the current research: a planet could never be moved onto the fleet's
+                -- research, and would sit on its own while the manager reported the
+                -- shared bar. Cancelling first is what makes the switch take, and a
+                -- technology the game refuses (its prerequisites unmet) is skipped
+                -- rather than failing the whole sync.
+                if force.current_research ~= technology then
+                    pcall(function() force.cancel_current_research() end)
+                    pcall(function() force.add_research(technology) end)
+                end
+
+                if payload.progress then
                     force.research_progress = payload.progress
                 end
+
                 applied = applied + 1
             end
         end
