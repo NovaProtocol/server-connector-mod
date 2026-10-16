@@ -1,4 +1,13 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.14.0
+Date: 2026-10-16
+  Changed:
+    - strip_surfaces does two things now, because the game allows two. A platform or a
+      mod's surface is deleted; a planet's surface cannot be, because it belongs to the
+      planet system, so it is emptied instead -- every entity destroyed, the planet left
+      bare. That is what the fleet's own saves look like: all five planets present, one
+      with a factory on it. Found by converting a real save and watching nothing happen.
+---------------------------------------------------------------------------------------------------
 Version: 0.13.0
 Date: 2026-10-16
   Changed:

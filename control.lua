@@ -616,12 +616,14 @@ local calls = {
         return {instance = instance(), paused = game.tick_paused}
     end,
 
-    -- Delete every surface except the named ones.
+    -- Cut a world down to what this server keeps.
     --
-    -- This is what makes a save the fleet can run: one world per server, so a vanilla save
-    -- handed to six servers becomes six single-surface saves instead of six copies of the
-    -- whole system. Surfaces are deleted with their entities, which is the point -- the
-    -- other planets' factories are not this server's to keep.
+    -- Two different things have to happen, because the game allows two different things. A
+    -- platform or a mod's surface can be deleted, and is. A planet's surface cannot: it
+    -- belongs to the planet system, so it exists in every save of that world whether
+    -- anybody wants it or not. Those are emptied instead -- every entity destroyed, the
+    -- planet left bare -- which is exactly what the fleet's own saves look like: all five
+    -- planets present, one of them with a factory on it.
     strip_surfaces = function(payload)
         payload = payload or {}
 
@@ -630,33 +632,52 @@ local calls = {
             keep_set[name] = true
         end
 
-        -- A space server keeps its platforms, which are surfaces nobody can name in
-        -- advance: they are built, and they carry a platform. Every other server throws
-        -- them away, because a platform is not a planet's to keep.
         local keep_platforms = payload.platforms and true or false
 
-        local removed = {}
+        local removed, emptied = {}, {}
+
         for name, surface in pairs(game.surfaces) do
             local wanted = keep_set[name] or (keep_platforms and surface.platform ~= nil)
-            if not wanted and surface.deletable then
-                local ok = pcall(function() game.delete_surface(name) end)
-                if ok then
+            if wanted then
+                goto continue
+            end
+
+            if surface.deletable then
+                if pcall(function() game.delete_surface(name) end) then
                     removed[#removed + 1] = name
                 else
                     log(string.format("[%s] could not delete the surface %s", MOD, name))
                 end
+            else
+                local destroyed = 0
+                for _, entity in pairs(surface.find_entities()) do
+                    if entity.valid then
+                        entity.destroy()
+                        destroyed = destroyed + 1
+                    end
+                end
+                emptied[name] = destroyed
+                log(string.format("[%s] emptied %s: %d entities destroyed", MOD, name, destroyed))
             end
+
+            ::continue::
         end
+
         table.sort(removed)
 
-        log(string.format("[%s] stripped %d surface(s): %s", MOD, #removed, table.concat(removed, ", ")))
-        return {instance = instance(), removed = removed,
-                surfaces = (function()
-                    local out = {}
-                    for name, _ in pairs(game.surfaces) do out[#out + 1] = name end
-                    table.sort(out)
-                    return out
-                end)()}
+        local surfaces = {}
+        for name, _ in pairs(game.surfaces) do
+            surfaces[#surfaces + 1] = name
+        end
+        table.sort(surfaces)
+
+        log(string.format("[%s] cut down: removed %d, emptied %d", MOD, #removed, (function()
+            local count = 0
+            for _ in pairs(emptied) do count = count + 1 end
+            return count
+        end)()))
+
+        return {instance = instance(), removed = removed, emptied = emptied, surfaces = surfaces}
     end,
 
     -- One poll's worth of state, for the manager's health board.
