@@ -31,6 +31,8 @@ local function ensure_storage()
     storage.body = storage.body or {}           -- player name -> instance id
     storage.viewing = storage.viewing or {}     -- player name -> true, for the join rule
     storage.routed = storage.routed or {}       -- player name -> last surface routed from
+    storage.anchored = storage.anchored or {}   -- player name -> the platform they belong on
+    storage.cleared = storage.cleared or {}     -- surface name -> what was taken off it
 end
 
 --------------------------------------------------------------------------------
@@ -194,6 +196,175 @@ local function ensure_surfaces()
 end
 
 --------------------------------------------------------------------------------
+-- nobody stands on a surface this server does not own
+--------------------------------------------------------------------------------
+
+-- The surface a player on this server belongs on.
+--
+-- A planet server owns its planet, and that is the whole answer. The space server owns no
+-- planet: what its players belong on is a platform, which is built rather than named, so
+-- where their body was the last time it was somewhere it should be is remembered instead.
+local function owned_surface(player)
+    if instance() ~= "space" then
+        return game.surfaces[instance()]
+    end
+
+    local remembered = storage.anchored[player.name]
+    local surface = remembered and game.surfaces[remembered]
+    if surface and surface.platform then
+        return surface
+    end
+
+    return nil
+end
+
+-- Put a player who is standing somewhere they do not belong back where they do.
+--
+-- Sending them to another server comes first, in route_if_elsewhere: looking at a planet
+-- another server owns is a journey, and the game's own connect_to_server takes them. This
+-- is what is left when no journey applies -- the player is standing *on* a surface this
+-- server does not own, and there is nowhere to send them, because every other server's
+-- planet exists here as an empty duplicate nobody should be standing on at all.
+local function enforce_surface(player)
+    -- A remote viewer is looking at this server from wherever they really are. Their body
+    -- is not here and moving them would be moving somebody else's character.
+    if storage.viewing[player.name] then
+        return
+    end
+
+    local physical = player.physical_surface
+    if not physical then
+        return
+    end
+
+    -- A platform is a space server's home ground, so remember it while they are on one.
+    if physical.platform then
+        storage.anchored[player.name] = physical.name
+        if instance() == "space" then
+            return
+        end
+    end
+
+    local home = owned_surface(player)
+    if not home or physical == home then
+        return
+    end
+
+    local position = player.physical_position or {x = 0, y = 0}
+    local spot = home.find_non_colliding_position("character", position, 64, 1)
+        or home.find_non_colliding_position("character", {x = 0, y = 0}, 64, 1)
+        or position
+
+    log(string.format("[%s] %s was standing on %s, putting them back on %s",
+        instance(), player.name, physical.name, home.name))
+
+    local ok, err = pcall(function() player.teleport(spot, home) end)
+    if not ok then
+        log(string.format("[%s] could not move %s: %s", instance(), player.name, tostring(err)))
+    end
+end
+
+--------------------------------------------------------------------------------
+-- a surface nobody plays on costs nothing
+--------------------------------------------------------------------------------
+
+-- How far out chunks are looked for, in chunks. The spawn area is a few chunks wide and
+-- nothing visits an unowned surface to generate more, so this covers what is there; a save
+-- carried in from elsewhere can have explored further, and what that leaves behind is
+-- caught by the sweep of entities below, which is not bounded.
+local CLEAR_WINDOW = 64
+
+-- Take everything off the surfaces this server does not own.
+--
+-- A fleet server's save is a nauvis world whatever planet the server is for, so nauvis is
+-- generated -- spawn area, biters, the lot -- before anybody arrives, and on five of the
+-- six servers nobody ever goes there. Those biters are a UPS cost paid on every tick by a
+-- server whose players are somewhere else entirely.
+--
+-- Deleting a chunk takes what is in it, which is the cost, and leaves the map: if anything
+-- ever does need that surface, the game generates it again. Characters are left alone --
+-- a player standing there is somebody's body, not tax.
+-- What clearing one surface amounts to.
+--
+-- Entities anywhere on it, which is the part that costs UPS on every tick, and then the
+-- chunks themselves, so the map is not kept in memory for a surface nobody plays on.
+-- Characters are left alone: a player standing there is somebody's body, not tax.
+local function clear_one(surface)
+    local destroyed = 0
+    for _, entity in pairs(surface.find_entities_filtered{}) do
+        if entity.valid and entity.type ~= "character" then
+            entity.destroy()
+            destroyed = destroyed + 1
+        end
+    end
+
+    local chunks = 0
+    for cx = -CLEAR_WINDOW, CLEAR_WINDOW do
+        for cy = -CLEAR_WINDOW, CLEAR_WINDOW do
+            local chunk = surface.get_chunk(cx, cy)
+            if chunk and chunk.generated then
+                if pcall(function() return surface.delete_chunk({x = cx, y = cy}) end) then
+                    chunks = chunks + 1
+                end
+            end
+        end
+    end
+
+    return {entities = destroyed, chunks = chunks}
+end
+
+-- Take everything off the surfaces this server does not own.
+--
+-- A fleet server's save is a nauvis world whatever planet the server is for, so nauvis is
+-- generated -- spawn area, biters, the lot -- before anybody arrives, and on five of the
+-- six servers nobody ever goes there. Those biters are a UPS cost paid on every tick by a
+-- server whose players are somewhere else entirely.
+--
+-- Nothing is deleted from a surface this server owns, and nothing is deleted at all unless
+-- there is something to delete.
+local function clear_foreign_surfaces()
+    local cleared = {}
+
+    for name, surface in pairs(game.surfaces) do
+        local owned = name == instance() or (instance() == "space" and surface.platform ~= nil)
+
+        if not owned then
+            -- Wrapped, because this runs on every load: a wrong call here would take the
+            -- whole server down at boot rather than leave one surface uncleared.
+            local ok, counts = pcall(function()
+                return clear_one(surface)
+            end)
+
+            if not ok then
+                log(string.format("[%s] could not clear %s: %s", instance(), name, tostring(counts)))
+            elseif counts.entities > 0 or counts.chunks > 0 then
+                cleared[name] = counts
+                log(string.format("[%s] cleared %s: %d entities, %d chunks",
+                    instance(), name, counts.entities, counts.chunks))
+            end
+        end
+    end
+
+    storage.cleared = cleared
+    return cleared
+end
+
+local function spawn_on_owned_surface()
+    local home = game.surfaces[instance()]
+    if not home then
+        return
+    end
+
+    local force = main_force()
+    local here = force.get_spawn_position and force.get_spawn_position()
+    if here and here.surface ~= home then
+        local spot = home.find_non_colliding_position("character", {x = 0, y = 0}, 64, 1) or {x = 0, y = 0}
+        force.set_spawn_position(spot, home)
+        log(string.format("[%s] the spawn point moves to %s", instance(), home.name))
+    end
+end
+
+--------------------------------------------------------------------------------
 -- the trigger
 --------------------------------------------------------------------------------
 
@@ -235,13 +406,15 @@ local function route_if_elsewhere(player)
 
     if not target then
         storage.routed[player.name] = nil
-        return
+        return false
     end
 
     -- Already looking at where we would send them: nothing to do, and this is
     -- what stops the handler from bouncing a player every time it fires.
     if storage.routed[player.name] == target then
-        return
+        -- Already handed over and still on their way. Nothing else is done for them: a
+        -- teleport now would fight the connection that is being made.
+        return true
     end
 
     local entry = storage.topology[target]
@@ -251,6 +424,7 @@ local function route_if_elsewhere(player)
         instance(), player.name, viewed.name, entry.name or target))
 
     player.connect_to_server{address = entry.address, name = entry.name or target}
+    return true
 end
 
 --------------------------------------------------------------------------------
@@ -303,6 +477,11 @@ local settle_now, settle_later = false, false
 local function settle()
     disable_crash_site()
     ensure_surfaces()
+
+    -- The surfaces exist by now, so the two things that make a foreign one free: the spawn
+    -- moves to the planet this server is for, and what is on the others is taken away.
+    spawn_on_owned_surface()
+    clear_foreign_surfaces()
 end
 
 script.on_nth_tick(60, function()
@@ -344,8 +523,10 @@ end)
 
 script.on_event(defines.events.on_player_changed_surface, function(event)
     local player = game.get_player(event.player_index)
-    if player then
-        route_if_elsewhere(player)
+    if player and not route_if_elsewhere(player) then
+        -- Nowhere to send them, so put them back: the redirect is the first answer, and
+        -- standing on a planet this server does not own is the case it does not cover.
+        enforce_surface(player)
     end
 end)
 
@@ -354,8 +535,8 @@ end)
 -- controller too, so the routing decision is taken again here.
 script.on_event(defines.events.on_player_controller_changed, function(event)
     local player = game.get_player(event.player_index)
-    if player then
-        route_if_elsewhere(player)
+    if player and not route_if_elsewhere(player) then
+        enforce_surface(player)
     end
 end)
 
@@ -729,6 +910,22 @@ local calls = {
         return {instance = instance(), surfaces = out}
     end,
 
+    -- Take everything off the surfaces this server does not own, and say what was taken.
+    -- The manager can ask for it after loading a save, which is exactly the moment a server
+    -- can come back holding a world it does not play on.
+    clear_surfaces = function()
+        local cleared = clear_foreign_surfaces()
+        spawn_on_owned_surface()
+
+        local out = {}
+        for name, counts in pairs(cleared) do
+            out[#out + 1] = string.format("%s(%d entities, %d chunks)", name, counts.entities, counts.chunks)
+        end
+        table.sort(out)
+
+        return {instance = instance(), cleared = table.concat(out, ", ")}
+    end,
+
     -- Where a player looking at a surface would be sent, without a player to send.
     --
     -- The decision is the one the controller handler makes, and this is how it can be
@@ -789,6 +986,11 @@ local calls = {
             paused = game.tick_paused,
             surfaces = surfaces,
             unlocked = unlocked,
+            spawn = (function()
+                local ok, position = pcall(function() return main_force().get_spawn_position() end)
+                return ok and position and position.surface and position.surface.name or nil
+            end)(),
+            foreign = storage.cleared or {},
             schema = storage.schema,
         }
     end,
