@@ -71,10 +71,22 @@ local function destination_for(surface)
     if not surface then
         return nil
     end
+    local id = nil
     if surface.platform then
-        return storage.topology["space"] and "space" or nil
+        id = "space"
+    elseif storage.topology[surface.name] then
+        id = surface.name
     end
-    return storage.topology[surface.name] and surface.name or nil
+
+    -- Looking at the surface this server already owns is not a journey. Returning
+    -- the local id here is what prompted a player to connect to the server they
+    -- were standing on, and it is also what made the last-viewed planet sticky:
+    -- every surface change toward home looked like a hop that was never taken.
+    if id == nil or id == instance() then
+        return nil
+    end
+
+    return id
 end
 
 --------------------------------------------------------------------------------
