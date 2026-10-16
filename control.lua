@@ -104,16 +104,23 @@ end
 -- on load, so a server that is told anything late still ends up with all of them.
 local function ensure_surfaces()
     local unclassified = {}
+    local force = main_force()
 
     for id, entry in pairs(storage.topology or {}) do
         if entry.kind == nil then
             unclassified[#unclassified + 1] = id
         end
 
+        if entry.kind ~= "planet" then
+            -- A space server's platforms are built, not created, so there is nothing here
+            -- for it to make.
+            goto continue
+        end
+
         -- Its own planet counts most of all: a fresh save is always a nauvis world,
         -- whatever the server is for, so the planet this server exists to be is exactly
         -- the one that is missing.
-        if entry.kind == "planet" and not game.surfaces[id] then
+        if not game.surfaces[id] then
             local planet = game.planets and game.planets[id]
             if planet then
                 local ok, surface = pcall(function() return planet.create_surface() end)
@@ -125,6 +132,21 @@ local function ensure_surfaces()
                 end
             end
         end
+
+        -- Having the surface is not the same as the planet being reachable: a force only
+        -- sees and travels to space locations it has unlocked, and normally the discovery
+        -- research does that. A server with the surface and no unlock shows nothing in the
+        -- space map -- the planet is simply not there as far as the game is concerned.
+        if force.is_space_location_unlocked and not force.is_space_location_unlocked(id) then
+            local ok, err = pcall(function() force.unlock_space_location(id) end)
+            if ok then
+                log(string.format("[%s] unlocked %s for this force", MOD, id))
+            else
+                log(string.format("[%s] could not unlock %s: %s", MOD, id, tostring(err)))
+            end
+        end
+
+        ::continue::
     end
 
     -- Said out loud rather than skipped quietly: a topology with no kinds leaves every
@@ -539,6 +561,7 @@ local calls = {
 
     -- One poll's worth of state, for the manager's health board.
     report = function()
+        local force = main_force()
         local players = {}
         for _, player in pairs(game.connected_players) do
             players[#players + 1] = {
@@ -554,6 +577,16 @@ local calls = {
         end
         table.sort(surfaces)
 
+        local unlocked = {}
+        if force.is_space_location_unlocked then
+            for id, _ in pairs(storage.topology or {}) do
+                if force.is_space_location_unlocked(id) then
+                    unlocked[#unlocked + 1] = id
+                end
+            end
+            table.sort(unlocked)
+        end
+
         return {
             instance = instance(),
             tick = game.tick,
@@ -561,6 +594,7 @@ local calls = {
             players = players,
             destinations = #destinations(),
             surfaces = surfaces,
+            unlocked = unlocked,
             schema = storage.schema,
         }
     end,

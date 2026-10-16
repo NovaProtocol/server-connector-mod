@@ -1,4 +1,14 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.11.3
+Date: 2026-10-16
+  Fixed:
+    - A planet's surface existing is not the same as the planet being reachable: a force
+      only sees and travels to the space locations it has unlocked, which the discovery
+      research normally does. Creating the surface alone left a planet that was there and
+      invisible, so the surfaces are unlocked as well.
+    - report lists the unlocked space locations, so this can be checked rather than hoped
+      for.
+---------------------------------------------------------------------------------------------------
 Version: 0.11.2
 Date: 2026-10-16
   Fixed:
