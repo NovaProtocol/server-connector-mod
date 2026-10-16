@@ -1,4 +1,11 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.11.8
+Date: 2026-10-16
+  Fixed:
+    - report failed on a name that is not a space location, which is the space server's own
+      id: one bad name took the whole report down, so the manager had no telemetry at all
+      from that server. Only planets are asked about now, and through a pcall.
+---------------------------------------------------------------------------------------------------
 Version: 0.11.7
 Date: 2026-10-16
   Fixed:

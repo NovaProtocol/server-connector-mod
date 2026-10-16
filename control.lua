@@ -627,15 +627,22 @@ local calls = {
         end
         table.sort(surfaces)
 
+        -- Only planets, and only through a pcall: a name that is not a space location --
+        -- the space server's own id, for one -- makes the call error, and one bad name here
+        -- would take the whole report down with it and leave the manager with no telemetry
+        -- at all.
         local unlocked = {}
-        if force.is_space_location_unlocked then
-            for id, _ in pairs(storage.topology or {}) do
-                if force.is_space_location_unlocked(id) then
+        for id, entry in pairs(storage.topology or {}) do
+            if entry.kind == "planet" then
+                local ok, is_unlocked = pcall(function()
+                    return force.is_space_location_unlocked and force.is_space_location_unlocked(id)
+                end)
+                if ok and is_unlocked then
                     unlocked[#unlocked + 1] = id
                 end
             end
-            table.sort(unlocked)
         end
+        table.sort(unlocked)
 
         return {
             instance = instance(),
