@@ -103,7 +103,13 @@ end
 -- It runs whenever the topology arrives, whenever this server learns which one it is, and
 -- on load, so a server that is told anything late still ends up with all of them.
 local function ensure_surfaces()
+    local unclassified = {}
+
     for id, entry in pairs(storage.topology or {}) do
+        if entry.kind == nil and id ~= instance() then
+            unclassified[#unclassified + 1] = id
+        end
+
         if entry.kind == "planet" and id ~= instance() and not game.surfaces[id] then
             local planet = game.planets and game.planets[id]
             if planet then
@@ -116,6 +122,13 @@ local function ensure_surfaces()
                 end
             end
         end
+    end
+
+    -- Said out loud rather than skipped quietly: a topology with no kinds leaves every
+    -- planet to be discovered the hard way, and a silent skip looks exactly like working.
+    if #unclassified > 0 then
+        log(string.format("[%s] %d destinations arrived with no kind, so no surface was created for %s",
+            MOD, #unclassified, table.concat(unclassified, ", ")))
     end
 end
 

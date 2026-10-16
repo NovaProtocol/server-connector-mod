@@ -1,4 +1,11 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.11.1
+Date: 2026-10-16
+  Changed:
+    - A destination that arrives with no kind is named in the log instead of being
+      skipped quietly. Without it, a topology that carried no kinds looked exactly like
+      working code: no surfaces were created and nothing said why.
+---------------------------------------------------------------------------------------------------
 Version: 0.11.0
 Date: 2026-10-16
   Added:
