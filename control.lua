@@ -287,25 +287,52 @@ end
 -- events
 --------------------------------------------------------------------------------
 
+-- The load-time check, as two permanent handlers.
+--
+-- An existing save never fires on_init again, so the check runs on the ticks after every
+-- load as well. on_load may not touch the world, which is why it happens on a tick -- but
+-- what does it is registered here, once, at load, and never removed.
+--
+-- It has to be that way. The game compares the event handlers a joining client has against
+-- the server's, and a handler that registers itself on load and removes itself after
+-- running leaves the two sets different the moment anybody connects: the client registers
+-- it, the server no longer has it. Nothing can be registered or removed while the game is
+-- running, and the whole mod is written that way.
+local settle_now, settle_later = false, false
+
+local function settle()
+    disable_crash_site()
+    ensure_surfaces()
+end
+
+script.on_nth_tick(60, function()
+    if not settle_now then
+        return
+    end
+    settle_now = false
+    settle()
+end)
+
+script.on_nth_tick(600, function()
+    if not settle_later then
+        return
+    end
+    settle_later = false
+    settle()
+end)
+
 script.on_init(function()
     ensure_storage()
     log("[" .. MOD .. "] instance=" .. instance())
     disable_crash_site()
     ensure_surfaces()
+    settle_now, settle_later = true, true
 end)
 
--- An existing save never fires on_init again, so the check is scheduled on every load
--- too. on_load may not touch the world -- it may only re-register handlers -- so the work
--- happens on the next tick instead. It runs twice: a node pushes this server's identity a
--- moment after the game is up, and until that arrives there is no topology to check.
 script.on_load(function()
-    for _, delay in ipairs({60, 600}) do
-        script.on_nth_tick(delay, function()
-            script.on_nth_tick(delay, nil)
-            disable_crash_site()
-            ensure_surfaces()
-        end)
-    end
+    -- Twice: a node pushes this server's identity a moment after the game is up, and until
+    -- that arrives there is no topology to check.
+    settle_now, settle_later = true, true
 end)
 
 script.on_configuration_changed(function()

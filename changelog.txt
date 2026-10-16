@@ -1,4 +1,14 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.15.0
+Date: 2026-10-16
+  Fixed:
+    - The mod is multiplayer-safe again. Its load-time check registered a tick handler and
+      then removed it once it had run, and the game compares the handlers a joining client
+      has against the server's: the client registered it, the server had already removed
+      it, so nobody could join ("the following mod event handlers are not identical").
+      Every handler is registered at load and never registered or removed while the game
+      runs, which is the rule the check is enforcing.
+---------------------------------------------------------------------------------------------------
 Version: 0.14.0
 Date: 2026-10-16
   Changed:
