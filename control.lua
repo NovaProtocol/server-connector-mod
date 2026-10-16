@@ -622,15 +622,23 @@ local calls = {
     -- handed to six servers becomes six single-surface saves instead of six copies of the
     -- whole system. Surfaces are deleted with their entities, which is the point -- the
     -- other planets' factories are not this server's to keep.
-    strip_surfaces = function(keep)
+    strip_surfaces = function(payload)
+        payload = payload or {}
+
         local keep_set = {}
-        for _, name in ipairs(keep or {}) do
+        for _, name in ipairs(payload.surfaces or {}) do
             keep_set[name] = true
         end
 
+        -- A space server keeps its platforms, which are surfaces nobody can name in
+        -- advance: they are built, and they carry a platform. Every other server throws
+        -- them away, because a platform is not a planet's to keep.
+        local keep_platforms = payload.platforms and true or false
+
         local removed = {}
         for name, surface in pairs(game.surfaces) do
-            if not keep_set[name] and surface.deletable then
+            local wanted = keep_set[name] or (keep_platforms and surface.platform ~= nil)
+            if not wanted and surface.deletable then
                 local ok = pcall(function() game.delete_surface(name) end)
                 if ok then
                     removed[#removed + 1] = name
