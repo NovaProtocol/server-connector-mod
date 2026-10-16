@@ -71,6 +71,7 @@ local function destination_for(surface)
     if not surface then
         return nil
     end
+
     local id = nil
     if surface.platform then
         id = "space"
@@ -221,25 +222,6 @@ local function main_force()
     return game.forces.player or game.forces[1]
 end
 
-local function research_state()
-    local force = main_force()
-    local researched = {}
-    for name, technology in pairs(force.technologies) do
-        if technology.researched then
-            researched[#researched + 1] = name
-        end
-    end
-    table.sort(researched)
-
-    return {
-        instance = instance(),
-        researched = researched,
-        current = force.current_research and force.current_research.name or nil,
-        progress = force.research_progress,
-        tick = game.tick,
-    }
-end
-
 local function note_research(kind, name)
     if not name then
         return
@@ -332,11 +314,51 @@ local calls = {
         return {name = name, body = storage.body[name] or instance()}
     end,
 
-    -- What this server's tech tree looks like, for the manager to merge with the
-    -- others.
-    research_state = function()
+    -- What this server's tech tree looks like, a page at a time.
+    --
+    -- The whole tree does not fit in one RCON frame once enough of it is
+    -- researched, and it only grows as the save progresses. The companion mod this
+    -- stack replaced had to chunk its reports at 4096 bytes for the same reason, so
+    -- this asks for a slice and the node assembles the pages.
+    --
+    -- Paging is safe without a snapshot because the manager unions what it reads on
+    -- every poll: a technology that shifts across a page boundary and is missed once
+    -- is picked up on the next pass.
+    research_state = function(payload)
         ensure_storage()
-        return research_state()
+        payload = payload or {}
+
+        local force = main_force()
+        local all = {}
+        for name, technology in pairs(force.technologies) do
+            if technology.researched then
+                all[#all + 1] = name
+            end
+        end
+        table.sort(all)
+
+        local total = #all
+        local offset = tonumber(payload.offset) or 0
+        local limit = tonumber(payload.limit) or 64
+        if offset < 0 then offset = 0 end
+        if limit < 1 then limit = 1 end
+
+        local items = {}
+        local count = 0
+        for index = offset + 1, math.min(offset + limit, total) do
+            items[#items + 1] = all[index]
+            count = count + 1
+        end
+
+        return {
+            instance = instance(),
+            items = items,
+            count = count,
+            total = total,
+            current = force.current_research and force.current_research.name or nil,
+            progress = force.research_progress,
+            tick = game.tick,
+        }
     end,
 
     -- Apply the shared research: technologies to mark done, and where the research

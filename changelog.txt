@@ -1,4 +1,17 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.7.0
+Date: 2026-10-16
+  Changed:
+    - research_state takes an offset and a limit and returns one page plus the total, so
+      a node never depends on the whole technology list fitting in a single RCON frame.
+      The tree is already past 5 KB of JSON with a full save and it only grows; the
+      companion mod this stack replaced chunked its reports at 4096 bytes for the same
+      reason. The node assembles the pages.
+  Note:
+    - Paging needs no snapshot: the manager unions what it reads on every poll, so a
+      technology that shifts across a page boundary and is missed once is picked up on
+      the next pass.
+---------------------------------------------------------------------------------------------------
 Version: 0.6.0
 Date: 2026-10-15
   Changed:
@@ -71,4 +84,3 @@ Date: 2026-10-15
       leaving it disabled so they cannot drop into free build.
     - Reports identity, tick, speed and connected players as JSON for the health board.
 ---------------------------------------------------------------------------------------------------
-
