@@ -1,4 +1,16 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.11.4
+Date: 2026-10-16
+  Added:
+    - The surface and unlock check runs on every load, not only when a world is made. An
+      existing save never fires on_init again, so a save that was missing a planet stayed
+      missing it for good. on_load may not touch the world, so the check is registered
+      there and runs on the first ticks instead, twice, because a node pushes this
+      server's identity a moment after the game is up.
+  Note:
+    - 0.11.3, which unlocked the planets as well as creating their surfaces, was committed
+      but never released on its own; this release carries both.
+---------------------------------------------------------------------------------------------------
 Version: 0.11.3
 Date: 2026-10-16
   Fixed:

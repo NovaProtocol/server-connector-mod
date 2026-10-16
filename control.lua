@@ -257,6 +257,19 @@ script.on_init(function()
     ensure_surfaces()
 end)
 
+-- An existing save never fires on_init again, so the check is scheduled on every load
+-- too. on_load may not touch the world -- it may only re-register handlers -- so the work
+-- happens on the next tick instead. It runs twice: a node pushes this server's identity a
+-- moment after the game is up, and until that arrives there is no topology to check.
+script.on_load(function()
+    for _, delay in ipairs({60, 600}) do
+        script.on_nth_tick(delay, function()
+            script.on_nth_tick(delay, nil)
+            ensure_surfaces()
+        end)
+    end)
+end)
+
 script.on_configuration_changed(function()
     ensure_storage()
     storage.schema = SCHEMA
