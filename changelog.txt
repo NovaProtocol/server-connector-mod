@@ -1,4 +1,12 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.17.0
+Date: 2026-10-16
+  Added:
+    - route_for(surface): the destination a player looking at that surface would be sent
+      to, without a player to send. Clicking a platform already routes to the space server
+      through the game's own connect_to_server, and this makes that decision checkable
+      from outside rather than only by hand in a game.
+---------------------------------------------------------------------------------------------------
 Version: 0.16.0
 Date: 2026-10-16
   Added:

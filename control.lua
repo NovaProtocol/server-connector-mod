@@ -729,6 +729,22 @@ local calls = {
         return {instance = instance(), surfaces = out}
     end,
 
+    -- Where a player looking at a surface would be sent, without a player to send.
+    --
+    -- The decision is the one the controller handler makes, and this is how it can be
+    -- checked from outside: whether a platform goes to the space server, whether a planet
+    -- goes to itself, and whether looking at home is not a journey at all.
+    route_for = function(surface)
+        local id = destination_for(game.surfaces[surface] or (game.surfaces[1] and nil))
+
+        return {
+            instance = instance(),
+            surface = surface,
+            target = id,
+            address = id and (storage.topology[id] or {}).address or nil,
+        }
+    end,
+
     -- One poll's worth of state, for the manager's health board.
     report = function()
         local force = main_force()
