@@ -1,4 +1,12 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.18.4
+Date: 2026-10-16
+  Fixed:
+    - The sweep had two copies of itself and the older one was the live one -- in Lua the
+      last definition wins -- so it still called get_chunk, the method this build does not
+      have, and cleared nothing on any server while reporting an error per surface. One
+      copy, and it asks the surface API rather than assuming it.
+---------------------------------------------------------------------------------------------------
 Version: 0.18.2
 Date: 2026-10-16
   Fixed:
