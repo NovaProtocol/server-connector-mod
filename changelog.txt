@@ -1,4 +1,16 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.11.5
+Date: 2026-10-16
+  Added:
+    - The freeplay scenario's crash site is switched off, and its cutscene with it. A
+      fleet's worlds are made to be played in rather than started in, and the wreckage is
+      a pile of entities that would have to be kept in step across six saves. The scenario
+      offers one switch for both, so both go.
+  Note:
+    - The call is made on load as well as at world creation, so a world made before this
+      existed is not left with the wreckage either. Nothing is drawn, and no command or
+      setting is added to the game.
+---------------------------------------------------------------------------------------------------
 Version: 0.11.4
 Date: 2026-10-16
   Added:

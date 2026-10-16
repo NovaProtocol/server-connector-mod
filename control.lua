@@ -91,6 +91,34 @@ local function destination_for(surface)
 end
 
 --------------------------------------------------------------------------------
+-- no crash site, and no cutscene
+--------------------------------------------------------------------------------
+
+-- Space Age's freeplay scenario drops a crashed ship on the first player to join and plays
+-- a cutscene over it. These worlds are made to be played in rather than started in, and a
+-- pile of wreckage is entities the fleet would have to keep in step across six saves. The
+-- scenario has its own switch for it, and it is the only one there is: the setting turns
+-- the cutscene off with the crash site, which is why both go.
+--
+-- The call is made on load as well as at world creation, so a world made before this
+-- existed is not left with the wreckage either.
+local function disable_crash_site()
+    if not remote.interfaces.freeplay then
+        -- Something else is running the world: a sandbox, a tutorial, a scenario of its
+        -- own. Nothing here to switch off.
+        return
+    end
+
+    local ok, err = pcall(function()
+        remote.call("freeplay", "set_disable_crashsite", true)
+    end)
+
+    if not ok then
+        log(string.format("[%s] could not disable the crash site: %s", MOD, tostring(err)))
+    end
+end
+
+--------------------------------------------------------------------------------
 -- every planet exists everywhere
 --------------------------------------------------------------------------------
 
@@ -254,6 +282,7 @@ end
 script.on_init(function()
     ensure_storage()
     log("[" .. MOD .. "] instance=" .. instance())
+    disable_crash_site()
     ensure_surfaces()
 end)
 
@@ -265,6 +294,7 @@ script.on_load(function()
     for _, delay in ipairs({60, 600}) do
         script.on_nth_tick(delay, function()
             script.on_nth_tick(delay, nil)
+            disable_crash_site()
             ensure_surfaces()
         end)
     end)
@@ -273,6 +303,7 @@ end)
 script.on_configuration_changed(function()
     ensure_storage()
     storage.schema = SCHEMA
+    disable_crash_site()
     ensure_surfaces()
 end)
 
