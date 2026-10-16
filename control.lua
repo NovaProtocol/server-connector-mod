@@ -350,6 +350,8 @@ end)
 -- is told, which is the same split as everything else here.
 
 
+-- A research event, for the manager: which research, and when the game says it happened.
+local function note_research(kind, name)
     if not name then
         return
     end
