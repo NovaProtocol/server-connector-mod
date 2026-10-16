@@ -609,6 +609,48 @@ local calls = {
         return events
     end,
 
+    -- Hold the game still, or let it run. The fleet pauses together when one server stops
+    -- answering, so that five worlds do not run on without the sixth.
+    set_paused = function(paused)
+        game.tick_paused = paused and true or false
+        return {instance = instance(), paused = game.tick_paused}
+    end,
+
+    -- Delete every surface except the named ones.
+    --
+    -- This is what makes a save the fleet can run: one world per server, so a vanilla save
+    -- handed to six servers becomes six single-surface saves instead of six copies of the
+    -- whole system. Surfaces are deleted with their entities, which is the point -- the
+    -- other planets' factories are not this server's to keep.
+    strip_surfaces = function(keep)
+        local keep_set = {}
+        for _, name in ipairs(keep or {}) do
+            keep_set[name] = true
+        end
+
+        local removed = {}
+        for name, surface in pairs(game.surfaces) do
+            if not keep_set[name] and surface.deletable then
+                local ok = pcall(function() game.delete_surface(name) end)
+                if ok then
+                    removed[#removed + 1] = name
+                else
+                    log(string.format("[%s] could not delete the surface %s", MOD, name))
+                end
+            end
+        end
+        table.sort(removed)
+
+        log(string.format("[%s] stripped %d surface(s): %s", MOD, #removed, table.concat(removed, ", ")))
+        return {instance = instance(), removed = removed,
+                surfaces = (function()
+                    local out = {}
+                    for name, _ in pairs(game.surfaces) do out[#out + 1] = name end
+                    table.sort(out)
+                    return out
+                end)()}
+    end,
+
     -- One poll's worth of state, for the manager's health board.
     report = function()
         local force = main_force()
@@ -650,6 +692,7 @@ local calls = {
             ups_target = game.speed * 60,
             players = players,
             destinations = #destinations(),
+            paused = game.tick_paused,
             surfaces = surfaces,
             unlocked = unlocked,
             schema = storage.schema,

@@ -1,4 +1,14 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.12.0
+Date: 2026-10-16
+  Added:
+    - set_paused holds the game still, or lets it run. The fleet pauses together when one
+      server stops answering, so five worlds do not run on without the sixth.
+    - strip_surfaces deletes every surface except the ones named. This is what turns a
+      vanilla save into one the fleet can run: one world per server, so a save handed to
+      six servers becomes six single-surface saves instead of six copies of the system.
+    - report says whether the game is paused.
+---------------------------------------------------------------------------------------------------
 Version: 0.11.8
 Date: 2026-10-16
   Fixed:
