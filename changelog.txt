@@ -1,4 +1,15 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.11.7
+Date: 2026-10-16
+  Fixed:
+    - 0.11.6 loaded and then stopped every server: main_force was defined below the
+      function that calls it, and a local is only visible from the line after its own, so
+      it was a nil global. on_init errored and the game refused the save.
+  Note:
+    - The packaging script parses the Lua before building, which catches a syntax error.
+      This was not one: a nil local is a runtime error, and only a server starting finds
+      it.
+---------------------------------------------------------------------------------------------------
 Version: 0.11.6
 Date: 2026-10-16
   Fixed:

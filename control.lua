@@ -90,6 +90,14 @@ local function destination_for(surface)
     return id
 end
 
+-- The force everything here acts on. It is defined before anything that uses it: a local
+-- function is only visible from the line after its own, so one defined below its callers
+-- is a nil global to them, and that is a runtime error the game reports and the parser
+-- cannot.
+local function main_force()
+    return game.forces.player or game.forces[1]
+end
+
 --------------------------------------------------------------------------------
 -- no crash site, and no cutscene
 --------------------------------------------------------------------------------
@@ -341,11 +349,7 @@ end)
 -- manager owns the shared state; the mod reports what it has and applies what it
 -- is told, which is the same split as everything else here.
 
-local function main_force()
-    return game.forces.player or game.forces[1]
-end
 
-local function note_research(kind, name)
     if not name then
         return
     end
