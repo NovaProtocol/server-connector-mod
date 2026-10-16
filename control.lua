@@ -106,11 +106,14 @@ local function ensure_surfaces()
     local unclassified = {}
 
     for id, entry in pairs(storage.topology or {}) do
-        if entry.kind == nil and id ~= instance() then
+        if entry.kind == nil then
             unclassified[#unclassified + 1] = id
         end
 
-        if entry.kind == "planet" and id ~= instance() and not game.surfaces[id] then
+        -- Its own planet counts most of all: a fresh save is always a nauvis world,
+        -- whatever the server is for, so the planet this server exists to be is exactly
+        -- the one that is missing.
+        if entry.kind == "planet" and not game.surfaces[id] then
             local planet = game.planets and game.planets[id]
             if planet then
                 local ok, surface = pcall(function() return planet.create_surface() end)

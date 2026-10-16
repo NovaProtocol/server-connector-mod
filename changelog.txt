@@ -1,4 +1,11 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.11.2
+Date: 2026-10-16
+  Fixed:
+    - The planet a server exists to be was the one surface it did not create, because it
+      was assumed to be there. A fresh save is always a nauvis world whatever the server is
+      for, so the vulcanus server had every planet's surface except vulcanus.
+---------------------------------------------------------------------------------------------------
 Version: 0.11.1
 Date: 2026-10-16
   Changed:
