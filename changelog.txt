@@ -1,4 +1,15 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.18.2
+Date: 2026-10-16
+  Fixed:
+    - The sweep no longer asks for a chunk with a method this build of the game does not
+      have (get_chunk), which threw from a boot-time handler and took clearing down with it
+      -- including the report of what had already been taken off. The entities go first and
+      now always report; chunks are deleted only if delete_chunk is there at all.
+  Added:
+    - surface_api, which reports which of these calls the game actually has, so the next
+      question about it is answered by the game rather than guessed at.
+---------------------------------------------------------------------------------------------------
 Version: 0.18.1
 Date: 2026-10-16
   Fixed:

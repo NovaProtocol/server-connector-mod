@@ -286,6 +286,51 @@ local CLEAR_WINDOW = 64
 -- a player standing there is somebody's body, not tax.
 -- What clearing one surface amounts to.
 --
+-- The entities are the cost: a biter on a surface nobody plays on is a creature the game
+-- simulates on every tick, and five of the six servers hold a generated nauvis they never
+-- visit. They are taken first, and they are taken whether or not anything else here works.
+--
+-- The chunks are the map, which is memory rather than ticks, and they are only deleted if
+-- this build of the game has the call at all: the first version of this asked for a chunk
+-- with a method that does not exist, and an error raised from a boot-time tick takes the
+-- whole server down. Absent is not fatal, so it is checked rather than assumed.
+local function clear_one(surface)
+    local destroyed = 0
+    for _, entity in pairs(surface.find_entities_filtered{}) do
+        if entity.valid and entity.type ~= "character" then
+            entity.destroy()
+            destroyed = destroyed + 1
+        end
+    end
+
+    local chunks = 0
+    if type(surface.delete_chunk) == "function" then
+        for cx = -CLEAR_WINDOW, CLEAR_WINDOW do
+            for cy = -CLEAR_WINDOW, CLEAR_WINDOW do
+                -- Straight at the chunk, without asking whether it is generated first: an
+                -- empty one is a no-op, which is cheaper than a query that may not exist.
+                if pcall(function() return surface.delete_chunk({x = cx, y = cy}) end) then
+                    chunks = chunks + 1
+                end
+            end
+        end
+    end
+
+    return {entities = destroyed, chunks = chunks}
+end
+
+-- Take everything off the surfaces this server does not own.
+--
+-- A fleet server's save is a nauvis world whatever planet the server is for, so nauvis is
+-- generated -- spawn area, biters, the lot -- before anybody arrives, and on five of the
+-- six servers nobody ever goes there. Those biters are a UPS cost paid on every tick by a
+-- server whose players are somewhere else entirely.
+--
+-- Deleting a chunk takes what is in it, which is the cost, and leaves the map: if anything
+-- ever does need that surface, the game generates it again. Characters are left alone --
+-- a player standing there is somebody's body, not tax.
+-- What clearing one surface amounts to.
+--
 -- Entities anywhere on it, which is the part that costs UPS on every tick, and then the
 -- chunks themselves, so the map is not kept in memory for a surface nobody plays on.
 -- Characters are left alone: a player standing there is somebody's body, not tax.
@@ -937,6 +982,20 @@ local calls = {
         table.sort(out)
 
         return {instance = instance(), cleared = table.concat(out, ", ")}
+    end,
+
+    -- Which of the surface calls this build of the game actually has.
+    --
+    -- Asked rather than assumed: one of these was guessed at and the guess took the whole
+    -- fleet down on load, because an error from a boot-time handler is non-recoverable.
+    surface_api = function()
+        local surface = game.surfaces[instance()] or game.surfaces[1]
+        local out = {}
+        for _, name in ipairs({"get_chunk", "get_chunks", "delete_chunk", "set_chunk_generated_status",
+                               "get_chunk_size", "find_entities_filtered", "get_map_bounds"}) do
+            out[name] = type(surface[name])
+        end
+        return {instance = instance(), surface = surface and surface.name or nil, calls = out}
     end,
 
     -- Where a player looking at a surface would be sent, without a player to send.
