@@ -352,16 +352,19 @@ end
 local function spawn_on_owned_surface()
     local home = game.surfaces[instance()]
     if not home then
-        return
+        return false
     end
 
-    local force = main_force()
-    local here = force.get_spawn_position and force.get_spawn_position()
-    if here and here.surface ~= home then
-        local spot = home.find_non_colliding_position("character", {x = 0, y = 0}, 64, 1) or {x = 0, y = 0}
-        force.set_spawn_position(spot, home)
-        log(string.format("[%s] the spawn point moves to %s", instance(), home.name))
-    end
+    -- Set, not compared. The game answers a spawn-position query for whichever surface it
+    -- is asked about, so there is no "which surface does this force spawn on" to read back
+    -- -- and asking it with no argument at all is a non-recoverable error that quits the
+    -- server, which is how 0.18.0 came to not start. Setting it again is free.
+    local spot = home.find_non_colliding_position("character", {x = 0, y = 0}, 64, 1) or {x = 0, y = 0}
+    main_force().set_spawn_position(spot, home)
+    storage.spawn_surface = home.name
+
+    log(string.format("[%s] the spawn point is on %s", instance(), home.name))
+    return true
 end
 
 --------------------------------------------------------------------------------
@@ -475,13 +478,23 @@ end
 local settle_now, settle_later = false, false
 
 local function settle()
-    disable_crash_site()
-    ensure_surfaces()
+    -- Every step is wrapped, and that is not caution for its own sake: one of these took
+    -- the whole fleet down at boot -- an argument count the API refused, raised from a tick
+    -- handler, which is non-recoverable -- and a server that will not start is worse than a
+    -- surface left uncleared.
+    local steps = {
+        {"the crash site", disable_crash_site},
+        {"the surfaces", ensure_surfaces},
+        {"the spawn point", spawn_on_owned_surface},
+        {"the surfaces this server does not own", clear_foreign_surfaces},
+    }
 
-    -- The surfaces exist by now, so the two things that make a foreign one free: the spawn
-    -- moves to the planet this server is for, and what is on the others is taken away.
-    spawn_on_owned_surface()
-    clear_foreign_surfaces()
+    for _, step in ipairs(steps) do
+        local ok, err = pcall(step[2])
+        if not ok then
+            log(string.format("[%s] %s could not be done: %s", instance(), step[1], tostring(err)))
+        end
+    end
 end
 
 script.on_nth_tick(60, function()
@@ -986,10 +999,7 @@ local calls = {
             paused = game.tick_paused,
             surfaces = surfaces,
             unlocked = unlocked,
-            spawn = (function()
-                local ok, position = pcall(function() return main_force().get_spawn_position() end)
-                return ok and position and position.surface and position.surface.name or nil
-            end)(),
+            spawn = storage.spawn_surface,
             foreign = storage.cleared or {},
             schema = storage.schema,
         }

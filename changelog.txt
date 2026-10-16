@@ -1,4 +1,14 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.18.1
+Date: 2026-10-16
+  Fixed:
+    - 0.18.0 did not start. The spawn-position check called get_spawn_position with no
+      argument where the API wants one, and the error came out of a boot-time tick handler,
+      which is non-recoverable: every server running it quit as it loaded. The spawn
+      position is set on the surface this server is for instead of being compared with
+      anything, and every step of the boot work is wrapped, so a fault in one of them is a
+      log line rather than a fleet that will not start.
+---------------------------------------------------------------------------------------------------
 Version: 0.18.0
 Date: 2026-10-16
   Added:
