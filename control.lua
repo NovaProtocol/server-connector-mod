@@ -296,7 +296,22 @@ local CLEAR_WINDOW = 64
 -- whole server down. Absent is not fatal, so it is checked rather than assumed.
 local function clear_one(surface)
     local destroyed = 0
-    for _, entity in pairs(surface.find_entities_filtered{}) do
+
+    -- Either way of asking, whichever this build answers: taking the entities off is the
+    -- part that matters, and it must not depend on which of two equivalent calls exists.
+    local found = nil
+    for _, ask in ipairs({
+        function() return surface.find_entities_filtered{} end,
+        function() return surface.find_entities() end,
+    }) do
+        local ok, list = pcall(ask)
+        if ok and type(list) == "table" and #list > 0 then
+            found = list
+            break
+        end
+    end
+
+    for _, entity in pairs(found or {}) do
         if entity.valid and entity.type ~= "character" then
             entity.destroy()
             destroyed = destroyed + 1
@@ -984,18 +999,43 @@ local calls = {
         return {instance = instance(), cleared = table.concat(out, ", ")}
     end,
 
-    -- Which of the surface calls this build of the game actually has.
+    -- Which of the surface calls this build of the game actually has, and which way of
+    -- asking a surface for its entities finds them.
     --
-    -- Asked rather than assumed: one of these was guessed at and the guess took the whole
-    -- fleet down on load, because an error from a boot-time handler is non-recoverable.
+    -- Everything here is asked under pcall, because that is the whole lesson: reading a key
+    -- an API object does not have is an error rather than a nil, and an error raised from
+    -- the boot-time handler quits the server. So the question is asked of the game instead
+    -- of assumed, and the answers come back as strings.
     surface_api = function()
         local surface = game.surfaces[instance()] or game.surfaces[1]
-        local out = {}
-        for _, name in ipairs({"get_chunk", "get_chunks", "delete_chunk", "set_chunk_generated_status",
-                               "get_chunk_size", "find_entities_filtered", "get_map_bounds"}) do
-            out[name] = type(surface[name])
+        if not surface then
+            return {instance = instance(), error = "no surface"}
         end
-        return {instance = instance(), surface = surface and surface.name or nil, calls = out}
+
+        local out = {}
+        local function try(name, fn)
+            local ok, value = pcall(fn)
+            if not ok then
+                out[name] = "ERROR: " .. tostring(value)
+            elseif type(value) == "table" then
+                out[name] = "table, " .. tostring(#value) .. " entries"
+            else
+                out[name] = type(value)
+            end
+        end
+
+        for _, name in ipairs({"delete_chunk", "get_chunk", "get_chunks", "set_chunk_generated_status",
+                               "find_entities", "find_entities_filtered", "get_map_bounds"}) do
+            try(name, function() return surface[name] end)
+        end
+
+        try("find_entities_filtered{}", function() return surface.find_entities_filtered{} end)
+        try("find_entities()", function() return surface.find_entities() end)
+        try("find_entities_filtered{force=player}", function()
+            return surface.find_entities_filtered{force = main_force().name}
+        end)
+
+        return {instance = instance(), surface = surface.name, calls = out}
     end,
 
     -- Where a player looking at a surface would be sent, without a player to send.
