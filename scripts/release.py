@@ -19,6 +19,7 @@ and ``--repo`` if the default is wrong.
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import sys
 import urllib.error
@@ -40,7 +41,29 @@ def read_info():
         return json.load(handle)
 
 
+def check_lua():
+    """Parse the Lua before packaging it.
+
+    A syntax error in control.lua stops the mod loading at all -- the server refuses the
+    save and says so in a log nobody is reading yet -- so it is caught here instead,
+    whenever a parser is on PATH.
+    """
+    parser = next((shutil.which(name) for name in ("luac5.4", "luac", "luajit") if shutil.which(name)), None)
+    if not parser:
+        print("no Lua parser on PATH, syntax not checked")
+        return
+
+    for name in ("control.lua", "settings.lua"):
+        result = subprocess.run([parser, "-p", str(ROOT / name)], capture_output=True, text=True)
+        if result.returncode != 0:
+            raise SystemExit(f"{name} does not parse: {result.stderr.strip()}")
+
+    print(f"Lua parses ({parser})")
+
+
 def build(info):
+    check_lua()
+
     stem = f"{info['name']}_{info['version']}"
     out = ROOT / f"{stem}.zip"
 

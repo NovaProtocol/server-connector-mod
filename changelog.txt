@@ -1,4 +1,12 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.11.6
+Date: 2026-10-16
+  Fixed:
+    - 0.11.4 and 0.11.5 did not load at all: the on-load block closed its loop with `end)`
+      instead of `end`, so the mod failed to parse and every server refused the save. The
+      script that packages this now parses control.lua and settings.lua first, which is
+      what should have caught it.
+---------------------------------------------------------------------------------------------------
 Version: 0.11.5
 Date: 2026-10-16
   Added:

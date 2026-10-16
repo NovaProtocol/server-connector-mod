@@ -297,7 +297,7 @@ script.on_load(function()
             disable_crash_site()
             ensure_surfaces()
         end)
-    end)
+    end
 end)
 
 script.on_configuration_changed(function()
