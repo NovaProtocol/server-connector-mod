@@ -91,6 +91,35 @@ local function destination_for(surface)
 end
 
 --------------------------------------------------------------------------------
+-- every planet exists everywhere
+--------------------------------------------------------------------------------
+
+-- Each server has its own save, so a surface only exists on the server whose save made
+-- it -- and the remote view that routing depends on has nothing to click on a planet this
+-- server has never heard of. Creating the surface is enough: chunks are generated when
+-- something needs them, so an unvisited planet stays fog until somebody goes there, and
+-- nothing is charted or rendered by this.
+--
+-- It runs whenever the topology arrives, whenever this server learns which one it is, and
+-- on load, so a server that is told anything late still ends up with all of them.
+local function ensure_surfaces()
+    for id, entry in pairs(storage.topology or {}) do
+        if entry.kind == "planet" and id ~= instance() and not game.surfaces[id] then
+            local planet = game.planets and game.planets[id]
+            if planet then
+                local ok, surface = pcall(function() return planet.create_surface() end)
+                if ok and surface then
+                    log(string.format("[%s] created the surface for %s", MOD, id))
+                else
+                    log(string.format("[%s] could not create the surface for %s: %s",
+                        MOD, id, tostring(surface)))
+                end
+            end
+        end
+    end
+end
+
+--------------------------------------------------------------------------------
 -- the trigger
 --------------------------------------------------------------------------------
 
@@ -187,11 +216,13 @@ end
 script.on_init(function()
     ensure_storage()
     log("[" .. MOD .. "] instance=" .. instance())
+    ensure_surfaces()
 end)
 
 script.on_configuration_changed(function()
     ensure_storage()
     storage.schema = SCHEMA
+    ensure_surfaces()
 end)
 
 script.on_event(defines.events.on_player_changed_surface, function(event)
@@ -330,6 +361,7 @@ local calls = {
         -- Anything recorded against the old identity is meaningless now.
         storage.body = {}
         log("[" .. MOD .. "] instance=" .. tostring(id))
+        ensure_surfaces()
         return {instance = instance()}
     end,
 
@@ -340,9 +372,16 @@ local calls = {
         storage.topology = {}
         for id, entry in pairs(topology or {}) do
             if type(entry) == "table" and entry.address then
-                storage.topology[id] = {name = entry.name or id, address = entry.address}
+                storage.topology[id] = {
+                    name = entry.name or id,
+                    address = entry.address,
+                    -- Which kind of server it is decides whether this one has a surface
+                    -- to create for it: a planet does, a space server does not.
+                    kind = entry.kind,
+                }
             end
         end
+        ensure_surfaces()
         return {instance = instance(), destinations = #destinations()}
     end,
 
@@ -493,12 +532,19 @@ local calls = {
                 viewing_surface = player.surface and player.surface.name or nil,
             }
         end
+        local surfaces = {}
+        for name, _ in pairs(game.surfaces) do
+            surfaces[#surfaces + 1] = name
+        end
+        table.sort(surfaces)
+
         return {
             instance = instance(),
             tick = game.tick,
             ups_target = game.speed * 60,
             players = players,
             destinations = #destinations(),
+            surfaces = surfaces,
             schema = storage.schema,
         }
     end,

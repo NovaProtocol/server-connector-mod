@@ -1,4 +1,17 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.11.0
+Date: 2026-10-16
+  Added:
+    - Every planet's surface is created on every server, when the topology arrives. A
+      split world gives each server its own save, so a surface exists only where its save
+      made it -- and the remote view that routing depends on has nothing to click on a
+      planet this server has never had. Chunks are generated when something needs them, so
+      an unvisited planet stays fog: nothing is rendered or charted by this.
+    - report lists the surfaces this server has, which is how that is checked.
+  Note:
+    - The topology now names each server's kind, because only a planet has a surface to
+      create; a space server's platforms are built, not created.
+---------------------------------------------------------------------------------------------------
 Version: 0.10.0
 Date: 2026-10-16
   Added:
