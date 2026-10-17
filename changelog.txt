@@ -1,4 +1,12 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.23.1
+Date: 2026-10-17
+  Fixed:
+    - The strip step says what it does and what fails. It was called under pcall with nothing
+      logged, so a strip that made no progress for eight minutes left every counter at zero
+      and no word about why. The handler logs its error, a surface the job cannot find names
+      itself, an empty surface says so, and a job with nothing to strip says that too.
+---------------------------------------------------------------------------------------------------
 Version: 0.23.0
 Date: 2026-10-17
   Added:

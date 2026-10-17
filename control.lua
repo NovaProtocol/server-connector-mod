@@ -243,6 +243,8 @@ local function strip_step()
 
     local surface = game.surfaces[job.surfaces[job.index]]
     if not surface then
+        log(string.format("[%s] the strip cannot find surface %d of %d (%s)",
+            instance(), job.index, #job.surfaces, tostring(job.surfaces[job.index])))
         job.index = job.index + 1
         if job.index > #job.surfaces then
             job.done = true
@@ -266,6 +268,8 @@ local function strip_step()
         end
 
         if not batch or #batch == 0 then
+            log(string.format("[%s] %s has no more entities after %d",
+                instance(), surface.name, job.entities))
             job.phase = "chunks"
             job.cx, job.cy = -STRIP_WINDOW, -STRIP_WINDOW
             return
@@ -688,7 +692,12 @@ script.on_nth_tick(60, function()
 end)
 
 script.on_event(defines.events.on_tick, function()
-    pcall(strip_step)
+    -- Not pcall and silence: a step that fails and says nothing is how a strip came to make
+    -- no progress for eight minutes while every counter stayed at zero.
+    local ok, err = pcall(strip_step)
+    if not ok then
+        log(string.format("[%s] the strip step failed: %s", instance(), tostring(err)))
+    end
 end)
 
 script.on_nth_tick(60, function()
@@ -1168,6 +1177,11 @@ local calls = {
 
         log(string.format("[%s] stripping %d surface(s): %s",
             instance(), #surfaces, table.concat(surfaces, ", ")))
+
+        if #surfaces == 0 then
+            log(string.format("[%s] nothing to strip: this server keeps every surface it has",
+                instance()))
+        end
 
         return {instance = instance(), started = true, surfaces = #surfaces}
     end,
