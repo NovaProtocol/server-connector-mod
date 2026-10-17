@@ -1,4 +1,13 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.21.1
+Date: 2026-10-16
+  Fixed:
+    - mirror_platforms walked the list it was sent with ipairs, and nothing was made: the
+      JSON is decoded by the game's own helper and the shape that comes back is the helper's
+      business. It walks either shape now, and reports how many entries it saw and how many
+      were usable, so a list that arrives unusable says so instead of looking like a fleet
+      with no platforms.
+---------------------------------------------------------------------------------------------------
 Version: 0.21.0
 Date: 2026-10-16
   Added:

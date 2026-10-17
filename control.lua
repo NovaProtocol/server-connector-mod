@@ -1008,8 +1008,13 @@ local calls = {
 
         entries = entries or {}
 
+        -- Either an array or a table keyed by something else: the JSON is decoded by the
+        -- game's own helper, and which shape comes back is the helper's business, not
+        -- something to be assumed. The count is reported for the same reason.
         local wanted = {}
-        for _, entry in ipairs(entries) do
+        local seen = 0
+        for _, entry in pairs(entries) do
+            seen = seen + 1
             if type(entry) == "table" and entry.name then
                 wanted[entry.name] = entry
             end
@@ -1067,8 +1072,16 @@ local calls = {
         table.sort(kept)
         table.sort(removed)
 
+        log(string.format("[%s] the fleet sent %d platform(s), %d of them usable",
+            instance(), seen, (function()
+                local count = 0
+                for _ in pairs(wanted) do count = count + 1 end
+                return count
+            end)()))
+
         return {
             instance = instance(),
+            seen = seen,
             made = table.concat(made, ","),
             kept = table.concat(kept, ","),
             removed = table.concat(removed, ","),
