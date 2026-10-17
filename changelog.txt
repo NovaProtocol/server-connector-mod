@@ -1,4 +1,12 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.22.4
+Date: 2026-10-17
+  Fixed:
+    - The space server no longer mirrors itself. It is where the platforms really are, so a
+      list derived from them must not be applied back to them: a list one poll old dragged
+      the real platform back to where it had been, and a pause read from it re-paused it.
+      That loop is why the copies and the real platform kept reverting.
+---------------------------------------------------------------------------------------------------
 Version: 0.22.3
 Date: 2026-10-17
   Added (probes):

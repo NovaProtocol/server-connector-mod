@@ -1064,6 +1064,15 @@ local calls = {
             return {instance = instance(), skipped = "no identity"}
         end
 
+        -- The space server is where the platforms really are, so it is not a copy of
+        -- anything and must not be made to match a list derived from itself. Applying it
+        -- back is a loop: a list one poll old drags the real platform back to where it was,
+        -- and a pause read from it re-pauses it -- which is exactly what the copies and the
+        -- real platform were doing to each other.
+        if instance() == "space" then
+            return {instance = instance(), skipped = "the real platforms live here"}
+        end
+
         entries = entries or {}
 
         -- Either an array or a table keyed by something else: the JSON is decoded by the
