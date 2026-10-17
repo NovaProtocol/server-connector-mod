@@ -1,4 +1,14 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.23.3
+Date: 2026-10-17
+  Fixed:
+    - The world work no longer runs on a load or on a tick. Both run on every client as well
+      as the server, and a client that is joining reports no connected players while the
+      server sees one -- so the client cleared surfaces the server had kept, and the game
+      desynced the moment it noticed. Surfaces, the spawn point and clearing happen only on
+      an order (settle), and only with nobody connected: a world change made here is not
+      replicated, so it must never happen while anybody can be comparing.
+---------------------------------------------------------------------------------------------------
 Version: 0.23.2
 Date: 2026-10-17
   Fixed:

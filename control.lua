@@ -673,8 +673,6 @@ end
 
 -- The load-time check, as two permanent handlers.
 --
--- An existing save never fires on_init again, so the check runs on the ticks after every
--- load as well. on_load may not touch the world, which is why it happens on a tick -- but
 -- what does it is registered here, once, at load, and never removed.
 --
 -- It has to be that way. The game compares the event handlers a joining client has against
@@ -682,7 +680,6 @@ end
 -- running leaves the two sets different the moment anybody connects: the client registers
 -- it, the server no longer has it. Nothing can be registered or removed while the game is
 -- running, and the whole mod is written that way.
-local settle_now, settle_later = false, false
 
 local function settle()
     -- Every step is wrapped, and that is not caution for its own sake: one of these took
@@ -704,13 +701,6 @@ local function settle()
     end
 end
 
-script.on_nth_tick(60, function()
-    if not settle_now then
-        return
-    end
-    settle_now = false
-    settle()
-end)
 
 script.on_event(defines.events.on_tick, function()
     -- Not pcall and silence: a step that fails and says nothing is how a strip came to make
@@ -731,26 +721,12 @@ script.on_nth_tick(60, function()
     pcall(sweep_asteroids)
 end)
 
-script.on_nth_tick(600, function()
-    if not settle_later then
-        return
-    end
-    settle_later = false
-    settle()
-end)
 
 script.on_init(function()
     ensure_storage()
     log("[" .. MOD .. "] instance=" .. instance())
     disable_crash_site()
     ensure_surfaces()
-    settle_now, settle_later = true, true
-end)
-
-script.on_load(function()
-    -- Twice: a node pushes this server's identity a moment after the game is up, and until
-    -- that arrives there is no topology to check.
-    settle_now, settle_later = true, true
 end)
 
 script.on_configuration_changed(function()
@@ -787,7 +763,6 @@ script.on_event(defines.events.on_player_left_game, function()
     end
 
     if empty() then
-        settle_now, settle_later = true, true
     end
 end)
 
@@ -1176,6 +1151,33 @@ local calls = {
         table.sort(out)
 
         return {instance = instance(), surfaces = out}
+    end,
+
+    -- Bring this world into line: every planet's surface, the spawn point, and what no
+    -- longer belongs on this server.
+    --
+    -- An order, and only ever carried out with nobody connected. These are world changes,
+    -- they are not replicated to clients, and a client that is joining still counts as a
+    -- player -- which is exactly how a client and a server came to disagree: the autonomous
+    -- version of this ran on both sides, and each side counted the connected players
+    -- differently at the moment it ran.
+    settle = function()
+        if not known() then
+            return {instance = instance(), skipped = "no identity"}
+        end
+        if not empty() then
+            return {instance = instance(), skipped = "somebody is connected"}
+        end
+
+        settle()
+
+        local names = {}
+        for name, _ in pairs(game.surfaces) do
+            names[#names + 1] = name
+        end
+        table.sort(names)
+
+        return {instance = instance(), settled = true, surfaces = table.concat(names, ",")}
     end,
 
     -- Begin stripping this world down to what this server keeps. Returns at once; the work
