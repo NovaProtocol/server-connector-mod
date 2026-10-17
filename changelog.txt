@@ -1,4 +1,10 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.21.2
+Date: 2026-10-16
+  Changed:
+    - platform_api asks the game for the starter pack's item name, because creation requires
+      one and a guessed name is the third guess today the game has had to correct.
+---------------------------------------------------------------------------------------------------
 Version: 0.21.1
 Date: 2026-10-16
   Fixed:

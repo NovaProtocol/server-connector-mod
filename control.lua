@@ -1132,6 +1132,18 @@ local calls = {
             tried[label] = ok and ("ok: " .. tostring(value)) or ("error: " .. tostring(value))
         end
 
+        -- The starter pack's item name, asked for rather than guessed: creation requires
+        -- one, and a guessed item name would be the third guess today the game has had to
+        -- correct. Whichever of these exists is the one to use.
+        for _, name in ipairs({"space-platform-starter-pack", "space-platform-foundation",
+                               "platform-starter-pack", "space-platform-hub",
+                               "space-platform-starter", "cargo-landing-pad"}) do
+            attempt("item:" .. name, function()
+                local item = prototypes.item[name]
+                return item and item.name or "no such item"
+            end)
+        end
+
         attempt("platforms", function() return #force.platforms end)
         attempt("create()", function() return force.create_space_platform() end)
         attempt("create{name}", function() return force.create_space_platform{name = name or "probe"} end)
