@@ -1,4 +1,13 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.24.1
+Date: 2026-10-17
+  Fixed:
+    - A surface's chunks are found by asking the world for them (get_chunks, tolerant of the
+      shape it hands back) instead of walking a window around the origin. A 170MB world has
+      chunks far from anywhere and every one of them is a chunk of a surface nobody wants.
+    - surfaces() says which of them are platforms, because a space server keeps its platforms
+      and they cannot be named in advance -- they are built.
+---------------------------------------------------------------------------------------------------
 Version: 0.24.0
 Date: 2026-10-17
   Added:

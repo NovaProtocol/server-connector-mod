@@ -486,16 +486,29 @@ local function clear_one(surface)
         end
     end
 
+    -- The world's own chunk list, not a window around the origin: a 170MB world has chunks
+    -- far from anywhere, and they are still chunks of a surface nobody wants. get_chunks is
+    -- the method this build has (get_chunk does not exist), and what it hands back is read
+    -- tolerantly because its shape is the game's business, not something to assume.
     local chunks = 0
-    if type(surface.delete_chunk) == "function" then
-        for cx = -CLEAR_WINDOW, CLEAR_WINDOW do
-            for cy = -CLEAR_WINDOW, CLEAR_WINDOW do
-                -- Straight at the chunk, without asking whether it is generated first: an
-                -- empty one is a no-op, which is cheaper than a query that may not exist.
-                if pcall(function() return surface.delete_chunk({x = cx, y = cy}) end) then
+    if type(surface.get_chunks) == "function" then
+        local ok, list = pcall(function() return surface.get_chunks() end)
+        if ok and type(list) == "table" then
+            for _, entry in pairs(list) do
+                local position = entry
+                if type(entry) == "table" and entry.position then
+                    position = entry.position
+                end
+
+                if type(position) == "table" and pcall(function()
+                    return surface.delete_chunk(position)
+                end) then
                     chunks = chunks + 1
                 end
             end
+        else
+            log(string.format("[%s] could not list %s's chunks: %s",
+                instance(), surface.name, tostring(list)))
         end
     end
 
@@ -1186,13 +1199,23 @@ local calls = {
 
     -- What surfaces this world has, for the node to walk one by one.
     surfaces = function()
-        local names = {}
-        for name, _ in pairs(game.surfaces) do
+        local names, platforms = {}, {}
+        for name, surface in pairs(game.surfaces) do
             names[#names + 1] = name
+            if surface.platform then
+                platforms[#platforms + 1] = name
+            end
         end
         table.sort(names)
+        table.sort(platforms)
 
-        return {instance = instance(), surfaces = table.concat(names, ",")}
+        -- The platforms are told apart from the planets: a space server keeps its platforms,
+        -- and they cannot be named in advance because they are built.
+        return {
+            instance = instance(),
+            surfaces = table.concat(names, ","),
+            platforms = table.concat(platforms, ","),
+        }
     end,
 
     -- Bring this world into line: every planet's surface, the spawn point, and what no
