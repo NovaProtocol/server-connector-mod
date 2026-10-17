@@ -994,6 +994,53 @@ local calls = {
         return {instance = instance(), cleared = table.concat(out, ", ")}
     end,
 
+    -- What this server's platforms are.
+    --
+    -- Read-only. Every field here is one the runtime docs list for LuaSpacePlatform, and
+    -- nothing is derived or invented: a planet server reports none, which is a real answer.
+    -- The copies come from this list, and what to do with them is the manager's decision.
+    platforms = function()
+        local out = {}
+        for _, platform in pairs(main_force().platforms or {}) do
+            out[#out + 1] = {
+                name = platform.name,
+                index = platform.index,
+                state = tostring(platform.state),
+                location = platform.space_location and platform.space_location.name or nil,
+                connection = platform.space_connection and platform.space_connection.name or nil,
+                distance = platform.distance,
+                paused = platform.paused,
+                hub = platform.hub ~= nil,
+                hidden = platform.hidden,
+                deleting_in = platform.scheduled_for_deletion,
+            }
+        end
+
+        table.sort(out, function(a, b) return (a.name or "") < (b.name or "") end)
+        return {instance = instance(), platforms = out}
+    end,
+
+    -- The creation call, tried rather than assumed.
+    --
+    -- The docs say it exists -- LuaForce::create_space_platform -- and do not say here what
+    -- it takes, so the shapes are tried under pcall and the game's own answer about each one
+    -- comes back. Nothing is created unless the game accepts it, and a stray platform on the
+    -- space server's own world is the only thing a successful probe could leave behind.
+    platform_api = function(name)
+        local force = main_force()
+        local tried = {}
+        local function attempt(label, fn)
+            local ok, value = pcall(fn)
+            tried[label] = ok and ("ok: " .. tostring(value)) or ("error: " .. tostring(value))
+        end
+
+        attempt("platforms", function() return #force.platforms end)
+        attempt("create()", function() return force.create_space_platform() end)
+        attempt("create{name}", function() return force.create_space_platform{name = name or "probe"} end)
+
+        return {instance = instance(), tried = tried, platforms = #force.platforms}
+    end,
+
     -- Which of the surface calls this build of the game actually has, and which way of
     -- asking a surface for its entities finds them.
     --

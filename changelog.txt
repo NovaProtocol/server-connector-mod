@@ -1,4 +1,15 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.20.0
+Date: 2026-10-16
+  Added:
+    - platforms(): what this server's platforms are -- name, index, state, location,
+      connection, distance, paused, whether it has a hub, hidden, and how long until it is
+      deleted. Read-only, and every field is one the runtime docs list for LuaSpacePlatform.
+      A planet server reports none, which is a real answer rather than an error.
+    - platform_api(): the creation call the docs name (LuaForce::create_space_platform) tried
+      with a couple of shapes under pcall, so its arguments come from the game rather than
+      from a guess. Two of this fleet's outages were guessed calls.
+---------------------------------------------------------------------------------------------------
 Version: 0.19.0
 Date: 2026-10-16
   Changed:
