@@ -1,4 +1,11 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.22.1
+Date: 2026-10-17
+  Fixed:
+    - The position writes on a copy say why they were refused. They were wrapped and silent,
+      and a silent refusal is indistinguishable from a copy that follows: the write happens,
+      nothing changes, nobody is told. Three faults today were hidden by that pattern.
+---------------------------------------------------------------------------------------------------
 Version: 0.22.0
 Date: 2026-10-17
   Added:

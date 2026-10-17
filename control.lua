@@ -1035,7 +1035,24 @@ local calls = {
         return {instance = instance(), cleared = table.concat(out, ", ")}
     end,
 
-    -- Make, keep or remove this server's copies of the fleet's platforms.
+    -- A write to a copy's position, said out loud when the game refuses it.
+--
+-- These were wrapped and silent, and a silent refusal looks exactly like a copy that
+-- follows: the write happens, nothing changes, and nobody is told. Three bugs today were
+-- hidden by the same pattern.
+local function set_position(platform, field, value)
+    if value == nil then
+        return
+    end
+
+    local ok, err = pcall(function() platform[field] = value end)
+    if not ok then
+        log(string.format("[%s] could not set %s to %s on %s: %s",
+            instance(), field, tostring(value), platform.name, tostring(err)))
+    end
+end
+
+-- Make, keep or remove this server's copies of the fleet's platforms.
     --
     -- An order, not a decision: the list comes from the manager, which is the only thing
     -- that can see the real platforms wherever they are. A planet server's copy is a hub
@@ -1093,21 +1110,21 @@ local calls = {
                 -- moved is still a copy.
                 if entry.connection and (platform.space_connection == nil
                     or platform.space_connection.name ~= entry.connection) then
-                    pcall(function() platform.space_connection = entry.connection end)
+                    set_position(platform, "space_connection", entry.connection)
                 end
 
                 if entry.location and (platform.space_location == nil
                     or platform.space_location.name ~= entry.location) then
-                    pcall(function() platform.space_location = entry.location end)
+                    set_position(platform, "space_location", entry.location)
                 end
 
                 -- After the connection: writing one sets the distance to 0.5.
                 if type(entry.distance) == "number" and platform.distance ~= entry.distance then
-                    pcall(function() platform.distance = entry.distance end)
+                    set_position(platform, "distance", entry.distance)
                 end
 
                 if entry.paused ~= nil and platform.paused ~= entry.paused then
-                    pcall(function() platform.paused = entry.paused end)
+                    set_position(platform, "paused", entry.paused)
                 end
             else
                 local planet = entry.location or instance()
