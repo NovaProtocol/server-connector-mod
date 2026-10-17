@@ -1,4 +1,14 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.23.2
+Date: 2026-10-17
+  Fixed:
+    - World changes happen only with nobody connected. They are driven by orders that arrive
+      over RCON, and RCON-driven world changes are NOT replicated to clients: the server cut
+      a surface down and the client, never told, kept it -- "Multiplayer desynchronisation:
+      crc test failed" on join, every time. Clearing, the spawn move, the strip and the
+      platform mirror all run empty now, and the boot-time work is re-armed when the last
+      player leaves so a busy fleet still gets it done.
+---------------------------------------------------------------------------------------------------
 Version: 0.23.1
 Date: 2026-10-17
   Fixed:

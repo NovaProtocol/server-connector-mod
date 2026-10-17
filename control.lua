@@ -65,6 +65,18 @@ local function known()
     return storage ~= nil and storage.instance ~= nil
 end
 
+-- Whether the fleet is empty of players.
+--
+-- World changes driven from outside the game -- orders arriving over RCON -- are NOT
+-- replicated to clients. The server cuts a surface down and the client, which was never
+-- told, keeps it, and the next crc comparison fails: a desync on join, every time. So
+-- anything that changes the world runs only with nobody connected, and again when the last
+-- player leaves.
+local function empty()
+    local players = game.connected_players
+    return players == nil or #players == 0
+end
+
 local function destinations()
     local out = {}
     for id, entry in pairs(storage.topology) do
@@ -232,6 +244,9 @@ local STRIP_CHUNKS_PER_TICK = 96
 local STRIP_WINDOW = 64
 
 local function strip_step()
+    if not empty() then
+        return
+    end
     if not known() then
         return
     end
@@ -497,6 +512,9 @@ end
 -- Nothing is deleted from a surface this server owns, and nothing is deleted at all unless
 -- there is something to delete.
 local function clear_foreign_surfaces()
+    if not empty() then
+        return
+    end
     if not known() then
         return
     end
@@ -527,6 +545,9 @@ local function clear_foreign_surfaces()
 end
 
 local function spawn_on_owned_surface()
+    if not empty() then
+        return
+    end
     if not known() then
         return
     end
@@ -755,6 +776,18 @@ script.on_event(defines.events.on_player_controller_changed, function(event)
     local player = game.get_player(event.player_index)
     if player and not route_if_elsewhere(player) then
         enforce_surface(player)
+    end
+end)
+
+-- Registered at load like every other handler, and it runs on both sides identically: when
+-- the last player leaves, the world work that was skipped is armed again.
+script.on_event(defines.events.on_player_left_game, function()
+    if not known() then
+        return
+    end
+
+    if empty() then
+        settle_now, settle_later = true, true
     end
 end)
 
@@ -1152,6 +1185,12 @@ local calls = {
             return {instance = instance(), skipped = "no identity"}
         end
 
+        -- Cutting a world down with somebody connected desyncs them: the work is the
+        -- server's and is never replicated.
+        if not empty() then
+            return {instance = instance(), skipped = "somebody is connected"}
+        end
+
         local surfaces = {}
         for name, surface in pairs(game.surfaces) do
             local wanted = false
@@ -1264,6 +1303,12 @@ local calls = {
     mirror_platforms = function(entries)
         if not known() then
             return {instance = instance(), skipped = "no identity"}
+        end
+
+        -- Making or removing a platform from an order is a world change with no counterpart
+        -- on a client, which is a desync by construction.
+        if not empty() then
+            return {instance = instance(), skipped = "somebody is connected"}
         end
 
         -- The space server is where the platforms really are, so it is not a copy of
