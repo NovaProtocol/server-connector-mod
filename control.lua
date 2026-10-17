@@ -1076,16 +1076,39 @@ local calls = {
         end
 
         for name, entry in pairs(wanted) do
-            local exists = false
-            for _, platform in pairs(force.platforms or {}) do
-                if platform.name == name then
-                    exists = true
+            local platform = nil
+            for _, candidate in pairs(force.platforms or {}) do
+                if candidate.name == name then
+                    platform = candidate
                     break
                 end
             end
 
-            if exists then
+            if platform then
                 kept[#kept + 1] = name
+
+                -- Where it is and where it is going, from the real one. Each write is
+                -- wrapped and only made when it differs: these are the game's own setters
+                -- on a platform that is, here, only a copy, and a copy that cannot be
+                -- moved is still a copy.
+                if entry.connection and (platform.space_connection == nil
+                    or platform.space_connection.name ~= entry.connection) then
+                    pcall(function() platform.space_connection = entry.connection end)
+                end
+
+                if entry.location and (platform.space_location == nil
+                    or platform.space_location.name ~= entry.location) then
+                    pcall(function() platform.space_location = entry.location end)
+                end
+
+                -- After the connection: writing one sets the distance to 0.5.
+                if type(entry.distance) == "number" and platform.distance ~= entry.distance then
+                    pcall(function() platform.distance = entry.distance end)
+                end
+
+                if entry.paused ~= nil and platform.paused ~= entry.paused then
+                    pcall(function() platform.paused = entry.paused end)
+                end
             else
                 local planet = entry.location or instance()
                 -- Both required fields, named as the game names them: `planet` is a space
@@ -1192,6 +1215,22 @@ local calls = {
                 return item and item.name or "no such item"
             end)
         end
+
+        -- Move the real platform, so the copies can be watched following it. This is the
+        -- only way to see stage 4 work without a player aboard a platform.
+        attempt("move to vulcanus", function()
+            local first = nil
+            for _, platform in pairs(force.platforms or {}) do
+                first = platform
+                break
+            end
+            if not first then
+                return "no platform"
+            end
+
+            first.space_location = "vulcanus"
+            return first.name .. " is at " .. tostring(first.space_location and first.space_location.name)
+        end)
 
         attempt("platforms", function() return #force.platforms end)
         attempt("create()", function() return force.create_space_platform() end)

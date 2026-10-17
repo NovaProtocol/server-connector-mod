@@ -1,4 +1,12 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.22.0
+Date: 2026-10-17
+  Added:
+    - A copy follows the real platform: the position fields the manager pushes (space
+      location, connection, distance, paused) are applied to a copy that already exists, each
+      write made only when it differs and wrapped, because these are the game's setters on
+      something that is, on a planet server, only a copy.
+---------------------------------------------------------------------------------------------------
 Version: 0.21.4
 Date: 2026-10-16
   Fixed:
