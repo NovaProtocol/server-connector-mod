@@ -1,4 +1,11 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.21.3
+Date: 2026-10-16
+  Fixed:
+    - Creating a platform passes both required fields. planet is a space location and
+      starter_pack is space-platform-starter-pack, which the game's own prototypes name --
+      asked for with plate rather than guessed.
+---------------------------------------------------------------------------------------------------
 Version: 0.21.2
 Date: 2026-10-16
   Changed:

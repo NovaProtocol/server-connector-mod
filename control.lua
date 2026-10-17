@@ -1047,8 +1047,16 @@ local calls = {
                 kept[#kept + 1] = name
             else
                 local planet = entry.location or instance()
+                -- Both required fields, named as the game names them: `planet` is a space
+                -- location and `starter_pack` is the item the game itself uses for one
+                -- (asked for with plate, not guessed -- the probe reports it). The starter
+                -- pack is also what gives the copy its hub, which is all a copy is.
                 local ok, platform = pcall(function()
-                    return force.create_space_platform{planet = planet, name = name}
+                    return force.create_space_platform{
+                        planet = planet,
+                        name = name,
+                        starter_pack = "space-platform-starter-pack",
+                    }
                 end)
 
                 if ok and platform then
