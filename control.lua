@@ -994,6 +994,87 @@ local calls = {
         return {instance = instance(), cleared = table.concat(out, ", ")}
     end,
 
+    -- Make, keep or remove this server's copies of the fleet's platforms.
+    --
+    -- An order, not a decision: the list comes from the manager, which is the only thing
+    -- that can see the real platforms wherever they are. A planet server's copy is a hub
+    -- and its cargo -- the starter pack and nothing else, no inserters, no chemical plants
+    -- -- with no asteroids and nothing that can damage it, because nothing here runs a
+    -- platform. It is a place to look at and to launch to.
+    mirror_platforms = function(entries)
+        if not known() then
+            return {instance = instance(), skipped = "no identity"}
+        end
+
+        entries = entries or {}
+
+        local wanted = {}
+        for _, entry in ipairs(entries) do
+            if type(entry) == "table" and entry.name then
+                wanted[entry.name] = entry
+            end
+        end
+
+        local force = main_force()
+        local made, kept, removed = {}, {}, {}
+
+        -- Gone from the list means gone here: the real platform was deleted or destroyed,
+        -- and a copy of something that no longer exists is a lie players can stand on.
+        for _, platform in pairs(force.platforms or {}) do
+            if not wanted[platform.name] then
+                local name = platform.name
+                pcall(function() platform.destroy() end)
+                removed[#removed + 1] = name
+                log(string.format("[%s] %s is gone from the fleet, removing the copy", instance(), name))
+            end
+        end
+
+        for name, entry in pairs(wanted) do
+            local exists = false
+            for _, platform in pairs(force.platforms or {}) do
+                if platform.name == name then
+                    exists = true
+                    break
+                end
+            end
+
+            if exists then
+                kept[#kept + 1] = name
+            else
+                local planet = entry.location or instance()
+                local ok, platform = pcall(function()
+                    return force.create_space_platform{planet = planet, name = name}
+                end)
+
+                if ok and platform then
+                    if not pcall(function() platform.apply_starter_pack(true) end) then
+                        log(string.format("[%s] %s was made without its hub", instance(), name))
+                    end
+
+                    -- Never asteroids: they belong to the space server, and a planet server
+                    -- spawning them would be running a platform.
+                    pcall(function() platform.destroy_asteroid_chunks{} end)
+
+                    made[#made + 1] = name
+                    log(string.format("[%s] made a copy of %s, at %s", instance(), name, planet))
+                else
+                    log(string.format("[%s] could not make a copy of %s: %s", instance(), name, tostring(platform)))
+                end
+            end
+        end
+
+        table.sort(made)
+        table.sort(kept)
+        table.sort(removed)
+
+        return {
+            instance = instance(),
+            made = table.concat(made, ","),
+            kept = table.concat(kept, ","),
+            removed = table.concat(removed, ","),
+        }
+    end,
+
     -- What this server's platforms are.
     --
     -- Read-only. Every field here is one the runtime docs list for LuaSpacePlatform, and
@@ -1013,6 +1094,10 @@ local calls = {
                 hub = platform.hub ~= nil,
                 hidden = platform.hidden,
                 deleting_in = platform.scheduled_for_deletion,
+                asteroids = (function()
+                    local ok, chunks = pcall(function() return #platform.find_asteroid_chunks_filtered{} end)
+                    return ok and chunks or nil
+                end)(),
             }
         end
 
@@ -1037,6 +1122,12 @@ local calls = {
         attempt("platforms", function() return #force.platforms end)
         attempt("create()", function() return force.create_space_platform() end)
         attempt("create{name}", function() return force.create_space_platform{name = name or "probe"} end)
+        -- The shape the errors above point at, which is the one that works. Making a platform
+        -- is the only thing here that can leave something behind, and it is how the copies get
+        -- tested: without a platform on the space server there is nothing to mirror.
+        attempt("create{planet,name}", function()
+            return force.create_space_platform{planet = instance(), name = name or "probe"}
+        end)
 
         return {instance = instance(), tried = tried, platforms = #force.platforms}
     end,

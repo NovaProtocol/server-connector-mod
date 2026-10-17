@@ -1,4 +1,13 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.21.0
+Date: 2026-10-16
+  Added:
+    - mirror_platforms(entries): make, keep or remove this server's copies of the fleet's
+      platforms, as ordered by the manager. A copy is a hub and its cargo -- the starter pack
+      and nothing else -- with no asteroid spawning and nothing that can damage it: nothing
+      here runs a platform. A platform that has left the list is removed, because a copy of
+      something that no longer exists is a lie players can stand on.
+---------------------------------------------------------------------------------------------------
 Version: 0.20.0
 Date: 2026-10-16
   Added:
