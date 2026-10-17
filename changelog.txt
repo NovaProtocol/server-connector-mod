@@ -1,4 +1,14 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.21.4
+Date: 2026-10-16
+  Fixed:
+    - A planet server's copies have no asteroids, ever. One sweep when a copy was made was
+      not enough: a copy sits at a space location and spawns them regardless, so the sweep
+      runs every second from a handler registered once at load. There is no switch for it --
+      spawning comes from the location and a platform has to be at one to exist -- and the
+      space server's platforms keep theirs, because asteroids are part of what a real
+      platform is.
+---------------------------------------------------------------------------------------------------
 Version: 0.21.3
 Date: 2026-10-16
   Fixed:

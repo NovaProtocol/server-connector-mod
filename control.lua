@@ -215,6 +215,37 @@ local function ensure_surfaces()
 end
 
 --------------------------------------------------------------------------------
+-- a copy has no asteroids, ever
+--------------------------------------------------------------------------------
+
+-- Take the asteroids off this server's platforms.
+--
+-- Only a planet server's: the space server's platforms are real, and asteroids are part of
+-- what a real one is. A copy sits at a space location, though, and spawns them whether
+-- anybody wants them or not -- one sweep when the copy is made is not enough, which is what
+-- the copies showed when they first existed.
+--
+-- There is no switch for this: asteroid spawning comes from the space location the platform
+-- is at, and a platform has to be at one to exist. So the sweep runs, every second, and is
+-- cheap because there is nothing there to destroy.
+local function sweep_asteroids()
+    if instance() == "space" then
+        return
+    end
+
+    for _, platform in pairs(main_force().platforms or {}) do
+        local ok, destroyed = pcall(function() return platform.destroy_asteroid_chunks{} end)
+        if not ok then
+            return
+        end
+
+        if type(destroyed) == "number" and destroyed > 0 then
+            log(string.format("[%s] took %d asteroid chunk(s) off %s", instance(), destroyed, platform.name))
+        end
+    end
+end
+
+--------------------------------------------------------------------------------
 -- nobody stands on a surface this server does not own
 --------------------------------------------------------------------------------
 
@@ -558,6 +589,16 @@ script.on_nth_tick(60, function()
     end
     settle_now = false
     settle()
+end)
+
+script.on_nth_tick(60, function()
+    if not known() then
+        return
+    end
+
+    -- A planet server and asteroids, once a second. Wrapped, because a fault here would run
+    -- every second forever.
+    pcall(sweep_asteroids)
 end)
 
 script.on_nth_tick(600, function()
