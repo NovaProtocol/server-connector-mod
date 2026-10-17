@@ -1,4 +1,13 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.22.2
+Date: 2026-10-17
+  Fixed:
+    - 0.22.1 did not parse: the helper that reports refused position writes was put inside the
+      interface table, where a local function cannot go. Every server running it refuses the
+      mod. It is a top-level local again, and the parse is checked before anything is
+      released -- the check caught it and the release ran on regardless, which is its own
+      fault to fix.
+---------------------------------------------------------------------------------------------------
 Version: 0.22.1
 Date: 2026-10-17
   Fixed:

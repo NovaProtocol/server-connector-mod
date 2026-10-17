@@ -757,6 +757,23 @@ commands.add_command(
 -- save as cheated, and it echoes into the chat, so a manager polling every few
 -- seconds fills the screen a player is trying to play on. A mod's own command does
 -- neither, which is the whole reason the companion mod did it this way.
+-- A write to a copy's position, said out loud when the game refuses it.
+--
+-- These were wrapped and silent, and a silent refusal looks exactly like a copy that
+-- follows: the write happens, nothing changes, and nobody is told. Three bugs today were
+-- hidden by the same pattern.
+local function set_position(platform, field, value)
+    if value == nil then
+        return
+    end
+
+    local ok, err = pcall(function() platform[field] = value end)
+    if not ok then
+        log(string.format("[%s] could not set %s to %s on %s: %s",
+            instance(), field, tostring(value), platform.name, tostring(err)))
+    end
+end
+
 local calls = {
     -- Which server this is. Pushed by the node at startup, because the
     -- mod-settings.json route is not read on a headless server (see instance()).
@@ -1035,24 +1052,7 @@ local calls = {
         return {instance = instance(), cleared = table.concat(out, ", ")}
     end,
 
-    -- A write to a copy's position, said out loud when the game refuses it.
---
--- These were wrapped and silent, and a silent refusal looks exactly like a copy that
--- follows: the write happens, nothing changes, and nobody is told. Three bugs today were
--- hidden by the same pattern.
-local function set_position(platform, field, value)
-    if value == nil then
-        return
-    end
-
-    local ok, err = pcall(function() platform[field] = value end)
-    if not ok then
-        log(string.format("[%s] could not set %s to %s on %s: %s",
-            instance(), field, tostring(value), platform.name, tostring(err)))
-    end
-end
-
--- Make, keep or remove this server's copies of the fleet's platforms.
+    -- Make, keep or remove this server's copies of the fleet's platforms.
     --
     -- An order, not a decision: the list comes from the manager, which is the only thing
     -- that can see the real platforms wherever they are. A planet server's copy is a hub
