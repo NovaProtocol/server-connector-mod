@@ -1,4 +1,13 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.24.0
+Date: 2026-10-17
+  Added:
+    - delete_surface_chunks(name): delete one surface's chunks and everything on it. This is
+      the primitive a conversion is driven with -- one surface per call, the node deciding
+      which and in what order, because a sequence of steps belongs to the node and the mod is
+      only the way into the game's components.
+    - surfaces(): what surfaces this world has, so the node can walk them one by one.
+---------------------------------------------------------------------------------------------------
 Version: 0.23.3
 Date: 2026-10-17
   Fixed:

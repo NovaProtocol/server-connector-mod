@@ -1153,6 +1153,48 @@ local calls = {
         return {instance = instance(), surfaces = out}
     end,
 
+    -- Delete one surface's chunks, and everything on it. The primitive a conversion is
+    -- driven with: one surface per call, and the node decides which and in what order.
+    --
+    -- Nothing here loops over anything. The sequence of a conversion is the node's, because
+    -- a sequence of steps is a thing the node knows about and the mod is only the way into
+    -- the game's components.
+    delete_surface_chunks = function(name)
+        if not known() then
+            return {instance = instance(), skipped = "no identity"}
+        end
+        if not empty() then
+            return {instance = instance(), skipped = "somebody is connected"}
+        end
+
+        local surface = game.surfaces[name]
+        if not surface then
+            return {instance = instance(), surface = name, missing = true}
+        end
+
+        local counts = clear_one(surface)
+        log(string.format("[%s] cleared %s: %d entities, %d chunks",
+            instance(), name, counts.entities, counts.chunks))
+
+        return {
+            instance = instance(),
+            surface = name,
+            entities = counts.entities,
+            chunks = counts.chunks,
+        }
+    end,
+
+    -- What surfaces this world has, for the node to walk one by one.
+    surfaces = function()
+        local names = {}
+        for name, _ in pairs(game.surfaces) do
+            names[#names + 1] = name
+        end
+        table.sort(names)
+
+        return {instance = instance(), surfaces = table.concat(names, ",")}
+    end,
+
     -- Bring this world into line: every planet's surface, the spawn point, and what no
     -- longer belongs on this server.
     --
