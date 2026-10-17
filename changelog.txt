@@ -1,4 +1,11 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.22.3
+Date: 2026-10-17
+  Added (probes):
+    - Unpausing the real platform, so the copies can be watched following it both ways.
+    - Which logistic member index a hub's requests live on, asked of the game rather than
+      read out of the defines page.
+---------------------------------------------------------------------------------------------------
 Version: 0.22.2
 Date: 2026-10-17
   Fixed:

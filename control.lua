@@ -1249,6 +1249,56 @@ local calls = {
             return first.name .. " is at " .. tostring(first.space_location and first.space_location.name)
         end)
 
+        -- Unpause the real platform, so the copies can be watched following it both ways.
+        -- If it flips back on its own, something is writing a value it read from itself.
+        attempt("unpause", function()
+            local first = nil
+            for _, platform in pairs(force.platforms or {}) do
+                first = platform
+                break
+            end
+            if not first then
+                return "no platform"
+            end
+
+            first.paused = false
+            return first.name .. " paused=" .. tostring(first.paused)
+        end)
+
+        -- Which logistic member index a hub's requests are on, asked of the game rather than
+        -- read out of the defines page: the names are the game's, not mine to remember.
+        attempt("member index names", function()
+            local names = {}
+            for name, _ in pairs(defines.logistic_member_index) do
+                names[#names + 1] = name
+            end
+            table.sort(names)
+            return table.concat(names, ",")
+        end)
+
+        attempt("which member index answers", function()
+            local first = nil
+            for _, platform in pairs(force.platforms or {}) do
+                first = platform
+                break
+            end
+            if not first or not first.hub then
+                return "no hub"
+            end
+
+            local answered = {}
+            for name, value in pairs(defines.logistic_member_index) do
+                local ok, point = pcall(function() return first.hub.get_logistic_point(value) end)
+                if ok and point then
+                    local sections = 0
+                    pcall(function() sections = #point.sections end)
+                    answered[#answered + 1] = name .. "(sections=" .. tostring(sections) .. ")"
+                end
+            end
+            table.sort(answered)
+            return table.concat(answered, " | ")
+        end)
+
         attempt("platforms", function() return #force.platforms end)
         attempt("create()", function() return force.create_space_platform() end)
         attempt("create{name}", function() return force.create_space_platform{name = name or "probe"} end)
