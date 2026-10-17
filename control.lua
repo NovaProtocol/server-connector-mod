@@ -215,6 +215,102 @@ local function ensure_surfaces()
 end
 
 --------------------------------------------------------------------------------
+-- stripping a world, a batch at a time
+--------------------------------------------------------------------------------
+
+-- How much is done per tick: entities to destroy, and chunks to delete.
+--
+-- A 170MB world cannot be stripped inside one call. The work outlives the RCON timeout, the
+-- reply comes back empty, and an empty reply is indistinguishable from a refusal -- so the
+-- manager retried, the retry started the work again, and the world came out untouched and
+-- reported as converted.
+--
+-- So the work lives here: a job begun by the manager, advanced a little every tick, and
+-- reported while it runs. Nothing about it is one long call.
+local STRIP_ENTITIES_PER_TICK = 400
+local STRIP_CHUNKS_PER_TICK = 96
+local STRIP_WINDOW = 64
+
+local function strip_step()
+    if not known() then
+        return
+    end
+
+    local job = storage.strip
+    if not job or job.done then
+        return
+    end
+
+    local surface = game.surfaces[job.surfaces[job.index]]
+    if not surface then
+        job.index = job.index + 1
+        if job.index > #job.surfaces then
+            job.done = true
+            log(string.format("[%s] strip done: %d entities, %d chunks",
+                instance(), job.entities, job.chunks))
+        end
+        return
+    end
+
+    job.surface = surface.name
+
+    -- Entities first, in batches, until the surface has none left to give.
+    if job.phase == "entities" then
+        local ok, batch = pcall(function()
+            return surface.find_entities_filtered{limit = STRIP_ENTITIES_PER_TICK}
+        end)
+        if not ok then
+            log(string.format("[%s] could not look at %s: %s", instance(), surface.name, tostring(batch)))
+            job.phase = "chunks"
+            return
+        end
+
+        if not batch or #batch == 0 then
+            job.phase = "chunks"
+            job.cx, job.cy = -STRIP_WINDOW, -STRIP_WINDOW
+            return
+        end
+
+        for _, entity in pairs(batch) do
+            if entity.valid and entity.type ~= "character" then
+                pcall(function() entity.destroy() end)
+                job.entities = job.entities + 1
+            end
+        end
+        return
+    end
+
+    -- Then the chunks around the origin, a slab per tick. Blind, because the query for
+    -- whether a chunk is generated is the method this build does not have.
+    local deleted = 0
+    while deleted < STRIP_CHUNKS_PER_TICK and job.cx <= STRIP_WINDOW do
+        local ok = pcall(function() return surface.delete_chunk({x = job.cx, y = job.cy}) end)
+        if ok then
+            job.chunks = job.chunks + 1
+        end
+        deleted = deleted + 1
+
+        job.cy = job.cy + 1
+        if job.cy > STRIP_WINDOW then
+            job.cy = -STRIP_WINDOW
+            job.cx = job.cx + 1
+        end
+    end
+
+    if job.cx > STRIP_WINDOW then
+        job.index = job.index + 1
+        job.phase = "entities"
+        job.cx, job.cy = 0, 0
+
+        if job.index > #job.surfaces then
+            job.done = true
+            log(string.format("[%s] strip done: %d entities, %d chunks",
+                instance(), job.entities, job.chunks))
+        end
+    end
+end
+
+--------------------------------------------------------------------------------
 -- a copy has no asteroids, ever
 --------------------------------------------------------------------------------
 
@@ -589,6 +685,10 @@ script.on_nth_tick(60, function()
     end
     settle_now = false
     settle()
+end)
+
+script.on_event(defines.events.on_tick, function()
+    pcall(strip_step)
 end)
 
 script.on_nth_tick(60, function()
@@ -1034,6 +1134,94 @@ local calls = {
         table.sort(out)
 
         return {instance = instance(), surfaces = out}
+    end,
+
+    -- Begin stripping this world down to what this server keeps. Returns at once; the work
+    -- is done a batch at a time from then on.
+    strip_begin = function(keep)
+        if not known() then
+            return {instance = instance(), skipped = "no identity"}
+        end
+
+        local surfaces = {}
+        for name, surface in pairs(game.surfaces) do
+            local wanted = false
+            for _, kept in ipairs(keep or {}) do
+                if kept == name then
+                    wanted = true
+                    break
+                end
+            end
+
+            -- Never the surface this server is for, and never a platform on the space
+            -- server: what a copy is, is decided by the mirror, not by a strip.
+            if not wanted and name ~= instance() and not surface.platform then
+                surfaces[#surfaces + 1] = name
+            end
+        end
+        table.sort(surfaces)
+
+        storage.strip = {
+            surfaces = surfaces, index = 1, phase = "entities",
+            cx = 0, cy = 0, entities = 0, chunks = 0, done = false,
+        }
+
+        log(string.format("[%s] stripping %d surface(s): %s",
+            instance(), #surfaces, table.concat(surfaces, ", ")))
+
+        return {instance = instance(), started = true, surfaces = #surfaces}
+    end,
+
+    -- Where the work has got to.
+    strip_status = function()
+        local job = storage.strip
+        if not job then
+            return {instance = instance(), none = true}
+        end
+
+        return {
+            instance = instance(),
+            done = job.done,
+            surface = job.surface,
+            index = job.index,
+            total = #job.surfaces,
+            phase = job.phase,
+            entities = job.entities,
+            chunks = job.chunks,
+        }
+    end,
+
+    -- What was taken, and the job is over.
+    strip_finish = function()
+        local job = storage.strip
+        if not job then
+            return {instance = instance(), none = true}
+        end
+
+        local summary = {
+            instance = instance(),
+            done = job.done,
+            surfaces = #job.surfaces,
+            entities = job.entities,
+            chunks = job.chunks,
+            removed = table.concat(job.surfaces, ","),
+        }
+
+        storage.strip = nil
+        return summary
+    end,
+
+    -- Stop, and say how far it had got.
+    strip_cancel = function()
+        local job = storage.strip
+        storage.strip = nil
+
+        return {
+            instance = instance(),
+            cancelled = true,
+            entities = job and job.entities or 0,
+            chunks = job and job.chunks or 0,
+        }
     end,
 
     -- Take everything off the surfaces this server does not own, and say what was taken.

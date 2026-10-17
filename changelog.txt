@@ -1,4 +1,15 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.23.0
+Date: 2026-10-17
+  Added:
+    - Stripping a world is a job now, not one call. A 170MB world cannot be stripped inside
+      an RCON round trip: the work outlives the timeout, the reply comes back empty, and an
+      empty reply looks exactly like a refusal -- so the manager retried, the retry started
+      the work again, and the world came out untouched while the conversion reported success.
+      strip_begin starts it, a permanent on_tick handler does a batch every tick,
+      strip_status says where it has got to, strip_finish returns the summary, and
+      strip_cancel stops it. Every step is wrapped and says what it did.
+---------------------------------------------------------------------------------------------------
 Version: 0.22.4
 Date: 2026-10-17
   Fixed:
