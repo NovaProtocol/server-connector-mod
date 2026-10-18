@@ -74,6 +74,28 @@ The remote controller is an *overlay* on a physical one, so leaving it returns t
 player to that — and a bodyless player's physical controller is god mode. Leaving is
 therefore disabled, which is load-bearing rather than a nicety.
 
+## Source layout
+
+`control.lua` is the entry point and nothing else: it `require`s the runtime, which is a
+package under `control/`, one file per concern.
+
+| File | Holds |
+|---|---|
+| `control/state.lua` | constants, `storage`, identity, topology, the event queue, `report` |
+| `control/convert.lua` | world shaping: crash site, surfaces, clear, strip, spawn, settle |
+| `control/route.lua` | the destination decision, the hand-over, the join rule |
+| `control/platforms.lua` | the fleet's platform copies, and the API probes |
+| `control/research.lua` | the shared tech tree: report and apply |
+| `control/events.lua` | every event handler |
+| `control/rcon.lua` | the calls the node drives, and the two commands |
+
+Modules use Factorio's `require`, resolved from the mod root
+(`__server-connector-mod__.control.<name>`). One spelling per module: Factorio caches a
+required file by the exact string it was asked for, so two spellings would load it twice,
+and two copies of a module are two different beliefs. `require` cannot run inside an event
+handler or a `remote.call`, so every require is at load. `scripts/release.py` ships
+`control/` whole and syntax-checks every file in it before building.
+
 ## Install
 
 The manager distributes it: it fetches the zip from this repository's GitHub release

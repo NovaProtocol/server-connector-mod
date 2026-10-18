@@ -1,4 +1,16 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.25.0
+Date: 2026-10-18
+  Changed:
+    - Conversion is gone from this mod. Cutting a world down to the one surface a server keeps
+      -- the tick-bounded strip, delete-and-recreate, and the per-surface primitives -- moved to
+      the private converter mod the manager installs for the length of a conversion and removes
+      afterwards. This mod routes, reports, researches and settles; it does not cut worlds down.
+  Added:
+    - A join fallback: a player joining can generate chunks on a surface this server does not
+      own, and those are taken off at once. It is one join's worth, and it is the only clearing
+      left here.
+---------------------------------------------------------------------------------------------------
 Version: 0.24.1
 Date: 2026-10-17
   Fixed:

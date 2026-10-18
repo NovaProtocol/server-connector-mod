@@ -33,7 +33,10 @@ ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_REPO = "NovaProtocol/server-connector-mod"
 
 # Everything the game needs, and nothing the game does not.
+# Top-level files, plus every Lua file under the directories listed below -- the runtime is
+# a package under control/, and it must ship whole or the mod does not load.
 SHIPPED = ["info.json", "settings.lua", "control.lua", "changelog.txt", "LICENSE", "README.md"]
+SHIPPED_DIRS = ["control"]
 
 
 def read_info():
@@ -41,11 +44,34 @@ def read_info():
         return json.load(handle)
 
 
-def check_lua():
-    """Parse the Lua before packaging it.
+def shipped_files():
+    """Every file the mod ships, as paths relative to ROOT.
 
-    A syntax error in control.lua stops the mod loading at all -- the server refuses the
-    save and says so in a log nobody is reading yet -- so it is caught here instead,
+    The top-level files, then every Lua file under the shipped directories. Written out
+    rather than walked wholesale, so scripts/, the built zips and the git metadata can
+    never end up inside the mod.
+    """
+    files = []
+    for name in SHIPPED:
+        if not (ROOT / name).exists():
+            raise SystemExit(f"missing {name}; the mod would be incomplete")
+        files.append(name)
+
+    for directory in SHIPPED_DIRS:
+        root = ROOT / directory
+        if not root.is_dir():
+            raise SystemExit(f"missing {directory}/; the mod would be incomplete")
+        for path in sorted(root.rglob("*.lua")):
+            files.append(path.relative_to(ROOT).as_posix())
+
+    return files
+
+
+def check_lua():
+    """Parse every shipped Lua file before packaging it.
+
+    A syntax error in any one of them stops the mod loading at all -- the server refuses
+    the save and says so in a log nobody is reading yet -- so it is caught here instead,
     whenever a parser is on PATH.
     """
     parser = next((shutil.which(name) for name in ("luac5.4", "luac", "luajit") if shutil.which(name)), None)
@@ -53,7 +79,7 @@ def check_lua():
         print("no Lua parser on PATH, syntax not checked")
         return
 
-    for name in ("control.lua", "settings.lua"):
+    for name in [path for path in shipped_files() if path.endswith(".lua")]:
         result = subprocess.run([parser, "-p", str(ROOT / name)], capture_output=True, text=True)
         if result.returncode != 0:
             raise SystemExit(f"{name} does not parse: {result.stderr.strip()}")
@@ -64,17 +90,15 @@ def check_lua():
 def build(info):
     check_lua()
 
+    files = shipped_files()
     stem = f"{info['name']}_{info['version']}"
     out = ROOT / f"{stem}.zip"
 
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as archive:
-        for name in SHIPPED:
-            source = ROOT / name
-            if not source.exists():
-                raise SystemExit(f"missing {name}; the mod would be incomplete")
-            archive.write(source, f"{stem}/{name}")
+        for name in files:
+            archive.write(ROOT / name, f"{stem}/{name}")
 
-    print(f"built {out.name} ({out.stat().st_size} bytes, {len(SHIPPED)} files)")
+    print(f"built {out.name} ({out.stat().st_size} bytes, {len(files)} files)")
     return out, stem
 
 

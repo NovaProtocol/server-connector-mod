@@ -1,0 +1,159 @@
+-- server-connector-mod / control/rcon.lua
+--
+-- The surface the node and the manager drive over RCON: one remote interface and one
+-- command. Each entry is either glue over two domains (set_instance, set_topology,
+-- set_body_location, set_paused, settle) or a reference to the function that owns it
+-- (research, convert, platforms, route, state).
+--
+-- Required as "__server-connector-mod__.control.rcon". Required last: it is the only
+-- module that reaches across all the others.
+
+local state = require("__server-connector-mod__.control.state")
+local convert = require("__server-connector-mod__.control.convert")
+local route = require("__server-connector-mod__.control.route")
+local platforms = require("__server-connector-mod__.control.platforms")
+local research = require("__server-connector-mod__.control.research")
+
+local MOD = state.MOD
+
+--------------------------------------------------------------------------------
+-- what the node and the manager drive over RCON
+--------------------------------------------------------------------------------
+
+-- The calls the node makes, registered both as a remote interface and as one plain
+-- command -- and the node uses the command.
+--
+-- The obvious route is `/c remote.call(...)`, and that is what this started as.
+-- It is wrong twice over: `/c` is a *script* command, which permanently marks the
+-- save as cheated, and it echoes into the chat, so a manager polling every few
+-- seconds fills the screen a player is trying to play on. A mod's own command does
+-- neither, which is the whole reason the companion mod did it this way.
+local calls = {
+    -- Which server this is. Pushed by the node at startup, because the
+    -- mod-settings.json route is not read on a headless server (see state.instance()).
+    set_instance = function(id)
+        state.ensure_storage()
+        state.set_instance(id)
+        convert.ensure_surfaces()
+        return {instance = state.instance()}
+    end,
+
+    -- Replace the whole destination table. Idempotent: sending the same set twice
+    -- changes nothing, so a retried push is harmless.
+    set_topology = function(topology)
+        state.ensure_storage()
+        state.set_topology(topology)
+        convert.ensure_surfaces()
+        return {instance = state.instance(), destinations = #state.destinations()}
+    end,
+
+    -- Where a player's body is. The manager owns this fact; the mod only obeys it.
+    set_body_location = function(name, id)
+        state.ensure_storage()
+        state.set_body(name, id)
+        local player = game.get_player(name)
+        if player then
+            route.apply_join_rule(player)
+        end
+        return {name = name, body = storage.body[name] or state.instance()}
+    end,
+
+    -- One page of this server's researched technologies (research.research_state).
+    research_state = research.research_state,
+
+    -- Apply the shared tech tree (research.apply_research).
+    apply_research = research.apply_research,
+
+    -- Everything the game has told this mod since the last drain, so the manager
+    -- can act on joins and surface changes it cannot see for itself.
+    drain_events = function()
+        state.ensure_storage()
+        return state.drain()
+    end,
+
+    -- Hold the game still, or let it run. The fleet pauses together when one server stops
+    -- answering, so that five worlds do not run on without the sixth.
+    set_paused = function(paused)
+        game.tick_paused = paused and true or false
+        return {instance = state.instance(), paused = game.tick_paused}
+    end,
+
+    -- Make every planet this fleet knows about (convert.create_surfaces).
+    create_surfaces = convert.create_surfaces,
+
+    -- What surfaces this world has (convert.surfaces).
+    surfaces = convert.surfaces,
+
+    -- Bring this world into line, as an order carried out only with nobody connected
+    -- (convert.settle).
+    settle = convert.settle,
+
+    -- Make, keep or remove this server's copies of the fleet's platforms
+    -- (platforms.mirror_platforms).
+    mirror_platforms = platforms.mirror_platforms,
+
+    -- What this server's platforms are (platforms.platforms).
+    platforms = platforms.platforms,
+
+    -- The creation call, tried rather than assumed (platforms.platform_api).
+    platform_api = platforms.platform_api,
+
+    -- Which surface calls this build actually has (platforms.surface_api).
+    surface_api = platforms.surface_api,
+
+    -- Where a player looking at a surface would be sent (route.route_for).
+    route_for = route.route_for,
+
+    -- One poll's worth of state, for the manager's health board (state.report).
+    report = state.report,
+}
+
+remote.add_interface(MOD, calls)
+
+--------------------------------------------------------------------------------
+-- commands
+--------------------------------------------------------------------------------
+
+commands.add_command(
+    MOD .. "-status",
+    "Report this server's identity, its topology size and its connected players as JSON.",
+    function(event)
+        local text = helpers.table_to_json(remote.call(MOD, "report"))
+        if event.player_index and game.get_player(event.player_index) then
+            game.get_player(event.player_index).print(text)
+        elseif rcon then
+            rcon.print(text)
+        end
+    end
+)
+
+-- One entry point for everything above: the node sends {"fn": "...", "args": [...]}
+-- and gets the result back as JSON. A single command rather than one per call, so
+-- the surface the node depends on is one name that does not move.
+commands.add_command(
+    MOD .. "-call",
+    "Internal: how the node reaches this mod's interface. Not for use by players.",
+    function(event)
+        local out = {ok = false}
+
+        local decodedOk, payload = pcall(function()
+            return helpers.json_to_table(event.parameter)
+        end)
+
+        if decodedOk and type(payload) == "table" and type(payload.fn) == "string" and calls[payload.fn] then
+            local called, result = pcall(calls[payload.fn], table.unpack(payload.args or {}))
+            if called then
+                out = result or {ok = true}
+            else
+                out = {ok = false, error = tostring(result)}
+            end
+        else
+            out = {ok = false, error = "unknown call"}
+        end
+
+        -- rcon.print reaches the RCON client and nobody else, which is the point.
+        if rcon then
+            rcon.print(helpers.table_to_json(out))
+        end
+    end
+)
