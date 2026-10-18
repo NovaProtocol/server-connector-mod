@@ -234,6 +234,9 @@ local function report()
     return {
         instance = instance(),
         tick = game.tick,
+        -- The speed itself, and what it asks for. The manager shows both: the speed is what
+        -- game.speed is, the target says how many ticks a second that is.
+        speed = game.speed,
         ups_target = game.speed * 60,
         players = players,
         destinations = #destinations(),

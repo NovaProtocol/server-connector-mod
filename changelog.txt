@@ -1,4 +1,12 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.26.0
+Date: 2026-10-18
+  Changed:
+    - Joining a server now puts a player on that server's own surface straight away, instead of
+      waiting for their first surface change. Landing somewhere else and having to click their
+      way across was the join being treated as a look rather than an arrival.
+
+---------------------------------------------------------------------------------------------------
 Version: 0.25.0
 Date: 2026-10-18
   Changed:

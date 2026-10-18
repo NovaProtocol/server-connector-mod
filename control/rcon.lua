@@ -78,6 +78,21 @@ local calls = {
         return {instance = state.instance(), paused = game.tick_paused}
     end,
 
+    -- How fast this world runs. Set here rather than from the console because a console line
+    -- that is not a command is chat: it reaches nobody, changes nothing, and only looks like
+    -- it worked. The value is kept in storage as well, because the game writes its speed to
+    -- nothing -- a restart is 1x until something sets it again, and this is that something.
+    set_speed = function(speed)
+        local value = tonumber(speed)
+        if not value or value ~= value or value <= 0 then
+            return {ok = false, error = "a speed has to be a positive number"}
+        end
+
+        game.speed = value
+        storage.speed = value
+        return {ok = true, speed = game.speed}
+    end,
+
     -- Make every planet this fleet knows about (convert.create_surfaces).
     create_surfaces = convert.create_surfaces,
 

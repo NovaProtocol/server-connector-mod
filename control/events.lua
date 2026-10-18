@@ -34,11 +34,22 @@ script.on_nth_tick(60, function()
     pcall(convert.sweep_asteroids)
 end)
 
+-- The speed this world is kept at, put back on the game as the world comes up. The game
+-- writes its speed to nothing, so without this a restart is 1x until the manager says
+-- otherwise, and the manager is a poll away.
+local function restore_speed()
+    local speed = tonumber(storage.speed)
+    if speed and speed > 0 then
+        game.speed = speed
+    end
+end
+
 script.on_init(function()
     state.ensure_storage()
     log("[" .. MOD .. "] instance=" .. state.instance())
     convert.disable_crash_site()
     convert.ensure_surfaces()
+    restore_speed()
 end)
 
 script.on_configuration_changed(function()
@@ -46,6 +57,7 @@ script.on_configuration_changed(function()
     storage.schema = SCHEMA
     convert.disable_crash_site()
     convert.ensure_surfaces()
+    restore_speed()
 end)
 
 script.on_event(defines.events.on_player_changed_surface, function(event)
@@ -83,6 +95,15 @@ script.on_event(defines.events.on_player_joined_game, function(event)
     if player then
         state.note("joined", player)
         route.apply_join_rule(player)
+        -- Put them on this server's own surface as they arrive, rather than waiting for them
+        -- to change surface before anything happens. Joining a server is an answer about
+        -- where they belong: whichever server they reached, they meant to be on its planet.
+        --
+        -- enforce_surface returns without doing anything when they are already standing on
+        -- it, and it never sends anybody anywhere: the journey decision is route_if_elsewhere,
+        -- which is not involved here and would not fire anyway, because looking at the
+        -- surface this server owns is not a journey.
+        route.enforce_surface(player)
         -- A join can generate chunks on a surface this server does not own; take them back
         -- off. One join's worth, done at once -- the only clearing the public mod still does.
         convert.clear_foreign_chunks()
