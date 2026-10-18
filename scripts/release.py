@@ -260,11 +260,14 @@ def main():
                   "this build. Pass --no-portal to release to GitHub anyway.", file=sys.stderr)
             return 2
 
-    url = publish(zip_path, stem, args.repo, args.tag, token)
-    print(f"manager can fetch it from {url}")
-
+    # The portal first. It is the half that can fail on a bad or expired key, and a release that
+    # exists on GitHub but not the portal is the one nobody can join -- so the failure has to
+    # happen before anything is published at all.
     if key:
         publish_to_portal(zip_path, info, key, args.create_page)
+
+    url = publish(zip_path, stem, args.repo, args.tag, token)
+    print(f"manager can fetch it from {url}")
 
     return 0
 
