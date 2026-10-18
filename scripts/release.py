@@ -10,10 +10,12 @@ Factorio is fussy about the archive layout. The zip must be named
 name, holding ``info.json`` at its root.
 
     scripts/release.py                 # build the zip only
-    scripts/release.py --tag v0.1.0    # build, tag, and publish the release
+    scripts/release.py --tag v0.1.0    # build, tag, and publish to GitHub and the portal
 
-Publishing needs ``GITHUB_TOKEN`` (or ``GH_TOKEN``) with rights to the repository,
-and ``--repo`` if the default is wrong.
+Publishing needs ``GITHUB_TOKEN`` (or ``GH_TOKEN``) with rights to the repository, and
+``MOD_PORTAL_KEY`` to upload the build to the mod portal, which is what a player's client
+installs from. Both are published together, or neither: ``--no-portal`` releases to GitHub
+alone when that is genuinely what is wanted. ``--repo`` if the default is wrong.
 """
 
 import argparse
@@ -219,10 +221,10 @@ def main():
     parser.add_argument("--tag", help="create and publish a release at this tag, e.g. v0.1.0")
     parser.add_argument("--repo", default=DEFAULT_REPO)
     parser.add_argument("--commit", action="store_true", help="commit the package change first")
-    parser.add_argument("--portal", action="store_true",
-                        help="also upload to the mod portal (needs MOD_PORTAL_KEY)")
+    parser.add_argument("--no-portal", action="store_true",
+                        help="publish to GitHub only; players' clients will not be able to fetch the build")
     parser.add_argument("--create-page", action="store_true",
-                        help="with --portal, create the mod page first; only valid once")
+                        help="create the mod page on the portal first; only valid once")
     args = parser.parse_args()
 
     info = read_info()
@@ -245,14 +247,23 @@ def main():
         print("GITHUB_TOKEN (or GH_TOKEN) is required to publish", file=sys.stderr)
         return 2
 
+    # Both channels or neither, and checked before anything is published: the two are not
+    # interchangeable. GitHub is what the manager installs onto the servers; the portal is
+    # what a player's client installs when it syncs with a server. A release that lands on
+    # one and not the other leaves servers and clients on different builds, and the only
+    # symptom is that nobody can join -- which is not something to discover afterwards.
+    key = None
+    if not args.no_portal:
+        key = os.environ.get("MOD_PORTAL_KEY")
+        if not key:
+            print("MOD_PORTAL_KEY is required: without the portal upload, players cannot fetch "
+                  "this build. Pass --no-portal to release to GitHub anyway.", file=sys.stderr)
+            return 2
+
     url = publish(zip_path, stem, args.repo, args.tag, token)
     print(f"manager can fetch it from {url}")
 
-    if args.portal:
-        key = os.environ.get("MOD_PORTAL_KEY")
-        if not key:
-            print("MOD_PORTAL_KEY is required for --portal", file=sys.stderr)
-            return 2
+    if key:
         publish_to_portal(zip_path, info, key, args.create_page)
 
     return 0
