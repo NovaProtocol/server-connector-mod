@@ -18,6 +18,7 @@
 
 local state = require("__server-connector-mod__.control.state")
 local convert = require("__server-connector-mod__.control.convert")
+local server = require("__server-connector-mod__.control.server")
 local route = require("__server-connector-mod__.control.route")
 local research = require("__server-connector-mod__.control.research")
 
@@ -65,7 +66,7 @@ script.on_event(defines.events.on_player_changed_surface, function(event)
     if player and not route.route_if_elsewhere(player) then
         -- Nowhere to send them, so put them back: the redirect is the first answer, and
         -- standing on a planet this server does not own is the case it does not cover.
-        route.enforce_surface(player)
+        server.enforce_surface(player)
     end
 end)
 
@@ -75,7 +76,7 @@ end)
 script.on_event(defines.events.on_player_controller_changed, function(event)
     local player = game.get_player(event.player_index)
     if player and not route.route_if_elsewhere(player) then
-        route.enforce_surface(player)
+        server.enforce_surface(player)
     end
 end)
 
@@ -94,7 +95,7 @@ script.on_event(defines.events.on_player_joined_game, function(event)
     local player = game.get_player(event.player_index)
     if player then
         state.note("joined", player)
-        route.apply_join_rule(player)
+        server.apply_join_rule(player)
         -- Put them on this server's own surface as they arrive, rather than waiting for them
         -- to change surface before anything happens. Joining a server is an answer about
         -- where they belong: whichever server they reached, they meant to be on its planet.
@@ -103,7 +104,7 @@ script.on_event(defines.events.on_player_joined_game, function(event)
         -- it, and it never sends anybody anywhere: the journey decision is route_if_elsewhere,
         -- which is not involved here and would not fire anyway, because looking at the
         -- surface this server owns is not a journey.
-        route.enforce_surface(player)
+        server.enforce_surface(player)
         -- A join can generate chunks on a surface this server does not own; take them back
         -- off. One join's worth, done at once -- the only clearing the public mod still does.
         convert.clear_foreign_chunks()

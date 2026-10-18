@@ -10,6 +10,7 @@
 
 local state = require("__server-connector-mod__.control.state")
 local convert = require("__server-connector-mod__.control.convert")
+local server = require("__server-connector-mod__.control.server")
 local route = require("__server-connector-mod__.control.route")
 local platforms = require("__server-connector-mod__.control.platforms")
 local research = require("__server-connector-mod__.control.research")
@@ -47,16 +48,9 @@ local calls = {
         return {instance = state.instance(), destinations = #state.destinations()}
     end,
 
-    -- Where a player's body is. The manager owns this fact; the mod only obeys it.
-    set_body_location = function(name, id)
-        state.ensure_storage()
-        state.set_body(name, id)
-        local player = game.get_player(name)
-        if player then
-            route.apply_join_rule(player)
-        end
-        return {name = name, body = storage.body[name] or state.instance()}
-    end,
+    -- Where a player's body is, and what that makes them on this server
+    -- (server.set_body_location). The manager calls it by this name.
+    set_body_location = server.set_body_location,
 
     -- One page of this server's researched technologies (research.research_state).
     research_state = research.research_state,

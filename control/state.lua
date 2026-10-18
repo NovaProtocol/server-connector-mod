@@ -206,6 +206,10 @@ local function report()
             admin = player.admin,
             viewing = storage.viewing[player.name] == true,
             viewing_surface = player.surface and player.surface.name or nil,
+            -- Whether this world holds their body. The manager takes a body's home from this
+            -- rather than from a player not being in remote view, which any join used to look
+            -- like -- and that is what put a body on every server the owner joined.
+            has_body = player.character ~= nil,
         }
     end
     local surfaces = {}
