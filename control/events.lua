@@ -80,17 +80,6 @@ script.on_event(defines.events.on_player_controller_changed, function(event)
     end
 end)
 
--- Registered at load like every other handler, and it runs on both sides identically: when
--- the last player leaves, the world work that was skipped is armed again.
-script.on_event(defines.events.on_player_left_game, function()
-    if not state.known() then
-        return
-    end
-
-    if state.empty() then
-    end
-end)
-
 script.on_event(defines.events.on_player_joined_game, function(event)
     local player = game.get_player(event.player_index)
     if player then

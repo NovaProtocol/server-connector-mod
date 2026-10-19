@@ -39,13 +39,31 @@ playing, which is why the node talks to this mod through its own command instead
 
 | `fn` | Does |
 |---|---|
-| `set_instance(id)` | Sets this server's identity and clears anything recorded against the old one. |
-| `set_topology(servers)` | Replaces the destination set. Idempotent, so a retried push is harmless. |
-| `set_body_location(name, id)` | Tells this server where a player's body is. `nil` or this instance means "here". |
+| `set_instance(id)` | Sets this server's identity. Returns `unchanged` for the id it already holds, and `skipped` while anybody is connected. |
+| `set_topology(servers)` | Replaces the destination set. Returns `unchanged` for the same set, and `skipped` while anybody is connected. |
+| `set_body_location(name, id)` | Tells this server where a player's body is. `nil` or this instance means "here". Reports `destroyed_character` when it removed one here. |
 | `research_state({offset, limit})` | One page of this server's researched technologies, with the total. |
 | `apply_research({researched})` or `{current, progress}` | Marks technologies done, and sets where the shared research stands. |
 | `drain_events()` | Everything the game has told this mod since the last drain. |
-| `report()` | Instance, tick, target speed, connected players and destination count. |
+| `set_paused(paused)` | Holds the game still, or lets it run. |
+| `set_speed(speed)` | Sets the world's speed, and keeps it for a restart. |
+| `create_surfaces()` | Makes every planet the topology names. `skipped` while anybody is connected. |
+| `surfaces()` | What surfaces this world has, and which of them are platforms. |
+| `settle()` | Brings the world into line: crash site, surfaces, spawn point. Nobody connected only. |
+| `mirror_platforms(entries)` | Makes, keeps or removes this server's copies of the fleet's platforms. Nobody connected only. |
+| `platforms()` | What this server's platforms are. Read-only. |
+| `platform_api()` | Which platform calls and names this build actually has. Read-only. |
+| `surface_api()` | Which surface calls this build actually has. |
+| `route_for(surface)` | Where a player looking at that surface would be sent, without a player to send. |
+| `report()` | Instance, tick, bodies, speed, connected players, destinations, surfaces and unlocked planets. |
+
+Three of these are orders that change the world. `set_instance`, `set_topology` and
+`create_surfaces` answer `{skipped = "somebody is connected"}` and write nothing while a
+player is connected: an RCON-driven change is not replicated to a client, so the next crc
+comparison desyncs it. `set_instance` and `set_topology` also answer `{unchanged = true}`
+when they are told what they already hold, which is what makes a retried push harmless. The
+node retries an identity push until the answer names its instance, and the manager retries a
+topology push until it is not skipped.
 
 `research_state` is paged because the whole tree does not fit in one RCON frame once
 enough of it is researched — the companion mod this stack replaced chunked its reports
@@ -82,8 +100,9 @@ package under `control/`, one file per concern.
 | File | Holds |
 |---|---|
 | `control/state.lua` | constants, `storage`, identity, topology, the event queue, `report` |
-| `control/convert.lua` | world shaping: crash site, surfaces, clear, strip, spawn, settle |
-| `control/route.lua` | the destination decision, the hand-over, the join rule |
+| `control/convert.lua` | the crash site, surfaces, the spawn point, the asteroid sweep and the join fallback (no strip) |
+| `control/server.lua` | the join rule: which controller a player gets, and where their body is |
+| `control/route.lua` | the destination decision and the hand-over |
 | `control/platforms.lua` | the fleet's platform copies, and the API probes |
 | `control/research.lua` | the shared tech tree: report and apply |
 | `control/events.lua` | every event handler |

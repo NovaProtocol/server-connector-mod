@@ -86,12 +86,19 @@ local function mirror_platforms(entries)
 
     -- Gone from the list means gone here: the real platform was deleted or destroyed,
     -- and a copy of something that no longer exists is a lie players can stand on.
+    local doomed = {}
     for _, platform in pairs(force.platforms or {}) do
         if not wanted[platform.name] then
-            local name = platform.name
-            pcall(function() platform.destroy() end)
+            doomed[#doomed + 1] = platform
+        end
+    end
+    for _, platform in ipairs(doomed) do
+        local name = platform.name
+        if pcall(function() platform.destroy() end) then
             removed[#removed + 1] = name
             log(string.format("[%s] %s is gone from the fleet, removing the copy", instance(), name))
+        else
+            log(string.format("[%s] could not remove the copy of %s", instance(), name))
         end
     end
 
@@ -214,12 +221,12 @@ end
 -- API probes: ask the game, do not assume
 --------------------------------------------------------------------------------
 
--- The creation call, tried rather than assumed.
+-- What the game actually offers, asked rather than assumed.
 --
--- The docs say it exists -- LuaForce::create_space_platform -- and do not say here what
--- it takes, so the shapes are tried under pcall and the game's own answer about each one
--- comes back. Nothing is created unless the game accepts it, and a stray platform on the
--- space server's own world is the only thing a successful probe could leave behind.
+-- Everything here is read-only: names and counts, never a move, a pause or a creation.
+-- The reading probes were enough to diagnose what this build does, and a probe that changes
+-- a real platform is a world change driven over RCON, which is not safe with anybody
+-- connected.
 local function platform_api(name)
     local force = main_force()
     local tried = {}
@@ -239,38 +246,6 @@ local function platform_api(name)
             return item and item.name or "no such item"
         end)
     end
-
-    -- Move the real platform, so the copies can be watched following it. This is the
-    -- only way to see stage 4 work without a player aboard a platform.
-    attempt("move to vulcanus", function()
-        local first = nil
-        for _, platform in pairs(force.platforms or {}) do
-            first = platform
-            break
-        end
-        if not first then
-            return "no platform"
-        end
-
-        first.space_location = "vulcanus"
-        return first.name .. " is at " .. tostring(first.space_location and first.space_location.name)
-    end)
-
-    -- Unpause the real platform, so the copies can be watched following it both ways.
-    -- If it flips back on its own, something is writing a value it read from itself.
-    attempt("unpause", function()
-        local first = nil
-        for _, platform in pairs(force.platforms or {}) do
-            first = platform
-            break
-        end
-        if not first then
-            return "no platform"
-        end
-
-        first.paused = false
-        return first.name .. " paused=" .. tostring(first.paused)
-    end)
 
     -- Which logistic member index a hub's requests are on, asked of the game rather than
     -- read out of the defines page: the names are the game's, not mine to remember.
@@ -307,14 +282,6 @@ local function platform_api(name)
     end)
 
     attempt("platforms", function() return #force.platforms end)
-    attempt("create()", function() return force.create_space_platform() end)
-    attempt("create{name}", function() return force.create_space_platform{name = name or "probe"} end)
-    -- The shape the errors above point at, which is the one that works. Making a platform
-    -- is the only thing here that can leave something behind, and it is how the copies get
-    -- tested: without a platform on the space server there is nothing to mirror.
-    attempt("create{planet,name}", function()
-        return force.create_space_platform{planet = instance(), name = name or "probe"}
-    end)
 
     return {instance = instance(), tried = tried, platforms = #force.platforms}
 end

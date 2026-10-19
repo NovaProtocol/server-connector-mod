@@ -1,4 +1,58 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.30.0
+Date: 2026-10-19
+  Changed:
+    - A world change driven over RCON is refused while anybody is connected: set_instance,
+      set_topology and create_surfaces answer skipped and write nothing. The node already
+      retries an identity push until it takes, and the manager now retries a skipped topology
+      push instead of reading it as applied.
+    - set_instance and set_topology answer unchanged when they are told what they already
+      hold. Re-pushing the same identity no longer clears the recorded body locations, and
+      an identical topology with nobody connected still repairs missing surfaces.
+    - set_topology drops entries with no address and compares two topologies as sets.
+    - A platform surface counts as owned on every server, so a planet server's copies are no
+      longer cleared by the join fallback.
+    - platform_api only reads. The probes that moved a platform, unpaused it or created one
+      are gone.
+    - A hand-set startup setting is a working fallback again; the default, unconfigured,
+      still leaves the mod inert.
+  Fixed:
+    - destination_for returns nil when the topology holds no entry with an address for the
+      surface, and route_if_elsewhere checks the address before handing over. Looking at a
+      platform on a fleet with no space server is no longer an error.
+    - report() no longer depends on storage.viewing existing, so a missing table cannot cost
+      the manager its whole telemetry.
+    - clear_foreign_chunks collects a surface's chunks before deleting any of them; deleting
+      while walking the iterator could skip entries or raise.
+    - The asteroid sweep carries on past a platform it could not clear, instead of stopping
+      for every other platform too.
+    - game.planets and is_space_location_unlocked are read under pcall, so a build without
+      Space Age cannot take ensure_surfaces down.
+    - mirror_platforms collects the copies to remove before destroying them, and reports only
+      the removals that took.
+    - apply_research clamps the progress it is given to 0..1.
+    - set_body_location reports destroyed_character when it destroyed a connected player's
+      character here, and only changes a controller for a player who is connected.
+    - The -call command refuses a player. Identity, research, pause and the probes are no
+      longer reachable from chat.
+    - The empty on_player_left_game handler is gone.
+---------------------------------------------------------------------------------------------------
+Version: 0.29.0
+Date: 2026-10-19
+  Added:
+    - report() now includes bodies: the characters each world holds, whether their player is
+      connected or not.
+---------------------------------------------------------------------------------------------------
+Version: 0.28.0
+Date: 2026-10-18
+  Changed:
+    - Not recorded.
+---------------------------------------------------------------------------------------------------
+Version: 0.27.0
+Date: 2026-10-18
+  Changed:
+    - Not recorded.
+---------------------------------------------------------------------------------------------------
 Version: 0.26.0
 Date: 2026-10-18
   Changed:

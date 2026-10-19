@@ -33,7 +33,19 @@ local calls = {
     -- Which server this is. Pushed by the node at startup, because the
     -- mod-settings.json route is not read on a headless server (see state.instance()).
     set_instance = function(id)
+        if type(id) ~= "string" or id == "" then
+            return {ok = false, error = "instance must be a non-empty string"}
+        end
         state.ensure_storage()
+        if storage.instance == id then
+            if state.empty() then
+                convert.ensure_surfaces()
+            end
+            return {instance = id, unchanged = true}
+        end
+        if not state.empty() then
+            return {instance = state.instance(), skipped = "somebody is connected"}
+        end
         state.set_instance(id)
         convert.ensure_surfaces()
         return {instance = state.instance()}
@@ -43,6 +55,16 @@ local calls = {
     -- changes nothing, so a retried push is harmless.
     set_topology = function(topology)
         state.ensure_storage()
+        local wanted = state.normalize_topology(topology)
+        if state.same_topology(wanted, storage.topology) then
+            if state.empty() then
+                convert.ensure_surfaces()
+            end
+            return {instance = state.instance(), destinations = #state.destinations(), unchanged = true}
+        end
+        if not state.empty() then
+            return {instance = state.instance(), skipped = "somebody is connected"}
+        end
         state.set_topology(topology)
         convert.ensure_surfaces()
         return {instance = state.instance(), destinations = #state.destinations()}
@@ -88,7 +110,12 @@ local calls = {
     end,
 
     -- Make every planet this fleet knows about (convert.create_surfaces).
-    create_surfaces = convert.create_surfaces,
+    create_surfaces = function()
+        if not state.empty() then
+            return {instance = state.instance(), skipped = "somebody is connected"}
+        end
+        return convert.create_surfaces()
+    end,
 
     -- What surfaces this world has (convert.surfaces).
     surfaces = convert.surfaces,
@@ -143,6 +170,14 @@ commands.add_command(
     MOD .. "-call",
     "Internal: how the node reaches this mod's interface. Not for use by players.",
     function(event)
+        if event.player_index then
+            local caller = game.get_player(event.player_index)
+            if caller then
+                caller.print("This command is not available to players.")
+            end
+            return
+        end
+
         local out = {ok = false}
 
         local decodedOk, payload = pcall(function()

@@ -51,9 +51,14 @@ end
 -- there. That division is also what makes it safe to have loaded at all: a server that
 -- never hears from a node -- somebody's own save, a server that has nothing to do with this
 -- fleet -- never gets an identity, and every action in this mod does nothing. Installing
--- it changes nothing.
+-- it changes nothing, unless somebody sets `server-connector-instance` by hand: then the
+-- setting is the identity, because instance() already falls back to it.
 local function known()
-    return storage ~= nil and storage.instance ~= nil
+    if storage ~= nil and storage.instance ~= nil then
+        return true
+    end
+    local setting = settings.startup[MOD .. "-instance"]
+    return setting ~= nil and setting.value ~= "unconfigured"
 end
 
 -- Whether the fleet is empty of players.
@@ -70,7 +75,7 @@ end
 
 local function destinations()
     local out = {}
-    for id, entry in pairs(storage.topology) do
+    for id, entry in pairs(storage.topology or {}) do
         if id ~= instance() and type(entry) == "table" and entry.address then
             out[#out + 1] = {id = id, name = entry.name or id, address = entry.address}
         end
@@ -90,18 +95,16 @@ local function destination_for(surface)
         return nil
     end
 
+    local topology = storage.topology or {}
     local id = nil
     if surface.platform then
         id = "space"
-    elseif storage.topology[surface.name] then
+    elseif topology[surface.name] then
         id = surface.name
     end
 
-    -- Looking at the surface this server already owns is not a journey. Returning
-    -- the local id here is what prompted a player to connect to the server they
-    -- were standing on, and it is also what made the last-viewed planet sticky:
-    -- every surface change toward home looked like a hop that was never taken.
-    if id == nil or id == instance() then
+    local entry = id and topology[id]
+    if id == nil or id == instance() or not entry or not entry.address then
         return nil
     end
 
@@ -153,27 +156,50 @@ end
 --
 -- The surfaces are not created here: that is convert's job, and the caller re-runs it.
 local function set_instance(id)
+    local changed = storage.instance ~= id
     storage.instance = id
-    -- Anything recorded against the old identity is meaningless now.
-    storage.body = {}
+    if changed then
+        -- Anything recorded against the old identity is meaningless now.
+        storage.body = {}
+        storage.viewing = {}
+        storage.routed = {}
+        storage.anchored = {}
+    end
     log("[" .. MOD .. "] instance=" .. tostring(id))
+end
+
+local function normalize_topology(topology)
+    local out = {}
+    for id, entry in pairs(topology or {}) do
+        if type(entry) == "table" and entry.address then
+            out[id] = {name = entry.name or id, address = entry.address, kind = entry.kind}
+        end
+    end
+    return out
+end
+
+local function same_topology(a, b)
+    a, b = a or {}, b or {}
+    for id, x in pairs(a) do
+        local y = b[id]
+        if not y or x.name ~= y.name or x.address ~= y.address or x.kind ~= y.kind then
+            return false
+        end
+    end
+    for id in pairs(b) do
+        if not a[id] then
+            return false
+        end
+    end
+    return true
 end
 
 -- Replace the whole destination table. Idempotent: sending the same set twice
 -- changes nothing, so a retried push is harmless.
 local function set_topology(topology)
-    storage.topology = {}
-    for id, entry in pairs(topology or {}) do
-        if type(entry) == "table" and entry.address then
-            storage.topology[id] = {
-                name = entry.name or id,
-                address = entry.address,
-                -- Which kind of server it is decides whether this one has a surface
-                -- to create for it: a planet does, a space server does not.
-                kind = entry.kind,
-            }
-        end
-    end
+    -- Which kind of server it is decides whether this one has a surface
+    -- to create for it: a planet does, a space server does not.
+    storage.topology = normalize_topology(topology)
 end
 
 -- Where a player's body is. The manager owns this fact; the mod only obeys it.
@@ -199,12 +225,13 @@ end
 
 local function report()
     local force = main_force()
+    local viewing = storage.viewing or {}
     local players = {}
     for _, player in pairs(game.connected_players) do
         players[#players + 1] = {
             name = player.name,
             admin = player.admin,
-            viewing = storage.viewing[player.name] == true,
+            viewing = viewing[player.name] == true,
             viewing_surface = player.surface and player.surface.name or nil,
             -- Whether this world holds their body. The manager takes a body's home from this
             -- rather than from a player not being in remote view, which any join used to look
@@ -282,6 +309,8 @@ return {
 
     set_instance = set_instance,
     set_topology = set_topology,
+    normalize_topology = normalize_topology,
+    same_topology = same_topology,
     set_body = set_body,
     drain = drain,
 

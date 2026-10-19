@@ -1,10 +1,10 @@
 -- server-connector-mod / control/convert.lua
 --
 -- What this server does to the world at runtime: the crash site, the surfaces every planet
--- needs, the spawn point, and the asteroid sweep. Conversion -- cutting a world down to the
--- one surface a server keeps -- is not here: that belongs to the private converter mod the
--- manager installs for the length of a conversion, and the public mod has no way to start
--- one.
+-- needs, the spawn point, the asteroid sweep and the join fallback. Conversion -- cutting a
+-- world down to the one surface a server keeps -- is not here: that belongs to the private
+-- converter mod the manager installs for the length of a conversion, and the public mod has
+-- no way to start one.
 --
 -- The exception is the join fallback below: a player joining can generate chunks on a
 -- surface this server does not own, and those are taken back off, because that is one join's
@@ -85,7 +85,8 @@ local function ensure_surfaces()
         -- whatever the server is for, so the planet this server exists to be is exactly
         -- the one that is missing.
         if not game.surfaces[id] then
-            local planet = game.planets and game.planets[id]
+            local okp, planet = pcall(function() return game.planets and game.planets[id] end)
+            if not okp then planet = nil end
             if planet then
                 local ok, surface = pcall(function() return planet.create_surface() end)
                 if ok and surface then
@@ -101,7 +102,8 @@ local function ensure_surfaces()
         -- sees and travels to space locations it has unlocked, and normally the discovery
         -- research does that. A server with the surface and no unlock shows nothing in the
         -- space map -- the planet is simply not there as far as the game is concerned.
-        if force.is_space_location_unlocked and not force.is_space_location_unlocked(id) then
+        local oku, unlocked = pcall(function() return force.is_space_location_unlocked(id) end)
+        if oku and not unlocked then
             local ok, err = pcall(function() force.unlock_space_location(id) end)
             if ok then
                 log(string.format("[%s] unlocked %s for this force", MOD, id))
@@ -142,11 +144,7 @@ local function sweep_asteroids()
 
     for _, platform in pairs(main_force().platforms or {}) do
         local ok, destroyed = pcall(function() return platform.destroy_asteroid_chunks{} end)
-        if not ok then
-            return
-        end
-
-        if type(destroyed) == "number" and destroyed > 0 then
+        if ok and type(destroyed) == "number" and destroyed > 0 then
             log(string.format("[%s] took %d asteroid chunk(s) off %s", instance(), destroyed, platform.name))
         end
     end
@@ -182,17 +180,13 @@ local function clear_one(surface)
         log(string.format("[%s] could not look at %s: %s", instance(), surface.name, tostring(batch)))
     end
 
-    local chunks = 0
+    local coords = {}
     if type(surface.get_chunks) == "function" then
         local got, iter = pcall(function() return surface.get_chunks() end)
         if got and iter ~= nil then
             local walked = pcall(function()
                 for chunk in iter do
-                    if pcall(function()
-                        return surface.delete_chunk({x = chunk.x, y = chunk.y})
-                    end) then
-                        chunks = chunks + 1
-                    end
+                    coords[#coords + 1] = {x = chunk.x, y = chunk.y}
                 end
             end)
             if not walked then
@@ -201,6 +195,13 @@ local function clear_one(surface)
         else
             log(string.format("[%s] could not ask %s for its chunks: %s",
                 instance(), surface.name, tostring(iter)))
+        end
+    end
+
+    local chunks = 0
+    for _, coord in ipairs(coords) do
+        if pcall(function() return surface.delete_chunk(coord) end) then
+            chunks = chunks + 1
         end
     end
 
@@ -223,7 +224,7 @@ local function clear_foreign_chunks()
     local cleared = {}
 
     for name, surface in pairs(game.surfaces) do
-        local owned = name == instance() or (instance() == "space" and surface.platform ~= nil)
+        local owned = name == instance() or surface.platform ~= nil
 
         if not owned then
             local chunks = 0

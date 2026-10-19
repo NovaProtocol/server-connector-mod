@@ -135,8 +135,9 @@ local function apply_research(payload)
                 pcall(function() force.add_research(technology) end)
             end
 
-            if payload.progress then
-                force.research_progress = payload.progress
+            local progress = tonumber(payload.progress)
+            if progress then
+                force.research_progress = math.max(0, math.min(1, progress))
             end
 
             applied = applied + 1

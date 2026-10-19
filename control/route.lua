@@ -50,6 +50,9 @@ local function route_if_elsewhere(player)
     end
 
     local entry = storage.topology[target]
+    if not entry or not entry.address then
+        return false
+    end
     storage.routed[player.name] = target
 
     log(string.format("[%s] %s looked at %s, sending them to %s",
@@ -69,7 +72,7 @@ end
 -- checked from outside: whether a platform goes to the space server, whether a planet
 -- goes to itself, and whether looking at home is not a journey at all.
 local function route_for(surface)
-    local id = destination_for(game.surfaces[surface] or (game.surfaces[1] and nil))
+    local id = destination_for(game.surfaces[surface])
 
     return {
         instance = instance(),

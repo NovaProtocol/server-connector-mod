@@ -119,11 +119,16 @@ local function as_observer(player)
         return
     end
 
-    player.set_controller{
-        type = defines.controllers.remote,
-        surface = game.surfaces[instance()] or player.physical_surface,
-        position = player.physical_position,
-    }
+    local fell_back = pcall(function()
+        player.set_controller{
+            type = defines.controllers.remote,
+            surface = game.surfaces[instance()] or player.physical_surface,
+            position = player.physical_position,
+        }
+    end)
+    if not fell_back then
+        log(string.format("[%s] could not put %s in the observer controller", instance(), player.name))
+    end
 end
 
 -- What a player gets when they arrive, and whenever the manager says where their body is.
@@ -140,6 +145,13 @@ local function apply_join_rule(player)
         -- their body's home that character is a second body with an inventory, so it is
         -- removed rather than left standing around.
         if player.character and player.character.valid then
+            local items = "unknown"
+            pcall(function()
+                local inv = player.character.get_inventory(defines.inventory.character_main)
+                items = inv and inv.get_item_count() or 0
+            end)
+            log(string.format("[%s] destroying %s's character here (main inventory items: %s)",
+                instance(), player.name, tostring(items)))
             player.character.destroy()
         end
 
@@ -170,14 +182,8 @@ local function apply_join_rule(player)
         return
     end
 
-    -- Nothing has said where their body is. If this world holds a character for them -- a save
-    -- that has one, or a first join, which mints one -- then that character *is* their body and
-    -- this server is its home: keep it, and the manager learns the fleet's homes from the
-    -- report. Only a player this world holds no character for is left observing.
-    if player.character and player.character.valid then
-        return
-    end
-
+    -- Nothing has said where their body is, and this world holds no character for them: leave
+    -- them observing.
     player.toggle_menu_leaves_remote_view = false
     as_observer(player)
 end
@@ -196,11 +202,17 @@ local function set_body_location(name, id)
     state.set_body(name, id)
 
     local player = game.get_player(name)
-    if player then
+    local destroyed = false
+    if player and player.connected then
+        destroyed = storage.body[name] ~= nil and player.character ~= nil and player.character.valid
         apply_join_rule(player)
     end
 
-    return {name = name, body = storage.body[name] or instance()}
+    local out = {name = name, body = storage.body[name] or instance()}
+    if destroyed then
+        out.destroyed_character = true
+    end
+    return out
 end
 
 return {
