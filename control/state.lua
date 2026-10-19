@@ -235,9 +235,21 @@ local function report()
     end
     table.sort(unlocked)
 
+    -- The bodies this world holds, whoever is connected. A player's character in this save *is*
+    -- their body, online on this server or not, and the manager takes a body's home from this
+    -- rather than from whichever planet a player happened to join first.
+    local bodies = {}
+    for _, player in pairs(game.players) do
+        if player.character and player.character.valid then
+            bodies[#bodies + 1] = player.name
+        end
+    end
+    table.sort(bodies)
+
     return {
         instance = instance(),
         tick = game.tick,
+        bodies = bodies,
         -- The speed itself, and what it asks for. The manager shows both: the speed is what
         -- game.speed is, the target says how many ticks a second that is.
         speed = game.speed,
