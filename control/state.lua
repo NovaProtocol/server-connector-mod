@@ -262,13 +262,26 @@ local function report()
     end
     table.sort(unlocked)
 
-    -- The bodies this world holds, whoever is connected. A player's character in this save *is*
-    -- their body, online on this server or not, and the manager takes a body's home from this
-    -- rather than from whichever planet a player happened to join first.
+    -- The bodies this world *owns*, whoever is connected: the manager takes a body's home from
+    -- this rather than from whichever planet a player happened to join first. A save can hold
+    -- a character on another planet's surface -- the fleet's saves are copies -- and that
+    -- character is not a body here. Claiming it made the manager state a home the character
+    -- was not standing on, and the join rule then refused to attach it, which the game does
+    -- not recover from.
     local bodies = {}
+    local home = instance()
     for _, player in pairs(game.players) do
-        if player.character and player.character.valid then
-            bodies[#bodies + 1] = player.name
+        local character = player.character
+        if character and character.valid and character.surface then
+            local owned
+            if home == "space" then
+                owned = character.surface.platform ~= nil
+            else
+                owned = character.surface.name == home
+            end
+            if owned then
+                bodies[#bodies + 1] = player.name
+            end
         end
     end
     table.sort(bodies)

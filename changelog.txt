@@ -1,4 +1,15 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.30.1
+Date: 2026-10-19
+  Fixed:
+    - A player joining with their character on a different surface no longer takes the
+      server down. set_controller refuses an entity from another surface and that error is
+      not recoverable, so the body is put where it belongs first and the controller is only
+      attached once the two surfaces agree.
+    - report() only counts the bodies this server owns. A character on another planet's
+      surface in this save is not this server's body; claiming it made the manager state a
+      home the character was not standing on.
+---------------------------------------------------------------------------------------------------
 Version: 0.30.0
 Date: 2026-10-19
   Changed:

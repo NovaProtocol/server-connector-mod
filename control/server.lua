@@ -173,7 +173,18 @@ local function apply_join_rule(player)
     if player.character and player.character.valid then
         -- Their body is here. Put the controller back on it: a player who was a viewer a
         -- moment ago is still in the remote one, and the character would sit unattended.
-        if player.controller_type ~= defines.controllers.character then
+        --
+        -- The character this save holds can be on a different surface from the one the player
+        -- joined on: the fleet's saves are copies, and a body that moved last session is not
+        -- necessarily where the client came back to. set_controller refuses an entity from
+        -- another surface, and that error quits the server, so the body is put where it
+        -- belongs first and the controller is only attached once the two surfaces agree.
+        if player.character.surface ~= player.physical_surface then
+            enforce_surface(player)
+        end
+        if player.controller_type ~= defines.controllers.character
+            and player.character and player.character.valid
+            and player.character.surface == player.physical_surface then
             player.set_controller{
                 type = defines.controllers.character,
                 character = player.character,

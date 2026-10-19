@@ -92,6 +92,12 @@ The remote controller is an *overlay* on a physical one, so leaving it returns t
 player to that — and a bodyless player's physical controller is god mode. Leaving is
 therefore disabled, which is load-bearing rather than a nicety.
 
+A character in a save is only a body of that server when it stands on a surface the
+server owns. A copy of the world can hold a character on another planet's surface, and
+attaching the player's controller to that is an error the game does not recover from: the
+body is put where it belongs first, and `report().bodies` only names characters this
+server actually holds.
+
 ## Source layout
 
 `control.lua` is the entry point and nothing else: it `require`s the runtime, which is a
