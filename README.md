@@ -98,6 +98,14 @@ attaching the player's controller to that is an error the game does not recover 
 body is put where it belongs first, and `report().bodies` only names characters this
 server actually holds.
 
+## Faults
+
+An error raised from an event handler quits the server, and the fleet's watchdog then stops
+the other five. So no handler is allowed to raise: each one runs its work inside a wrapper
+whose failure is a log line, and the writes inside the join and routing rules are wrapped
+individually so one refused call does not skip the rest. The same applies to the two console
+commands. A fault shows up as `[<instance>] <what> failed: <reason>` in the game log.
+
 ## Source layout
 
 `control.lua` is the entry point and nothing else: it `require`s the runtime, which is a

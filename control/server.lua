@@ -27,6 +27,19 @@ local state = require("__server-connector-mod__.control.state")
 local instance = state.instance
 local known = state.known
 
+-- A write to the game's own API, said out loud when it refuses.
+--
+-- Every one of these can throw: an entity that went invalid between two lines, a controller a
+-- build does not accept, a surface that changed underneath. From an event handler that error
+-- is non-recoverable, so a refused write is its own log line and the rule carries on.
+local function attempt(what, fn)
+    local ok, err = pcall(fn)
+    if not ok then
+        log(string.format("[%s] %s failed: %s", instance(), what, tostring(err)))
+    end
+    return ok
+end
+
 --------------------------------------------------------------------------------
 -- the surface a body belongs on
 --------------------------------------------------------------------------------
@@ -86,9 +99,14 @@ local function enforce_surface(player)
     end
 
     local position = player.physical_position or {x = 0, y = 0}
-    local spot = home.find_non_colliding_position("character", position, 64, 1)
-        or home.find_non_colliding_position("character", {x = 0, y = 0}, 64, 1)
-        or position
+    local found, spot = pcall(function()
+        return home.find_non_colliding_position("character", position, 64, 1)
+            or home.find_non_colliding_position("character", {x = 0, y = 0}, 64, 1)
+            or position
+    end)
+    if not found or spot == nil then
+        spot = position
+    end
 
     log(string.format("[%s] %s was standing on %s, putting them back on %s",
         instance(), player.name, physical.name, home.name))
@@ -152,15 +170,19 @@ local function apply_join_rule(player)
             end)
             log(string.format("[%s] destroying %s's character here (main inventory items: %s)",
                 instance(), player.name, tostring(items)))
-            player.character.destroy()
+            attempt("destroying " .. player.name .. "'s character", function()
+                player.character.destroy()
+            end)
         end
 
         storage.viewing[player.name] = true
-        player.set_controller{
-            type = defines.controllers.remote,
-            surface = game.surfaces[instance()] or player.physical_surface,
-            position = player.physical_position,
-        }
+        attempt("putting " .. player.name .. " in the remote controller", function()
+            player.set_controller{
+                type = defines.controllers.remote,
+                surface = game.surfaces[instance()] or player.physical_surface,
+                position = player.physical_position,
+            }
+        end)
         player.toggle_menu_leaves_remote_view = false
         player.disable_space_map = true
         return
@@ -185,10 +207,12 @@ local function apply_join_rule(player)
         if player.controller_type ~= defines.controllers.character
             and player.character and player.character.valid
             and player.character.surface == player.physical_surface then
-            player.set_controller{
-                type = defines.controllers.character,
-                character = player.character,
-            }
+            attempt("putting " .. player.name .. " back on their character", function()
+                player.set_controller{
+                    type = defines.controllers.character,
+                    character = player.character,
+                }
+            end)
         end
         return
     end

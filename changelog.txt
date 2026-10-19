@@ -1,4 +1,16 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.30.2
+Date: 2026-10-19
+  Changed:
+    - Every event handler and both commands contain their own failure. An error from a
+      handler is non-recoverable in Factorio: the server quits, and the fleet's watchdog then
+      stops the other five without saving. A fault is now a log line and the handler returns.
+    - The writes in the join rule (destroying a character, both set_controller calls) and the
+      position lookup in enforce_surface are wrapped individually, so one refusal is a log
+      line and the rest of the rule still runs.
+    - A failed connect_to_server is logged and retried on the next surface change, instead of
+      raising from the routing handler and leaving the player marked as handed over.
+---------------------------------------------------------------------------------------------------
 Version: 0.30.1
 Date: 2026-10-19
   Fixed:

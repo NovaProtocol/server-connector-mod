@@ -25,14 +25,27 @@ local research = require("__server-connector-mod__.control.research")
 local MOD = state.MOD
 local SCHEMA = state.SCHEMA
 
+-- Everything a handler does is wrapped in this.
+--
+-- An error raised from an event handler is non-recoverable in Factorio: the server quits,
+-- and the fleet's watchdog then stops the other five without saving. A field one build does
+-- not have, one entity that went invalid between two lines, must not be able to do that. So
+-- a handler's work is a function whose failure is a log line, and the handler returns.
+local function guard(what, fn)
+    local ok, err = pcall(fn)
+    if not ok then
+        log(string.format("[%s] %s failed: %s", state.instance(), what, tostring(err)))
+    end
+end
+
 script.on_nth_tick(60, function()
     if not state.known() then
         return
     end
 
-    -- A planet server and asteroids, once a second. Wrapped, because a fault here would run
+    -- A planet server and asteroids, once a second. Guarded, because a fault here would run
     -- every second forever.
-    pcall(convert.sweep_asteroids)
+    guard("the asteroid sweep", convert.sweep_asteroids)
 end)
 
 -- The speed this world is kept at, put back on the game as the world comes up. The game
@@ -46,58 +59,70 @@ local function restore_speed()
 end
 
 script.on_init(function()
-    state.ensure_storage()
-    log("[" .. MOD .. "] instance=" .. state.instance())
-    convert.disable_crash_site()
-    convert.ensure_surfaces()
-    restore_speed()
+    guard("on_init", function()
+        state.ensure_storage()
+        log("[" .. MOD .. "] instance=" .. state.instance())
+        convert.disable_crash_site()
+        convert.ensure_surfaces()
+        restore_speed()
+    end)
 end)
 
 script.on_configuration_changed(function()
-    state.ensure_storage()
-    storage.schema = SCHEMA
-    convert.disable_crash_site()
-    convert.ensure_surfaces()
-    restore_speed()
+    guard("on_configuration_changed", function()
+        state.ensure_storage()
+        storage.schema = SCHEMA
+        convert.disable_crash_site()
+        convert.ensure_surfaces()
+        restore_speed()
+    end)
 end)
 
 script.on_event(defines.events.on_player_changed_surface, function(event)
-    local player = game.get_player(event.player_index)
-    if player and not route.route_if_elsewhere(player) then
-        -- Nowhere to send them, so put them back: the redirect is the first answer, and
-        -- standing on a planet this server does not own is the case it does not cover.
-        server.enforce_surface(player)
-    end
+    guard("a surface change", function()
+        local player = game.get_player(event.player_index)
+        if player and not route.route_if_elsewhere(player) then
+            -- Nowhere to send them, so put them back: the redirect is the first answer, and
+            -- standing on a planet this server does not own is the case it does not cover.
+            server.enforce_surface(player)
+        end
+    end)
 end)
 
 -- Entering or leaving remote view changes what a player is looking at without changing
 -- which surface their body is on, and entering a space platform goes through the
 -- controller too, so the routing decision is taken again here.
 script.on_event(defines.events.on_player_controller_changed, function(event)
-    local player = game.get_player(event.player_index)
-    if player and not route.route_if_elsewhere(player) then
-        server.enforce_surface(player)
-    end
+    guard("a controller change", function()
+        local player = game.get_player(event.player_index)
+        if player and not route.route_if_elsewhere(player) then
+            server.enforce_surface(player)
+        end
+    end)
 end)
 
 script.on_event(defines.events.on_player_joined_game, function(event)
-    local player = game.get_player(event.player_index)
-    if player then
-        state.note("joined", player)
-        server.apply_join_rule(player)
-        -- Put them on this server's own surface as they arrive, rather than waiting for them
-        -- to change surface before anything happens. Joining a server is an answer about
-        -- where they belong: whichever server they reached, they meant to be on its planet.
-        --
-        -- enforce_surface returns without doing anything when they are already standing on
-        -- it, and it never sends anybody anywhere: the journey decision is route_if_elsewhere,
-        -- which is not involved here and would not fire anyway, because looking at the
-        -- surface this server owns is not a journey.
-        server.enforce_surface(player)
-        -- A join can generate chunks on a surface this server does not own; take them back
-        -- off. One join's worth, done at once -- the only clearing the public mod still does.
-        convert.clear_foreign_chunks()
-    end
+    guard("a join", function()
+        local player = game.get_player(event.player_index)
+        if player then
+            state.note("joined", player)
+            server.apply_join_rule(player)
+            -- Put them on this server's own surface as they arrive, rather than waiting for
+            -- them to change surface before anything happens. Joining a server is an answer
+            -- about where they belong: whichever server they reached, they meant to be on its
+            -- planet.
+            --
+            -- enforce_surface returns without doing anything when they are already standing
+            -- on it, and it never sends anybody anywhere: the journey decision is
+            -- route_if_elsewhere, which is not involved here and would not fire anyway,
+            -- because looking at the surface this server owns is not a journey.
+            server.enforce_surface(player)
+            -- A join can generate chunks on a surface this server does not own; take them
+            -- back off. One join's worth, done at once -- the only clearing the public mod
+            -- still does.
+            convert.clear_foreign_chunks()
+        end
+    end)
 end)
 
 --------------------------------------------------------------------------------
@@ -111,30 +136,42 @@ end)
 -- learns the fleet's research from the games rather than inferring it from a poll. Every
 -- one of the six events is reported, named, for that reason.
 script.on_event(defines.events.on_research_started, function(event)
-    research.note_research("research-started",
-        (event.research and event.research.name) or research.current_name())
+    guard("a research start", function()
+        research.note_research("research-started",
+            (event.research and event.research.name) or research.current_name())
+    end)
 end)
 
 script.on_event(defines.events.on_research_finished, function(event)
-    research.note_research("researched", event.research and event.research.name)
-    -- Whatever the game moved on to, if anything was queued behind it.
-    research.note_research("research-started", research.current_name())
+    guard("a finished research", function()
+        research.note_research("researched", event.research and event.research.name)
+        -- Whatever the game moved on to, if anything was queued behind it.
+        research.note_research("research-started", research.current_name())
+    end)
 end)
 
 script.on_event(defines.events.on_research_cancelled, function(event)
-    research.note_research("research-cancelled",
-        (event.research and event.research.name) or research.current_name())
+    guard("a cancelled research", function()
+        research.note_research("research-cancelled",
+            (event.research and event.research.name) or research.current_name())
+    end)
 end)
 
 script.on_event(defines.events.on_research_reversed, function(event)
-    research.note_research("research-reversed", event.research and event.research.name)
+    guard("a reversed research", function()
+        research.note_research("research-reversed", event.research and event.research.name)
+    end)
 end)
 
 script.on_event(defines.events.on_research_queued, function(event)
-    research.note_research("research-queued",
-        (event.research and event.research.name) or research.current_name())
+    guard("a queued research", function()
+        research.note_research("research-queued",
+            (event.research and event.research.name) or research.current_name())
+    end)
 end)
 
 script.on_event(defines.events.on_research_moved, function(event)
-    research.note_research("research-moved", event.research and event.research.name)
+    guard("a moved research", function()
+        research.note_research("research-moved", event.research and event.research.name)
+    end)
 end)

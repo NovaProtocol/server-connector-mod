@@ -58,7 +58,18 @@ local function route_if_elsewhere(player)
     log(string.format("[%s] %s looked at %s, sending them to %s",
         instance(), player.name, viewed.name, entry.name or target))
 
-    player.connect_to_server{address = entry.address, name = entry.name or target}
+    local sent, err = pcall(function()
+        player.connect_to_server{address = entry.address, name = entry.name or target}
+    end)
+    if not sent then
+        -- Not recorded as handed over: the next surface change tries again rather than
+        -- leaving them on a world they are not supposed to be on, with nothing said.
+        storage.routed[player.name] = nil
+        log(string.format("[%s] could not send %s to %s: %s",
+            instance(), player.name, target, tostring(err)))
+        return false
+    end
+
     return true
 end
 

@@ -154,11 +154,17 @@ commands.add_command(
     MOD .. "-status",
     "Report this server's identity, its topology size and its connected players as JSON.",
     function(event)
-        local text = helpers.table_to_json(remote.call(MOD, "report"))
-        if event.player_index and game.get_player(event.player_index) then
-            game.get_player(event.player_index).print(text)
-        elseif rcon then
-            rcon.print(text)
+        -- A command error is as fatal as a handler error, so it is contained here too.
+        local ok, err = pcall(function()
+            local text = helpers.table_to_json(remote.call(MOD, "report"))
+            if event.player_index and game.get_player(event.player_index) then
+                game.get_player(event.player_index).print(text)
+            elseif rcon then
+                rcon.print(text)
+            end
+        end)
+        if not ok then
+            log(string.format("[%s] -status failed: %s", MOD, tostring(err)))
         end
     end
 )
@@ -178,26 +184,33 @@ commands.add_command(
             return
         end
 
-        local out = {ok = false}
+        -- The call itself is already wrapped. This is the last line: decoding the request and
+        -- encoding the answer are the game's own helpers, and neither may quit the server.
+        local handled, err = pcall(function()
+            local out = {ok = false}
 
-        local decodedOk, payload = pcall(function()
-            return helpers.json_to_table(event.parameter)
-        end)
+            local decodedOk, payload = pcall(function()
+                return helpers.json_to_table(event.parameter)
+            end)
 
-        if decodedOk and type(payload) == "table" and type(payload.fn) == "string" and calls[payload.fn] then
-            local called, result = pcall(calls[payload.fn], table.unpack(payload.args or {}))
-            if called then
-                out = result or {ok = true}
+            if decodedOk and type(payload) == "table" and type(payload.fn) == "string" and calls[payload.fn] then
+                local called, result = pcall(calls[payload.fn], table.unpack(payload.args or {}))
+                if called then
+                    out = result or {ok = true}
+                else
+                    out = {ok = false, error = tostring(result)}
+                end
             else
-                out = {ok = false, error = tostring(result)}
+                out = {ok = false, error = "unknown call"}
             end
-        else
-            out = {ok = false, error = "unknown call"}
-        end
 
-        -- rcon.print reaches the RCON client and nobody else, which is the point.
-        if rcon then
-            rcon.print(helpers.table_to_json(out))
+            -- rcon.print reaches the RCON client and nobody else, which is the point.
+            if rcon then
+                rcon.print(helpers.table_to_json(out))
+            end
+        end)
+        if not handled then
+            log(string.format("[%s] -call failed: %s", MOD, tostring(err)))
         end
     end
 )
