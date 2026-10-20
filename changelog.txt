@@ -1,4 +1,28 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.32.0
+Date: 2026-10-20
+  Changed:
+    - No fake surfaces. A server creates only the surfaces it owns: its planet, the custom
+      surfaces declared for it, or nothing at all on the space server, whose platforms are
+      built. Another server's planet is no longer copied here, and the join fallback that
+      cleared those copies is gone.
+    - The way to another server is the server map: a list of buttons shown while the map is
+      open, one per other instance, labelled with its name. A click connects. The vanilla
+      space map is disabled, because it would offer a planet with no surface behind it.
+    - The topology is instance-centric: name, address, kind, editor, primary and the list of
+      surfaces an instance owns. No public copies and no owner id.
+    - report().bodies counts a character on any surface this instance owns, not only one
+      named after the instance.
+    - A custom instance can give its players the editor controller on join.
+    - create_surfaces takes the manager's surface forms: flat tile, planet-template
+      generation, peaceful, no enemies, day length, solar, wind and cold.
+  Added:
+    - delete_surface(name) removes one custom surface. It refuses while anybody is
+      connected, and refuses the primary.
+  Fixed:
+    - route_for, route_if_elsewhere and destination_for are gone with the surface-change
+      trigger they existed for.
+---------------------------------------------------------------------------------------------------
 Version: 0.30.2
 Date: 2026-10-19
   Changed:

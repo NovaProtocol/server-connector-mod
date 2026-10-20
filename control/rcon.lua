@@ -3,7 +3,7 @@
 -- The surface the node and the manager drive over RCON: one remote interface and one
 -- command. Each entry is either glue over two domains (set_instance, set_topology,
 -- set_body_location, set_paused, settle) or a reference to the function that owns it
--- (research, convert, platforms, route, state).
+-- (research, convert, platforms, state).
 --
 -- Required as "__server-connector-mod__.control.rcon". Required last: it is the only
 -- module that reaches across all the others.
@@ -11,7 +11,6 @@
 local state = require("__server-connector-mod__.control.state")
 local convert = require("__server-connector-mod__.control.convert")
 local server = require("__server-connector-mod__.control.server")
-local route = require("__server-connector-mod__.control.route")
 local platforms = require("__server-connector-mod__.control.platforms")
 local research = require("__server-connector-mod__.control.research")
 
@@ -109,12 +108,19 @@ local calls = {
         return {ok = true, speed = game.speed}
     end,
 
-    -- Make every planet this fleet knows about (convert.create_surfaces).
-    create_surfaces = function()
+    -- Make this instance's surfaces. With a list, it is the custom surfaces the manager
+    -- declared, with their generation forms (convert.create_custom_surfaces); without one, it
+    -- is every owned surface that is missing.
+    create_surfaces = function(entries)
         if not state.empty() then
             return {instance = state.instance(), skipped = "somebody is connected"}
         end
-        return convert.create_surfaces()
+        return convert.create_surfaces(entries)
+    end,
+
+    -- Delete one custom surface. Refused while anybody is connected, and for the primary.
+    delete_surface = function(name)
+        return convert.delete_surface(name)
     end,
 
     -- What surfaces this world has (convert.surfaces).
@@ -136,9 +142,6 @@ local calls = {
 
     -- Which surface calls this build actually has (platforms.surface_api).
     surface_api = platforms.surface_api,
-
-    -- Where a player looking at a surface would be sent (route.route_for).
-    route_for = route.route_for,
 
     -- One poll's worth of state, for the manager's health board (state.report).
     report = state.report,

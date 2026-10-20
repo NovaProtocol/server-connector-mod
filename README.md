@@ -47,14 +47,14 @@ playing, which is why the node talks to this mod through its own command instead
 | `drain_events()` | Everything the game has told this mod since the last drain. |
 | `set_paused(paused)` | Holds the game still, or lets it run. |
 | `set_speed(speed)` | Sets the world's speed, and keeps it for a restart. |
-| `create_surfaces()` | Makes every planet the topology names. `skipped` while anybody is connected. |
+| `create_surfaces(entries?)` | Makes this instance's surfaces. With a list, it creates the custom surfaces the manager declared. `skipped` while anybody is connected. |
+| `delete_surface(name)` | Removes one custom surface. Refuses the primary and anybody connected. |
 | `surfaces()` | What surfaces this world has, and which of them are platforms. |
 | `settle()` | Brings the world into line: crash site, surfaces, spawn point. Nobody connected only. |
 | `mirror_platforms(entries)` | Makes, keeps or removes this server's copies of the fleet's platforms. Nobody connected only. |
 | `platforms()` | What this server's platforms are. Read-only. |
 | `platform_api()` | Which platform calls and names this build actually has. Read-only. |
 | `surface_api()` | Which surface calls this build actually has. |
-| `route_for(surface)` | Where a player looking at that surface would be sent, without a player to send. |
 | `report()` | Instance, tick, bodies, speed, connected players, destinations, surfaces and unlocked planets. |
 
 Three of these are orders that change the world. `set_instance`, `set_topology` and
@@ -71,12 +71,18 @@ at 4096 bytes for the same reason. Paging needs no snapshot: the manager unions 
 it reads on every poll, so a technology that shifts across a page boundary and is
 missed once is picked up on the next pass.
 
-## Routing a player
+## The server map
 
-The trigger is the game's own remote view, not a menu this mod draws. Opening remote
-view onto another planet and clicking it changes the surface the player is *viewing*,
-which fires `on_player_changed_surface` even though their body never moved. The mod
-notices where they looked and calls `connect_to_server`.
+There are no copies of another server's surface, so the game's remote view has nothing to
+look at and no surface change to route on. The way across is the map: while the map view is
+open, a frame lists one button per other instance, labelled with the name the manager gave it,
+and a click calls `connect_to_server`. The instance you are already on is not in the list, so
+there is no button to send yourself where you already are.
+
+The vanilla space map is disabled (`disable_space_map`), because it would offer every planet
+as a view with no surface behind it. The mod's map is the space map. It is rebuilt on join and
+whenever the topology changes; there is no event for opening the map, so its visibility is
+checked on the one-second pass.
 
 **The address is the one a client dials.** Pointing a player at an RCON port produces
 a prompt that reads perfectly correctly and a client that sits at "connecting" until
@@ -92,10 +98,9 @@ The remote controller is an *overlay* on a physical one, so leaving it returns t
 player to that — and a bodyless player's physical controller is god mode. Leaving is
 therefore disabled, which is load-bearing rather than a nicety.
 
-A character in a save is only a body of that server when it stands on a surface the
-server owns. A copy of the world can hold a character on another planet's surface, and
-attaching the player's controller to that is an error the game does not recover from: the
-body is put where it belongs first, and `report().bodies` only names characters this
+A character in a save is only a body of that server when it stands on a surface the instance
+owns: its planet, the custom surfaces the manager declared, or a platform on the space server.
+The instance's topology entry names them, and `report().bodies` only names characters this
 server actually holds.
 
 ## Faults
@@ -114,9 +119,9 @@ package under `control/`, one file per concern.
 | File | Holds |
 |---|---|
 | `control/state.lua` | constants, `storage`, identity, topology, the event queue, `report` |
-| `control/convert.lua` | the crash site, surfaces, the spawn point, the asteroid sweep and the join fallback (no strip) |
+| `control/convert.lua` | the crash site, owned surfaces, custom surfaces, the spawn point and the asteroid sweep |
 | `control/server.lua` | the join rule: which controller a player gets, and where their body is |
-| `control/route.lua` | the destination decision and the hand-over |
+| `control/map.lua` | the server map: one button per other instance, shown while the map is open |
 | `control/platforms.lua` | the fleet's platform copies, and the API probes |
 | `control/research.lua` | the shared tech tree: report and apply |
 | `control/events.lua` | every event handler |

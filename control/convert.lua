@@ -1,14 +1,14 @@
 -- server-connector-mod / control/convert.lua
 --
--- What this server does to the world at runtime: the crash site, the surfaces every planet
--- needs, the spawn point, the asteroid sweep and the join fallback. Conversion -- cutting a
--- world down to the one surface a server keeps -- is not here: that belongs to the private
--- converter mod the manager installs for the length of a conversion, and the public mod has
--- no way to start one.
+-- What this server does to the world at runtime: the crash site, the surfaces this instance
+-- owns, the spawn point, the asteroid sweep, and the custom surfaces the manager asks for.
+-- Conversion -- cutting a world down to the one surface a server keeps -- is not here: that
+-- belongs to the private converter mod the manager installs for the length of a conversion,
+-- and the public mod has no way to start one.
 --
--- The exception is the join fallback below: a player joining can generate chunks on a
--- surface this server does not own, and those are taken back off, because that is one join's
--- worth of work rather than a conversion.
+-- Nothing here creates another server's surface. A planet owns exactly one, a custom instance
+-- owns the ones declared for it, and the space server owns its platforms, which are built
+-- rather than created.
 --
 -- Required as "__server-connector-mod__.control.convert".
 
@@ -19,6 +19,8 @@ local known = state.known
 local empty = state.empty
 local instance = state.instance
 local main_force = state.main_force
+local owned_surfaces = state.owned_surfaces
+local primary_surface = state.primary_surface
 
 --------------------------------------------------------------------------------
 -- no crash site, and no cutscene
@@ -55,35 +57,23 @@ end
 -- every planet exists everywhere
 --------------------------------------------------------------------------------
 
--- Each server has its own save, so a surface only exists on the server whose save made
--- it -- and the remote view that routing depends on has nothing to click on a planet this
--- server has never heard of. Creating the surface is enough: chunks are generated when
--- something needs them, so an unvisited planet stays fog until somebody goes there, and
--- nothing is charted or rendered by this.
+-- The surface a save only has when this server made it.
 --
--- It runs whenever the topology arrives, whenever this server learns which one it is, and
--- on load, so a server that is told anything late still ends up with all of them.
+-- A fresh save is always a nauvis world, whatever the server is for, so the planet this
+-- instance exists to be is exactly the one that can be missing. Only owned surfaces are
+-- created: there are no copies of another server's planet any more, and the map is the way
+-- to reach one.
+--
+-- A custom surface is created by create_custom_surfaces below, with its generation form. If
+-- one is missing here it is made again from its declared form, so a surface is never silently
+-- absent.
 local function ensure_surfaces()
     if not known() then
         return
     end
-    local unclassified = {}
     local force = main_force()
 
-    for id, entry in pairs(storage.topology or {}) do
-        if entry.kind == nil then
-            unclassified[#unclassified + 1] = id
-        end
-
-        if entry.kind ~= "planet" then
-            -- A space server's platforms are built, not created, so there is nothing here
-            -- for it to make.
-            goto continue
-        end
-
-        -- Its own planet counts most of all: a fresh save is always a nauvis world,
-        -- whatever the server is for, so the planet this server exists to be is exactly
-        -- the one that is missing.
+    for id in pairs(owned_surfaces()) do
         if not game.surfaces[id] then
             local okp, planet = pcall(function() return game.planets and game.planets[id] end)
             if not okp then planet = nil end
@@ -99,9 +89,8 @@ local function ensure_surfaces()
         end
 
         -- Having the surface is not the same as the planet being reachable: a force only
-        -- sees and travels to space locations it has unlocked, and normally the discovery
-        -- research does that. A server with the surface and no unlock shows nothing in the
-        -- space map -- the planet is simply not there as far as the game is concerned.
+        -- sees and travels to space locations it has unlocked. A custom surface has no space
+        -- location, and the call simply refuses it, which is caught.
         local oku, unlocked = pcall(function() return force.is_space_location_unlocked(id) end)
         if oku and not unlocked then
             local ok, err = pcall(function() force.unlock_space_location(id) end)
@@ -111,15 +100,6 @@ local function ensure_surfaces()
                 log(string.format("[%s] could not unlock %s: %s", MOD, id, tostring(err)))
             end
         end
-
-        ::continue::
-    end
-
-    -- Said out loud rather than skipped quietly: a topology with no kinds leaves every
-    -- planet to be discovered the hard way, and a silent skip looks exactly like working.
-    if #unclassified > 0 then
-        log(string.format("[%s] %d destinations arrived with no kind, so no surface was created for %s",
-            MOD, #unclassified, table.concat(unclassified, ", ")))
     end
 end
 
@@ -151,105 +131,152 @@ local function sweep_asteroids()
 end
 
 --------------------------------------------------------------------------------
--- the join fallback
+-- custom surfaces, on order
 --------------------------------------------------------------------------------
 
--- Take everything off one surface, in one call.
---
--- destroy() answers false for the few entities that cannot be destroyed -- a rail under a
--- train is the example the API gives -- so only real destructions are counted. Characters
--- are somebody's body, and this runs with nobody connected, so one can only be a stray a
--- script left behind; skipping it is deliberate.
---
--- get_chunks hands back a LuaChunkIterator -- iterated, never indexed as a table -- whose
--- values carry their chunk coordinates as x/y.
-local function clear_one(surface)
-    local destroyed = 0
+-- Apply the form a surface was described with. Everything here is a property the game
+-- exposes on a surface created at runtime; the two that belong to a planet prototype --
+-- lightning and the Aquilo heating mechanic -- are not pretended.
+local function apply_surface_options(surface, generation)
+    generation = generation or {}
 
-    local ok, batch = pcall(function() return surface.find_entities_filtered{} end)
-    if ok and type(batch) == "table" then
-        for _, entity in pairs(batch) do
-            if entity.valid and entity.type ~= "character" then
-                local removed, gone = pcall(function() return entity.destroy() end)
-                if removed and gone then
-                    destroyed = destroyed + 1
-                end
-            end
-        end
-    else
-        log(string.format("[%s] could not look at %s: %s", instance(), surface.name, tostring(batch)))
-    end
-
-    local coords = {}
-    if type(surface.get_chunks) == "function" then
-        local got, iter = pcall(function() return surface.get_chunks() end)
-        if got and iter ~= nil then
-            local walked = pcall(function()
-                for chunk in iter do
-                    coords[#coords + 1] = {x = chunk.x, y = chunk.y}
-                end
-            end)
-            if not walked then
-                log(string.format("[%s] could not walk %s's chunks", instance(), surface.name))
-            end
-        else
-            log(string.format("[%s] could not ask %s for its chunks: %s",
-                instance(), surface.name, tostring(iter)))
+    local function set(what, fn)
+        local ok, err = pcall(fn)
+        if not ok then
+            log(string.format("[%s] could not set %s on %s: %s",
+                instance(), what, surface.name, tostring(err)))
         end
     end
 
-    local chunks = 0
-    for _, coord in ipairs(coords) do
-        if pcall(function() return surface.delete_chunk(coord) end) then
-            chunks = chunks + 1
-        end
+    set("peaceful mode", function() surface.peaceful_mode = generation.peaceful == true end)
+    set("no enemies", function() surface.no_enemies_mode = generation.noEnemies == true end)
+    set("always day", function() surface.always_day = generation.alwaysDay == true end)
+
+    if type(generation.ticksPerDay) == "number" and generation.ticksPerDay > 0 then
+        set("day length", function() surface.ticks_per_day = math.floor(generation.ticksPerDay) end)
+    end
+    if type(generation.solarMultiplier) == "number" then
+        set("solar multiplier", function() surface.solar_power_multiplier = generation.solarMultiplier end)
+    end
+    if type(generation.windSpeed) == "number" then
+        set("wind speed", function() surface.wind_speed = generation.windSpeed end)
     end
 
-    return {entities = destroyed, chunks = chunks}
+    -- The full Aquilo heating mechanic is a planet-prototype property. What a runtime
+    -- surface can have is the cold property, so that is what this does.
+    if generation.freezing == true then
+        set("temperature", function() surface.set_property("temperature", 0) end)
+    end
 end
 
--- A joining player can generate chunks on a surface this server does not own. Take them
--- back off: it is one join's worth, so it is done at once rather than as a job, and it is
--- the only clearing this mod still does. The heavy conversion work lives in the private
--- converter the manager installs for a conversion.
---
--- The server and the client are comparing by the time this runs, so a change here is a
--- change the client was not told about. It is kept to the surfaces nobody should be on, and
--- to chunks a join has just made, which is as small as the fallback can be.
-local function clear_foreign_chunks()
-    if not known() then
+-- Paint a bounded starting area with one tile. A flat sandbox is a starting area, not a
+-- whole planet generated a tile at a time.
+local function paint_flat(surface, tile)
+    if type(tile) ~= "string" or tile == "" then
         return
     end
 
-    local cleared = {}
+    local tiles = {}
+    for x = -32, 32 do
+        for y = -32, 32 do
+            tiles[#tiles + 1] = {name = tile, position = {x = x, y = y}}
+        end
+    end
 
-    for name, surface in pairs(game.surfaces) do
-        local owned = name == instance() or surface.platform ~= nil
+    local ok, err = pcall(function() surface.set_tiles(tiles, true) end)
+    if not ok then
+        log(string.format("[%s] could not paint %s: %s", instance(), surface.name, tostring(err)))
+    end
+end
 
-        if not owned then
-            local chunks = 0
-            if type(surface.get_chunks) == "function" then
-                local ok, iter = pcall(function() return surface.get_chunks() end)
-                if ok and iter ~= nil then
-                    pcall(function()
-                        for _ in iter do
-                            chunks = chunks + 1
-                        end
-                    end)
+-- Create the surfaces the manager declared for this instance. Nobody connected: these are
+-- world changes, and a client that is connected would desync on the next comparison.
+local function create_custom_surfaces(entries)
+    if not known() then
+        return {instance = instance(), skipped = "no identity"}
+    end
+    if not empty() then
+        return {instance = instance(), skipped = "somebody is connected"}
+    end
+
+    local made, failed = {}, {}
+
+    for _, entry in pairs(entries or {}) do
+        local id = type(entry) == "table" and entry.id or nil
+        if type(id) == "string" and id ~= "" and not game.surfaces[id] then
+            local generation = entry.generation or {}
+
+            local settings = {
+                seed = type(generation.seed) == "number" and generation.seed or nil,
+                peaceful_mode = generation.peaceful == true,
+                no_enemies_mode = generation.noEnemies == true,
+            }
+
+            if generation.flat == true then
+                -- The flat area is painted below; the settings only have to make it empty.
+                settings.property_expression_names = {
+                    elevation = "0", cliffiness = "0", roughness = "0",
+                    temperature = "0", moisture = "0", aux = "0",
+                }
+            else
+                local name = generation.planet
+                local okp, planet = pcall(function()
+                    return name and game.planets and game.planets[name]
+                end)
+                if okp and planet and planet.prototype and planet.prototype.map_gen_settings then
+                    settings = planet.prototype.map_gen_settings
                 end
             end
 
-            if chunks > 0 then
-                local counts = clear_one(surface)
-                cleared[name] = counts
-                log(string.format("[%s] join fallback: cleared %s: %d entities, %d chunks",
-                    instance(), name, counts.entities, counts.chunks))
+            local ok, surface = pcall(function() return game.create_surface(id, settings) end)
+            if ok and surface then
+                apply_surface_options(surface, generation)
+                if generation.flat == true then
+                    pcall(function()
+                        surface.request_to_generate_chunks({x = 0, y = 0}, 2)
+                        surface.force_generate_chunk_requests()
+                    end)
+                    paint_flat(surface, generation.tile)
+                end
+                made[#made + 1] = id
+                log(string.format("[%s] created custom surface %s", instance(), id))
+            else
+                failed[#failed + 1] = {id = id, error = tostring(surface)}
+                log(string.format("[%s] could not create custom surface %s: %s",
+                    instance(), id, tostring(surface)))
             end
         end
     end
 
-    storage.cleared = cleared
-    return cleared
+    ensure_surfaces()
+
+    return {instance = instance(), made = made, failed = failed}
+end
+
+-- Delete one custom surface. Never the primary, never while somebody is connected.
+local function delete_surface(name)
+    if not known() then
+        return {instance = instance(), skipped = "no identity"}
+    end
+    if not empty() then
+        return {instance = instance(), skipped = "somebody is connected"}
+    end
+
+    local entry = (storage.topology or {})[instance()]
+    if not owned_surfaces()[name] then
+        return {instance = instance(), skipped = "not this instance's surface"}
+    end
+    if name == (entry and entry.primary) or name == instance() then
+        return {instance = instance(), skipped = "the primary surface cannot be deleted"}
+    end
+
+    local ok, err = pcall(function() game.delete_surface(name) end)
+    if not ok then
+        return {instance = instance(), error = tostring(err)}
+    end
+
+    log(string.format("[%s] deleted custom surface %s", instance(), name))
+    return {instance = instance(), deleted = name}
 end
 
 local function spawn_on_owned_surface()
@@ -259,7 +286,7 @@ local function spawn_on_owned_surface()
     if not known() then
         return
     end
-    local home = game.surfaces[instance()]
+    local home = primary_surface()
     if not home then
         return false
     end
@@ -322,8 +349,22 @@ local function surfaces()
     }
 end
 
--- Make every planet this fleet knows about, and say what the world holds afterwards.
-local function create_surfaces()
+-- Make this instance's surfaces, and say what the world holds afterwards.
+--
+-- With a list, the list is the custom surfaces to create, with their generation forms; without
+-- one, it is every owned surface that is missing (a planet's own, after an upgrade).
+local function create_surfaces(entries)
+    if type(entries) == "table" and #entries > 0 then
+        local result = create_custom_surfaces(entries)
+        local names = {}
+        for name, _ in pairs(game.surfaces) do
+            names[#names + 1] = name
+        end
+        table.sort(names)
+        result.surfaces = names
+        return result
+    end
+
     ensure_surfaces()
 
     local out = {}
@@ -364,9 +405,10 @@ return {
     ensure_surfaces = ensure_surfaces,
     settle_steps = settle_steps,
     sweep_asteroids = sweep_asteroids,
-    clear_foreign_chunks = clear_foreign_chunks,
     spawn_on_owned_surface = spawn_on_owned_surface,
 
+    create_custom_surfaces = create_custom_surfaces,
+    delete_surface = delete_surface,
     create_surfaces = create_surfaces,
     surfaces = surfaces,
     settle = settle,

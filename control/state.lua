@@ -84,31 +84,44 @@ local function destinations()
     return out
 end
 
--- Which server owns a surface the player is looking at.
+-- The surfaces this instance owns, as a set.
 --
--- A planet surface is named after its planet, so the instance id and the surface
--- name are the same string for the five planets, and the topology lookup finds it
--- directly. Anything with a platform is the space server, because every platform
--- lives there regardless of which one the player picked.
-local function destination_for(surface)
-    if not surface then
-        return nil
+-- The manager names them in this instance's topology entry: a planet owns its planet
+-- surface, a custom instance owns the surfaces declared for it, and the space instance owns
+-- its platforms (which are handled separately, because they are built rather than declared).
+-- There are no copies of another server's surface any more, so this set is also "everything
+-- on this world I am allowed to have".
+local function owned_surfaces()
+    local entry = (storage.topology or {})[instance()]
+    local out = {}
+    if entry and type(entry.surfaces) == "table" then
+        for _, name in ipairs(entry.surfaces) do
+            if type(name) == "string" and name ~= "" then
+                out[name] = true
+            end
+        end
     end
 
-    local topology = storage.topology or {}
-    local id = nil
-    if surface.platform then
-        id = "space"
-    elseif topology[surface.name] then
-        id = surface.name
+    -- An older manager sends no list: the instance's own surface is the fallback. A space
+    -- server owns no planet surface, and its platforms are not in the list.
+    if next(out) == nil and instance() ~= "space" then
+        out[instance()] = true
     end
 
-    local entry = id and topology[id]
-    if id == nil or id == instance() or not entry or not entry.address then
-        return nil
-    end
+    return out
+end
 
-    return id
+-- The surface a player on this instance is put back on. A planet has exactly one; a custom
+-- instance marks one primary.
+local function primary_surface()
+    local entry = (storage.topology or {})[instance()]
+    if entry and type(entry.primary) == "string" and entry.primary ~= "" then
+        return game.surfaces[entry.primary]
+    end
+    if instance() ~= "space" then
+        return game.surfaces[instance()]
+    end
+    return nil
 end
 
 -- The force everything here acts on. It is defined before anything that uses it: a local
@@ -141,12 +154,13 @@ end
 -- drains them over RCON. This is the half of "an interface to Lua" that would
 -- otherwise be missing -- without it the manager cannot know a player joined or
 -- looked somewhere.
-local function note(kind, player, surface)
+local function note(kind, player, surface, target)
     record_event({
         kind = kind,
         player = player.name,
         surface = surface or (player.surface and player.surface.name) or nil,
         body = storage.body[player.name],
+        target = target,
         tick = game.tick,
     })
 end
@@ -172,17 +186,50 @@ local function normalize_topology(topology)
     local out = {}
     for id, entry in pairs(topology or {}) do
         if type(entry) == "table" and entry.address then
-            out[id] = {name = entry.name or id, address = entry.address, kind = entry.kind}
+            local surfaces = {}
+            if type(entry.surfaces) == "table" then
+                for _, name in ipairs(entry.surfaces) do
+                    if type(name) == "string" and name ~= "" then
+                        surfaces[#surfaces + 1] = name
+                    end
+                end
+                table.sort(surfaces)
+            end
+
+            out[id] = {
+                name = entry.name or id,
+                address = entry.address,
+                kind = entry.kind,
+                editor = entry.editor == true,
+                primary = entry.primary,
+                surfaces = surfaces,
+            }
         end
     end
     return out
+end
+
+local function same_list(a, b)
+    a, b = a or {}, b or {}
+    if #a ~= #b then
+        return false
+    end
+    for i = 1, #a do
+        if a[i] ~= b[i] then
+            return false
+        end
+    end
+    return true
 end
 
 local function same_topology(a, b)
     a, b = a or {}, b or {}
     for id, x in pairs(a) do
         local y = b[id]
-        if not y or x.name ~= y.name or x.address ~= y.address or x.kind ~= y.kind then
+        if not y or x.name ~= y.name or x.address ~= y.address or x.kind ~= y.kind
+            or (x.editor == true) ~= (y.editor == true)
+            or x.primary ~= y.primary
+            or not same_list(x.surfaces, y.surfaces) then
             return false
         end
     end
@@ -270,16 +317,17 @@ local function report()
     -- not recover from.
     local bodies = {}
     local home = instance()
+    local owned = owned_surfaces()
     for _, player in pairs(game.players) do
         local character = player.character
         if character and character.valid and character.surface then
-            local owned
+            local here
             if home == "space" then
-                owned = character.surface.platform ~= nil
+                here = character.surface.platform ~= nil
             else
-                owned = character.surface.name == home
+                here = owned[character.surface.name] == true
             end
-            if owned then
+            if here then
                 bodies[#bodies + 1] = player.name
             end
         end
@@ -315,7 +363,8 @@ return {
     empty = empty,
     main_force = main_force,
     destinations = destinations,
-    destination_for = destination_for,
+    owned_surfaces = owned_surfaces,
+    primary_surface = primary_surface,
 
     record_event = record_event,
     note = note,

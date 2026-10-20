@@ -26,7 +26,7 @@
 --   control/state.lua      constants, storage, identity, topology, event notes, report
 --   control/convert.lua    surfaces: crash site, create, clear, spawn, settle, asteroid sweep, join fallback
 --   control/server.lua     the join rule: which controller a player gets, and their body
---   control/route.lua      destination decision and hand-over
+--   control/map.lua        the server map: one button per other instance
 --   control/platforms.lua  the fleet's platform copies, and the API probes
 --   control/research.lua   the shared tech tree: report and apply
 --   control/events.lua     every event handler
@@ -43,7 +43,7 @@
 require("__server-connector-mod__.control.state")
 require("__server-connector-mod__.control.convert")
 require("__server-connector-mod__.control.server")
-require("__server-connector-mod__.control.route")
+require("__server-connector-mod__.control.map")
 require("__server-connector-mod__.control.platforms")
 require("__server-connector-mod__.control.research")
 require("__server-connector-mod__.control.events")

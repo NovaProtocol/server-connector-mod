@@ -19,7 +19,7 @@
 local state = require("__server-connector-mod__.control.state")
 local convert = require("__server-connector-mod__.control.convert")
 local server = require("__server-connector-mod__.control.server")
-local route = require("__server-connector-mod__.control.route")
+local map = require("__server-connector-mod__.control.map")
 local research = require("__server-connector-mod__.control.research")
 
 local MOD = state.MOD
@@ -46,6 +46,10 @@ script.on_nth_tick(60, function()
     -- A planet server and asteroids, once a second. Guarded, because a fault here would run
     -- every second forever.
     guard("the asteroid sweep", convert.sweep_asteroids)
+
+    -- The map is shown only while the map view is open, and there is no event for opening
+    -- it, so the list is refreshed (and shown or hidden) on this pass.
+    guard("the server map", map.tick)
 end)
 
 -- The speed this world is kept at, put back on the game as the world comes up. The game
@@ -78,24 +82,13 @@ script.on_configuration_changed(function()
     end)
 end)
 
-script.on_event(defines.events.on_player_changed_surface, function(event)
-    guard("a surface change", function()
-        local player = game.get_player(event.player_index)
-        if player and not route.route_if_elsewhere(player) then
-            -- Nowhere to send them, so put them back: the redirect is the first answer, and
-            -- standing on a planet this server does not own is the case it does not cover.
-            server.enforce_surface(player)
-        end
-    end)
-end)
-
--- Entering or leaving remote view changes what a player is looking at without changing
--- which surface their body is on, and entering a space platform goes through the
--- controller too, so the routing decision is taken again here.
+-- Entering or leaving remote view, or boarding a platform, still goes through the controller,
+-- and a player can end up standing somewhere this instance does not own. There is no journey
+-- decision here any more: the map's buttons are the journeys.
 script.on_event(defines.events.on_player_controller_changed, function(event)
     guard("a controller change", function()
         local player = game.get_player(event.player_index)
-        if player and not route.route_if_elsewhere(player) then
+        if player then
             server.enforce_surface(player)
         end
     end)
@@ -113,15 +106,18 @@ script.on_event(defines.events.on_player_joined_game, function(event)
             -- planet.
             --
             -- enforce_surface returns without doing anything when they are already standing
-            -- on it, and it never sends anybody anywhere: the journey decision is
-            -- route_if_elsewhere, which is not involved here and would not fire anyway,
-            -- because looking at the surface this server owns is not a journey.
+            -- on a surface this instance owns. Journeys are the map's buttons now, not a
+            -- surface change.
             server.enforce_surface(player)
-            -- A join can generate chunks on a surface this server does not own; take them
-            -- back off. One join's worth, done at once -- the only clearing the public mod
-            -- still does.
-            convert.clear_foreign_chunks()
+            map.refresh(player)
         end
+    end)
+end)
+
+-- The server map's buttons.
+script.on_event(defines.events.on_gui_click, function(event)
+    guard("a map click", function()
+        map.click(event)
     end)
 end)
 

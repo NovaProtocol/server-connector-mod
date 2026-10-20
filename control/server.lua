@@ -26,6 +26,8 @@ local state = require("__server-connector-mod__.control.state")
 
 local instance = state.instance
 local known = state.known
+local owned_surfaces = state.owned_surfaces
+local primary_surface = state.primary_surface
 
 -- A write to the game's own API, said out loud when it refuses.
 --
@@ -50,26 +52,30 @@ end
 -- planet: what its players belong on is a platform, which is built rather than named, so
 -- where their body was the last time it was somewhere it should be is remembered instead.
 local function owned_surface(player)
-    if instance() ~= "space" then
-        return game.surfaces[instance()]
+    if instance() == "space" then
+        local remembered = storage.anchored[player.name]
+        local surface = remembered and game.surfaces[remembered]
+        if surface and surface.platform then
+            return surface
+        end
+        return nil
     end
 
-    local remembered = storage.anchored[player.name]
-    local surface = remembered and game.surfaces[remembered]
-    if surface and surface.platform then
-        return surface
+    -- A custom instance may own several surfaces. The one the player is standing on is home
+    -- while they are on it; otherwise the declared primary is.
+    local physical = player and player.physical_surface
+    if physical and owned_surfaces()[physical.name] then
+        return physical
     end
-
-    return nil
+    return primary_surface()
 end
 
 -- Put a player who is standing somewhere they do not belong back where they do.
 --
--- Sending them to another server comes first, in route_if_elsewhere: looking at a planet
--- another server owns is a journey, and the game's own connect_to_server takes them. This
--- is what is left when no journey applies -- the player is standing *on* a surface this
--- server does not own, and there is nowhere to send them, because every other server's
--- planet exists here as an empty duplicate nobody should be standing on at all.
+-- Journeys are the map's buttons now. This is what is left: a player standing on a surface
+-- this instance does not own -- there are none of another server's surfaces here any more, so
+-- this is a surface a script left behind, or a platform copy on a planet server -- is put back
+-- on one this instance does own.
 local function enforce_surface(player)
     if not known() then
         return
@@ -91,6 +97,12 @@ local function enforce_surface(player)
         if instance() == "space" then
             return
         end
+    end
+
+    -- Standing on any surface this instance owns is home; only a surface it does not own is
+    -- somewhere to be moved from.
+    if instance() ~= "space" and owned_surfaces()[physical.name] then
+        return
     end
 
     local home = owned_surface(player)
@@ -158,6 +170,20 @@ local function apply_join_rule(player)
         return
     end
 
+    -- The map is this mod's now: the vanilla space map would offer a planet with no surface
+    -- behind it, which is exactly the dead view there used to be a fake surface for.
+    player.disable_space_map = true
+
+    local entry = (storage.topology or {})[instance()]
+    if entry and entry.editor == true then
+        attempt("putting " .. player.name .. " in the editor", function()
+            player.admin = true
+            player.set_controller{type = defines.controllers.editor}
+        end)
+        storage.viewing[player.name] = nil
+        return
+    end
+
     if body_is_elsewhere(player) then
         -- Every joining player is handed a character by the game. On a server that is not
         -- their body's home that character is a second body with an inventory, so it is
@@ -184,13 +210,11 @@ local function apply_join_rule(player)
             }
         end)
         player.toggle_menu_leaves_remote_view = false
-        player.disable_space_map = true
         return
     end
 
     storage.viewing[player.name] = nil
     player.toggle_menu_leaves_remote_view = true
-    player.disable_space_map = false
 
     if player.character and player.character.valid then
         -- Their body is here. Put the controller back on it: a player who was a viewer a
