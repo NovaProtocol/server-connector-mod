@@ -66,6 +66,16 @@ local calls = {
         end
         state.set_topology(topology)
         convert.ensure_surfaces()
+
+        -- The topology carries the surfaces this instance owns, with the form each was
+        -- declared with. This is where a custom instance's declared surfaces come into
+        -- existence: the manager creates the instance, the instance starts, and the first
+        -- topology it receives makes them.
+        local own = (storage.topology or {})[state.instance()]
+        if own and type(own.forms) == "table" and #own.forms > 0 then
+            convert.create_custom_surfaces(own.forms)
+        end
+
         return {instance = state.instance(), destinations = #state.destinations()}
     end,
 

@@ -187,10 +187,14 @@ local function normalize_topology(topology)
     for id, entry in pairs(topology or {}) do
         if type(entry) == "table" and entry.address then
             local surfaces = {}
+            local forms = {}
             if type(entry.surfaces) == "table" then
-                for _, name in ipairs(entry.surfaces) do
-                    if type(name) == "string" and name ~= "" then
-                        surfaces[#surfaces + 1] = name
+                for _, item in ipairs(entry.surfaces) do
+                    if type(item) == "string" and item ~= "" then
+                        surfaces[#surfaces + 1] = item
+                    elseif type(item) == "table" and type(item.id) == "string" and item.id ~= "" then
+                        surfaces[#surfaces + 1] = item.id
+                        forms[#forms + 1] = item
                     end
                 end
                 table.sort(surfaces)
@@ -203,6 +207,7 @@ local function normalize_topology(topology)
                 editor = entry.editor == true,
                 primary = entry.primary,
                 surfaces = surfaces,
+                forms = forms,
             }
         end
     end
@@ -222,6 +227,15 @@ local function same_list(a, b)
     return true
 end
 
+-- Two surface forms are the same when the JSON the game would print is the same. A form is a
+-- table with a generation table inside it, so a field-by-field walk here would have to know
+-- every option the manager can add; the serializer does not.
+local function same_forms(a, b)
+    local oka, ja = pcall(function() return helpers.table_to_json(a or {}) end)
+    local okb, jb = pcall(function() return helpers.table_to_json(b or {}) end)
+    return oka and okb and ja == jb
+end
+
 local function same_topology(a, b)
     a, b = a or {}, b or {}
     for id, x in pairs(a) do
@@ -229,7 +243,8 @@ local function same_topology(a, b)
         if not y or x.name ~= y.name or x.address ~= y.address or x.kind ~= y.kind
             or (x.editor == true) ~= (y.editor == true)
             or x.primary ~= y.primary
-            or not same_list(x.surfaces, y.surfaces) then
+            or not same_list(x.surfaces, y.surfaces)
+            or not same_forms(x.forms, y.forms) then
             return false
         end
     end
