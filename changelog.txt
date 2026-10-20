@@ -1,4 +1,18 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.32.1
+Date: 2026-10-20
+  Added:
+    - research_all() unlocks every technology on this force. It is what a custom instance
+      whose research mode is "all" is given; it never reports anything back.
+    - A surface's form carries its seed, whether it generates cliffs, and its water size.
+      create_custom_surfaces applies them on top of the chosen planet template.
+  Changed:
+    - ensure_surfaces removes surfaces this instance does not own, so the planet copies the
+      old layout made disappear from existing saves. The space server is left alone: its
+      platforms are what it owns, and they are not declared.
+  Fixed:
+    - A custom instance never contributes research to the fleet, whatever its mode says.
+---------------------------------------------------------------------------------------------------
 Version: 0.32.0
 Date: 2026-10-20
   Changed:

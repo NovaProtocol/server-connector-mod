@@ -147,9 +147,28 @@ local function apply_research(payload)
     return {instance = instance(), applied = applied}
 end
 
+-- Unlock the whole tree on this force.
+--
+-- A sandbox asks for this instead of the fleet's tree: it wants everything available, and it
+-- is never a source, so nothing it unlocks travels back to the planets.
+local function research_all()
+    if not state.known() then
+        return {skipped = "no identity"}
+    end
+
+    local force = main_force()
+    local ok, err = pcall(function() force.research_all_technologies() end)
+    if not ok then
+        return {instance = instance(), error = tostring(err)}
+    end
+
+    return {instance = instance(), all = true}
+end
+
 return {
     note_research = note_research,
     current_name = current_name,
     research_state = research_state,
     apply_research = apply_research,
+    research_all = research_all,
 }

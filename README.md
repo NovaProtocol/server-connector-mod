@@ -47,7 +47,8 @@ playing, which is why the node talks to this mod through its own command instead
 | `drain_events()` | Everything the game has told this mod since the last drain. |
 | `set_paused(paused)` | Holds the game still, or lets it run. |
 | `set_speed(speed)` | Sets the world's speed, and keeps it for a restart. |
-| `create_surfaces(entries?)` | Makes this instance's surfaces. With a list, it creates the custom surfaces the manager declared. `skipped` while anybody is connected. |
+| `create_surfaces(entries?)` | Makes this instance's surfaces. With a list, it creates the custom surfaces the manager declared, including their seed, cliffs and water. `skipped` while anybody is connected. |
+| `research_all()` | Unlocks every technology on this force. For a custom instance in `all` mode. |
 | `delete_surface(name)` | Removes one custom surface. Refuses the primary and anybody connected. |
 | `surfaces()` | What surfaces this world has, and which of them are platforms. |
 | `settle()` | Brings the world into line: crash site, surfaces, spawn point. Nobody connected only. |

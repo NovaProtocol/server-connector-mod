@@ -57,6 +57,40 @@ end
 -- every planet exists everywhere
 --------------------------------------------------------------------------------
 
+-- Remove the surfaces this instance does not own.
+--
+-- The old layout copied every planet into every save so a player could look at one. Those
+-- copies are dead weight now that the map is the way across, and they are exactly what the
+-- plan meant by "no more fake surfaces". Only the game's own delete, only with nobody
+-- connected, and never a surface that still holds a character.
+local function remove_foreign_surfaces()
+    if not known() or not empty() or instance() == "space" then
+        return
+    end
+
+    local keep = owned_surfaces()
+    if next(keep) == nil then
+        return
+    end
+
+    for name, surface in pairs(game.surfaces) do
+        if not keep[name] and not surface.platform and name ~= storage.spawn_surface then
+            local ok, characters = pcall(function()
+                return surface.find_entities_filtered{type = "character"}
+            end)
+            if ok and type(characters) == "table" and #characters == 0 then
+                local deleted, err = pcall(function() return game.delete_surface(name) end)
+                if deleted then
+                    log(string.format("[%s] removed foreign surface %s", instance(), name))
+                else
+                    log(string.format("[%s] could not remove foreign surface %s: %s",
+                        instance(), name, tostring(err)))
+                end
+            end
+        end
+    end
+end
+
 -- The surface a save only has when this server made it.
 --
 -- A fresh save is always a nauvis world, whatever the server is for, so the planet this
@@ -101,6 +135,8 @@ local function ensure_surfaces()
             end
         end
     end
+
+    remove_foreign_surfaces()
 end
 
 --------------------------------------------------------------------------------
@@ -206,17 +242,13 @@ local function create_custom_surfaces(entries)
         if type(id) == "string" and id ~= "" and not game.surfaces[id] then
             local generation = entry.generation or {}
 
-            local settings = {
-                seed = type(generation.seed) == "number" and generation.seed or nil,
-                peaceful_mode = generation.peaceful == true,
-                no_enemies_mode = generation.noEnemies == true,
-            }
+            local settings = {}
 
             if generation.flat == true then
                 -- The flat area is painted below; the settings only have to make it empty.
                 settings.property_expression_names = {
-                    elevation = "0", cliffiness = "0", roughness = "0",
-                    temperature = "0", moisture = "0", aux = "0",
+                    elevation = 0, cliffiness = 0, roughness = 0,
+                    temperature = 0, moisture = 0, aux = 0,
                 }
             else
                 local name = generation.planet
@@ -224,8 +256,35 @@ local function create_custom_surfaces(entries)
                     return name and game.planets and game.planets[name]
                 end)
                 if okp and planet and planet.prototype and planet.prototype.map_gen_settings then
-                    settings = planet.prototype.map_gen_settings
+                    -- Copied, not referenced: the prototype's table belongs to the game, and
+                    -- writing a seed or a water control into it would change every surface
+                    -- made from that planet afterwards.
+                    for key, value in pairs(planet.prototype.map_gen_settings) do
+                        settings[key] = value
+                    end
                 end
+            end
+
+            -- The form's own choices, applied on top of whichever base generation was used.
+            settings.peaceful_mode = generation.peaceful == true
+            settings.no_enemies_mode = generation.noEnemies == true
+
+            if type(generation.seed) == "number" then
+                settings.seed = math.floor(generation.seed) % 4294967296
+            end
+            if generation.cliffs == false then
+                settings.property_expression_names = settings.property_expression_names or {}
+                settings.property_expression_names.cliffiness = 0
+            end
+            if generation.water == "none" or generation.water == "high" then
+                -- Water is an autoplace control, not a property expression: the map gen's
+                -- water size is what the slider in the game changes.
+                settings.autoplace_controls = settings.autoplace_controls or {}
+                settings.autoplace_controls.water = {
+                    frequency = "normal",
+                    size = generation.water == "none" and "none" or "high",
+                    richness = "normal",
+                }
             end
 
             local ok, surface = pcall(function() return game.create_surface(id, settings) end)

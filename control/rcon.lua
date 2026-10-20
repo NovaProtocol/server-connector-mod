@@ -89,6 +89,9 @@ local calls = {
     -- Apply the shared tech tree (research.apply_research).
     apply_research = research.apply_research,
 
+    -- Unlock everything, for a custom instance whose research mode is "all".
+    research_all = research.research_all,
+
     -- Everything the game has told this mod since the last drain, so the manager
     -- can act on joins and surface changes it cannot see for itself.
     drain_events = function()
