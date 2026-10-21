@@ -1,4 +1,18 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.32.2
+Date: 2026-10-22
+  Fixed:
+    - A join no longer moves a character to another surface. That teleport is a server-side
+      world change the client does not see, and it desynced the joining player. A character
+      found on a surface this instance does not own is removed as a copy instead.
+    - A player with no recorded body is parked on nauvis. If the join lands on nauvis and this
+      world holds no character for them, one is created there, so a player with no body
+      anywhere gets a nauvis body rather than the observer controller.
+  Changed:
+    - set_body_location only stores the body. It arrives over RCON, and applying a controller
+      or character change to a connected player is a world change the client never sees; the
+      stored body is applied by the join rule the next time they join.
+---------------------------------------------------------------------------------------------------
 Version: 0.32.1
 Date: 2026-10-20
   Added:

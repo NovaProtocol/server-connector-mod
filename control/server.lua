@@ -133,9 +133,27 @@ end
 -- the join rule
 --------------------------------------------------------------------------------
 
--- Whether the manager has said this player's body is on another server.
+-- The surface a player's body belongs on. A player the manager has never spoken for is
+-- parked on nauvis: give them that body rather than leaving them with nowhere to stand.
+local function body_home(player)
+    return storage.body[player.name] or "nauvis"
+end
+
+-- Whether this player's body is on another server.
 local function body_is_elsewhere(player)
-    return storage.body[player.name] ~= nil
+    return body_home(player) ~= instance()
+end
+
+-- Whether this surface is one this instance owns. A planet or custom instance owns the
+-- surfaces the manager declared; the space server owns platforms, wherever they are.
+local function surface_is_home(surface)
+    if not surface then
+        return false
+    end
+    if instance() == "space" then
+        return surface.platform ~= nil
+    end
+    return owned_surfaces()[surface.name] == true
 end
 
 -- The waiting-to-respawn controller: observe, touch nothing. Not every build accepts it from
@@ -216,21 +234,30 @@ local function apply_join_rule(player)
     storage.viewing[player.name] = nil
     player.toggle_menu_leaves_remote_view = true
 
-    if player.character and player.character.valid then
-        -- Their body is here. Put the controller back on it: a player who was a viewer a
-        -- moment ago is still in the remote one, and the character would sit unattended.
-        --
-        -- The character this save holds can be on a different surface from the one the player
-        -- joined on: the fleet's saves are copies, and a body that moved last session is not
-        -- necessarily where the client came back to. set_controller refuses an entity from
-        -- another surface, and that error quits the server, so the body is put where it
-        -- belongs first and the controller is only attached once the two surfaces agree.
-        if player.character.surface ~= player.physical_surface then
-            enforce_surface(player)
-        end
-        if player.controller_type ~= defines.controllers.character
-            and player.character and player.character.valid
-            and player.character.surface == player.physical_surface then
+    -- A character on a surface this instance does not own is a copy from another server's
+    -- save, not this world's body. Moving it on join is a server-side change the client does
+    -- not see, and that is what desyncs the join; remove it instead.
+    if player.character and player.character.valid
+        and not surface_is_home(player.character.surface) then
+        log(string.format("[%s] removing %s's character copy from %s",
+            instance(), player.name, player.character.surface.name))
+        attempt("removing " .. player.name .. "'s character copy", function()
+            player.character.destroy()
+        end)
+    end
+
+    -- The body is here and this world holds no character for it: make one on the surface
+    -- they joined on. A player with no body anywhere gets a nauvis body this way.
+    if (not player.character or not player.character.valid)
+        and surface_is_home(player.physical_surface) then
+        attempt("creating " .. player.name .. "'s character", function()
+            player.create_character()
+        end)
+    end
+
+    if player.character and player.character.valid
+        and player.character.surface == player.physical_surface then
+        if player.controller_type ~= defines.controllers.character then
             attempt("putting " .. player.name .. " back on their character", function()
                 player.set_controller{
                     type = defines.controllers.character,
@@ -241,8 +268,7 @@ local function apply_join_rule(player)
         return
     end
 
-    -- Nothing has said where their body is, and this world holds no character for them: leave
-    -- them observing.
+    -- No character could be put here: observe rather than leaving a half controller.
     player.toggle_menu_leaves_remote_view = false
     as_observer(player)
 end
@@ -253,25 +279,15 @@ end
 
 -- Where a player's body is. The manager owns this fact; the mod only obeys it.
 --
--- A player already in the world is converted now rather than at their next join: a body that
--- moved while they were connected -- they boarded a rocket, another server reported where they
--- really are -- has to change what they can do, not only what they get next time.
+-- Only the fact is stored. This arrives over RCON, and a controller or character change made
+-- that way is a server-side world change the client never sees -- applying it to a player who
+-- is connected is how a join desyncs. The stored body is applied by the join rule the next
+-- time they join.
 local function set_body_location(name, id)
     state.ensure_storage()
     state.set_body(name, id)
 
-    local player = game.get_player(name)
-    local destroyed = false
-    if player and player.connected then
-        destroyed = storage.body[name] ~= nil and player.character ~= nil and player.character.valid
-        apply_join_rule(player)
-    end
-
-    local out = {name = name, body = storage.body[name] or instance()}
-    if destroyed then
-        out.destroyed_character = true
-    end
-    return out
+    return {name = name, body = storage.body[name] or instance(), stored = true}
 end
 
 return {

@@ -82,33 +82,15 @@ script.on_configuration_changed(function()
     end)
 end)
 
--- Entering or leaving remote view, or boarding a platform, still goes through the controller,
--- and a player can end up standing somewhere this instance does not own. There is no journey
--- decision here any more: the map's buttons are the journeys.
-script.on_event(defines.events.on_player_controller_changed, function(event)
-    guard("a controller change", function()
-        local player = game.get_player(event.player_index)
-        if player then
-            server.enforce_surface(player)
-        end
-    end)
-end)
-
+-- A join is the one moment a controller can be changed safely: the client runs the same
+-- event. Nothing here moves a character to another surface -- a server-side teleport on join
+-- is a world change the client does not see, and it desyncs.
 script.on_event(defines.events.on_player_joined_game, function(event)
     guard("a join", function()
         local player = game.get_player(event.player_index)
         if player then
             state.note("joined", player)
             server.apply_join_rule(player)
-            -- Put them on this server's own surface as they arrive, rather than waiting for
-            -- them to change surface before anything happens. Joining a server is an answer
-            -- about where they belong: whichever server they reached, they meant to be on its
-            -- planet.
-            --
-            -- enforce_surface returns without doing anything when they are already standing
-            -- on a surface this instance owns. Journeys are the map's buttons now, not a
-            -- surface change.
-            server.enforce_surface(player)
             map.refresh(player)
         end
     end)
