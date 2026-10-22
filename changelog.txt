@@ -1,4 +1,10 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.33.3
+Date: 2026-10-22
+  Fixed:
+    - The flat surface replacement happens once, not on every topology push. Without the
+      marker the unchanged branch deleted and recreated the flat Main repeatedly, wiping it.
+---------------------------------------------------------------------------------------------------
 Version: 0.33.2
 Date: 2026-10-22
   Fixed:
