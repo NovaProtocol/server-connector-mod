@@ -1,4 +1,10 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.33.5
+Date: 2026-10-22
+  Fixed:
+    - Foreign-surface cleanup runs once per save, not on every topology push. Deleting the
+      nauvis chunks after a client had loaded the map was the desync on the join tick.
+---------------------------------------------------------------------------------------------------
 Version: 0.33.4
 Date: 2026-10-22
   Changed:

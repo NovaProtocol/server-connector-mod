@@ -68,6 +68,13 @@ local function remove_foreign_surfaces()
         return
     end
 
+    -- Once per save. Running this on every topology push deletes surfaces under a joining
+    -- client long after the map it loaded, which is a desync.
+    if storage.surfaces_cleared then
+        return
+    end
+    storage.surfaces_cleared = true
+
     -- The space server owns its platforms, not a named planet. Everything that is not a
     -- platform is another server's world and does not belong in this save.
     if instance() == "space" then
