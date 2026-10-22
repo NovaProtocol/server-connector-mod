@@ -96,6 +96,25 @@ script.on_event(defines.events.on_player_joined_game, function(event)
     end)
 end)
 
+-- A topology that arrived while somebody was connected applied its destinations but left
+-- its surface changes for later. The last player leaving is that later.
+script.on_event(defines.events.on_player_left_game, function()
+    guard("a leave", function()
+        if not storage.pending_surfaces or not state.empty() then
+            return
+        end
+        storage.pending_surfaces = nil
+        convert.ensure_surfaces()
+        local own = (storage.topology or {})[state.instance()]
+        if own and type(own.forms) == "table" and #own.forms > 0 then
+            convert.create_custom_surfaces(own.forms)
+        end
+        for _, player in pairs(game.connected_players) do
+            map.refresh(player)
+        end
+    end)
+end)
+
 -- The server map's buttons.
 script.on_event(defines.events.on_gui_click, function(event)
     guard("a map click", function()

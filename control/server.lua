@@ -136,7 +136,12 @@ end
 -- The surface a player's body belongs on. A player the manager has never spoken for is
 -- parked on nauvis: give them that body rather than leaving them with nowhere to stand.
 local function body_home(player)
-    return storage.body[player.name] or "nauvis"
+    if storage.body_known and storage.body_known[player.name] then
+        -- nil is a home on this very server; a known entry must not fall through to the
+        -- fleet default, or a body that lives on this server reads as living on nauvis.
+        return storage.body[player.name] or instance()
+    end
+    return "nauvis"
 end
 
 -- Whether this player's body is on another server.
@@ -179,6 +184,23 @@ local function as_observer(player)
     end
 end
 
+-- The remote controller: everything in reach, nothing owned. This is what a player with no
+-- body here uses. If even that is refused, fall back to the observer rather than leave them
+-- on a controller whose character is somewhere else.
+local function put_remote(player)
+    local ok = attempt("putting " .. player.name .. " in the remote controller", function()
+        player.set_controller{
+            type = defines.controllers.remote,
+            surface = game.surfaces[instance()] or player.physical_surface,
+            position = player.physical_position,
+        }
+    end)
+    player.toggle_menu_leaves_remote_view = false
+    if not ok then
+        as_observer(player)
+    end
+end
+
 -- What a player gets when they arrive, and whenever the manager says where their body is.
 --
 -- The order matters: another server's body wins over anything this world holds, because a
@@ -208,14 +230,7 @@ local function apply_join_rule(player)
         -- desync. The body's character stays on its own surface; this player only looks
         -- through the remote controller.
         storage.viewing[player.name] = true
-        attempt("putting " .. player.name .. " in the remote controller", function()
-            player.set_controller{
-                type = defines.controllers.remote,
-                surface = game.surfaces[instance()] or player.physical_surface,
-                position = player.physical_position,
-            }
-        end)
-        player.toggle_menu_leaves_remote_view = false
+        put_remote(player)
         return
     end
 
@@ -223,15 +238,14 @@ local function apply_join_rule(player)
     player.toggle_menu_leaves_remote_view = true
 
     -- A character on a surface this instance does not own is a copy from another server's
-    -- save, not this world's body. Moving it on join is a server-side change the client does
-    -- not see, and that is what desyncs the join; remove it instead.
+    -- save, not this world's body. Destroying or moving it on join is a world change the
+    -- client does not make, so the body map is left to settle it and the player looks through
+    -- the remote controller instead.
     if player.character and player.character.valid
         and not surface_is_home(player.character.surface) then
-        log(string.format("[%s] removing %s's character copy from %s",
-            instance(), player.name, player.character.surface.name))
-        attempt("removing " .. player.name .. "'s character copy", function()
-            player.character.destroy()
-        end)
+        storage.viewing[player.name] = true
+        put_remote(player)
+        return
     end
 
     -- The body is here and this world holds no character for it: make one on the surface
@@ -256,9 +270,10 @@ local function apply_join_rule(player)
         return
     end
 
-    -- No character could be put here: observe rather than leaving a half controller.
-    player.toggle_menu_leaves_remote_view = false
-    as_observer(player)
+    -- The character is on another of this server's surfaces, or none could be made. Never
+    -- teleport it on join; look through the remote controller instead.
+    storage.viewing[player.name] = true
+    put_remote(player)
 end
 
 --------------------------------------------------------------------------------

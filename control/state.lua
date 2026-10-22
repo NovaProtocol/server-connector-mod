@@ -20,6 +20,7 @@ local function ensure_storage()
     storage.schema = storage.schema or SCHEMA
     storage.topology = storage.topology or {}   -- instance id -> {name, address}
     storage.body = storage.body or {}           -- player name -> instance id
+    storage.body_known = storage.body_known or {} -- player name -> true once the manager has spoken
     storage.viewing = storage.viewing or {}     -- player name -> true, for the join rule
     storage.routed = storage.routed or {}       -- player name -> last surface routed from
     storage.anchored = storage.anchored or {}   -- player name -> the platform they belong on
@@ -175,6 +176,7 @@ local function set_instance(id)
     if changed then
         -- Anything recorded against the old identity is meaningless now.
         storage.body = {}
+        storage.body_known = {}
         storage.viewing = {}
         storage.routed = {}
         storage.anchored = {}
@@ -266,10 +268,19 @@ end
 
 -- Where a player's body is. The manager owns this fact; the mod only obeys it.
 local function set_body(name, id)
-    if id == nil or id == instance() then
+    storage.body_known = storage.body_known or {}
+    if id == nil then
+        -- No body at all: forget the location and go back to the fleet default.
         storage.body[name] = nil
+        storage.body_known[name] = nil
+    elseif id == instance() then
+        -- This server is the home. nil is how a home is stored (the join rule reads it as
+        -- "here"), but the known flag is what tells it apart from never having been told.
+        storage.body[name] = nil
+        storage.body_known[name] = true
     else
         storage.body[name] = id
+        storage.body_known[name] = true
     end
 end
 

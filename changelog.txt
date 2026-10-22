@@ -1,4 +1,18 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.32.4
+Date: 2026-10-22
+  Fixed:
+    - A body whose home is the server it is stored on was indistinguishable from never having
+      been told, so that server read it as nauvis and made its owner a remote viewer. The mod
+      remembers that the manager has spoken.
+    - A join never destroys a character and only creates one on the body's home when the save
+      holds none; a copy on a foreign surface puts the player in the remote controller.
+  Changed:
+    - A topology that arrives while somebody is connected applies its destinations and
+      refreshes the map immediately; surface creation waits for the last player to leave.
+    - A map click tells the manager the destination and holds the connect for six seconds, so
+      the target has the body's new home before the player arrives.
+---------------------------------------------------------------------------------------------------
 Version: 0.32.3
 Date: 2026-10-22
   Fixed:

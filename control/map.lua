@@ -110,6 +110,25 @@ local function tick()
     if not state.known() then
         return
     end
+
+    -- A click records the destination and tells the manager, then waits before it connects.
+    -- The manager has to hear where the body is going and push that to the target before the
+    -- player arrives, or the target still thinks the body is somewhere else.
+    local pending = storage.pending_connect
+    if pending and game.tick >= pending.tick then
+        storage.pending_connect = nil
+        local player = game.get_player(pending.player)
+        if player and player.connected then
+            local sent, err = pcall(function()
+                player.connect_to_server{address = pending.address, name = pending.name}
+            end)
+            if not sent then
+                log(string.format("[%s] could not send %s to %s: %s",
+                    state.instance(), pending.player, pending.name or "?", tostring(err)))
+            end
+        end
+    end
+
     for _, player in pairs(game.connected_players) do
         refresh(player)
     end
@@ -137,16 +156,15 @@ local function click(event)
         return
     end
 
-    local sent, err = pcall(function()
-        player.connect_to_server{address = entry.address, name = entry.name or target}
-    end)
-    if not sent then
-        log(string.format("[%s] could not send %s to %s: %s",
-            state.instance(), player.name, target, tostring(err)))
-        return
-    end
-
+    -- Tell the manager first: it records the body's destination and pushes it to the target.
+    -- The connect is held until that has had time to happen.
     state.note("connect", player, nil, target)
+    storage.pending_connect = {
+        player = player.name,
+        address = entry.address,
+        name = entry.name or target,
+        tick = game.tick + 6 * 60,
+    }
 end
 
 return {

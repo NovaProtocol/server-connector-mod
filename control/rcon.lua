@@ -13,6 +13,7 @@ local convert = require("__server-connector-mod__.control.convert")
 local server = require("__server-connector-mod__.control.server")
 local platforms = require("__server-connector-mod__.control.platforms")
 local research = require("__server-connector-mod__.control.research")
+local map = require("__server-connector-mod__.control.map")
 
 local MOD = state.MOD
 
@@ -62,7 +63,19 @@ local calls = {
             return {instance = state.instance(), destinations = #state.destinations(), unchanged = true}
         end
         if not state.empty() then
-            return {instance = state.instance(), skipped = "somebody is connected"}
+            -- Destinations are data, and a connected player needs the map buttons that use
+            -- them. Only surface creation is a world change; that waits for an empty server,
+            -- which the leave event picks up.
+            state.set_topology(topology)
+            storage.pending_surfaces = true
+            for _, player in pairs(game.connected_players) do
+                map.refresh(player)
+            end
+            return {
+                instance = state.instance(),
+                destinations = #state.destinations(),
+                deferred = "surface changes wait for an empty server",
+            }
         end
         state.set_topology(topology)
         convert.ensure_surfaces()
