@@ -1,4 +1,14 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.32.9
+Date: 2026-10-22
+  Fixed:
+    - A declared flat custom surface that already exists in the save is now replaced with
+      the flat form once. The create branch only handled a missing surface, so a old mixed
+      world was carried forward every conversion and the flat form was never applied.
+    - The foreign-surface cleanup no longer deletes platform surfaces on a planet. Those
+      are the copies the planet needs to see the fleet's platforms, and deleting them was
+      the world change behind the join-tick desync.
+---------------------------------------------------------------------------------------------------
 Version: 0.32.8
 Date: 2026-10-22
   Changed:

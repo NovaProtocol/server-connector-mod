@@ -98,7 +98,7 @@ local function remove_foreign_surfaces()
     for name, surface in pairs(game.surfaces) do
         -- A platform belongs to the space server. Keeping it here was how a planet save
         -- still carried the fleet's platforms.
-        if not keep[name] and name ~= storage.spawn_surface then
+        if not keep[name] and name ~= storage.spawn_surface and not surface.platform then
             local ok, characters = pcall(function()
                 return surface.find_entities_filtered{type = "character"}
             end)
@@ -260,6 +260,22 @@ local function create_custom_surfaces(entries)
     end
 
     local made, failed = {}, {}
+
+    -- A declared flat surface that already exists is an old world carried forward in the
+    -- save: the create branch below only ever runs for a missing surface, so without this
+    -- the flat form would never be applied. Replace it once, while nobody is connected.
+    for _, entry in pairs(entries or {}) do
+        local id = type(entry) == "table" and entry.id or nil
+        local generation = type(entry) == "table" and (entry.generation or {}) or {}
+        if type(id) == "string" and id ~= "" and generation.flat == true and game.surfaces[id] then
+            local ok, err = pcall(function() return game.delete_surface(id) end)
+            if ok then
+                log(string.format("[%s] replaced %s with the declared flat surface", instance(), id))
+            else
+                log(string.format("[%s] could not replace %s: %s", instance(), id, tostring(err)))
+            end
+        end
+    end
 
     for _, entry in pairs(entries or {}) do
         local id = type(entry) == "table" and entry.id or nil
