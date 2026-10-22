@@ -224,11 +224,9 @@ local function apply_join_rule(player)
         return
     end
 
-    if body_is_elsewhere(player) then
-        -- Leave the character where it is. Destroying it here is a world change made on join,
-        -- and the client does not make the same change at the same moment -- that is the
-        -- desync. The body's character stays on its own surface; this player only looks
-        -- through the remote controller.
+    -- The space server has no surface a body can live on: its platforms are built, and a
+    -- character there is not a playable body. Look through the remote controller.
+    if instance() == "space" then
         storage.viewing[player.name] = true
         put_remote(player)
         return
@@ -237,21 +235,36 @@ local function apply_join_rule(player)
     storage.viewing[player.name] = nil
     player.toggle_menu_leaves_remote_view = true
 
-    -- A character on a surface this instance does not own is a copy from another server's
-    -- save, not this world's body. Destroying or moving it on join is a world change the
-    -- client does not make, so the body map is left to settle it and the player looks through
-    -- the remote controller instead.
-    if player.character and player.character.valid
-        and not surface_is_home(player.character.surface) then
+    local character = player.character
+    if character and character.valid and surface_is_home(character.surface) then
+        if character.surface == player.physical_surface then
+            if player.controller_type ~= defines.controllers.character then
+                attempt("putting " .. player.name .. " on their character", function()
+                    player.set_controller{
+                        type = defines.controllers.character,
+                        character = player.character,
+                    }
+                end)
+            end
+            return
+        end
+        -- The body is on another of this server's surfaces. Do not teleport it on join.
         storage.viewing[player.name] = true
         put_remote(player)
         return
     end
 
-    -- The body is here and this world holds no character for it: make one on the surface
-    -- they joined on. A player with no body anywhere gets a nauvis body this way.
-    if (not player.character or not player.character.valid)
-        and surface_is_home(player.physical_surface) then
+    -- This world holds no character for the player, or holds a copy from another server's
+    -- save. Each server gives its own body on the surface the player joined on: detach the
+    -- copy (not destroy it, which is a world change the client does not make) and create a
+    -- character here.
+    if character and character.valid then
+        attempt("detaching " .. player.name .. "'s foreign character", function()
+            player.character = nil
+        end)
+    end
+
+    if surface_is_home(player.physical_surface) then
         attempt("creating " .. player.name .. "'s character", function()
             player.create_character()
         end)
@@ -259,19 +272,15 @@ local function apply_join_rule(player)
 
     if player.character and player.character.valid
         and player.character.surface == player.physical_surface then
-        if player.controller_type ~= defines.controllers.character then
-            attempt("putting " .. player.name .. " back on their character", function()
-                player.set_controller{
-                    type = defines.controllers.character,
-                    character = player.character,
-                }
-            end)
-        end
+        attempt("putting " .. player.name .. " on their character", function()
+            player.set_controller{
+                type = defines.controllers.character,
+                character = player.character,
+            }
+        end)
         return
     end
 
-    -- The character is on another of this server's surfaces, or none could be made. Never
-    -- teleport it on join; look through the remote controller instead.
     storage.viewing[player.name] = true
     put_remote(player)
 end

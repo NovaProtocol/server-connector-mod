@@ -1,4 +1,14 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.32.7
+Date: 2026-10-22
+  Changed:
+    - The cross-server body tracker no longer decides a join. Each server gives the player
+      its own body on the surface they joined on: attach a character already there, else
+      detach a foreign copy and create one. The space server has no living body and gives
+      the remote controller.
+    - The server strip has no caption and is pinned to the top; it is no longer a draggable
+      window.
+---------------------------------------------------------------------------------------------------
 Version: 0.32.6
 Date: 2026-10-22
   Fixed:
