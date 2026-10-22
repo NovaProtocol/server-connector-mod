@@ -1,4 +1,14 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.33.8
+Date: 2026-10-22
+  Added:
+    - The space server pushes every platform's serialized position (location, connection,
+      distance, docked, paused) over localhost UDP every 6 ticks.
+    - Research progress is pushed over UDP once a second only when it moved, with the delta
+      and the queue; every research queue/selection event is pushed as well.
+    - The manager keeps the last platform-position and research payloads and exposes them at
+      /api/fleet/platform-positions and /api/fleet/research-udp.
+---------------------------------------------------------------------------------------------------
 Version: 0.33.7
 Date: 2026-10-22
   Added:
