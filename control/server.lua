@@ -214,54 +214,37 @@ local function apply_join_rule(player)
     -- behind it, which is exactly the dead view there used to be a fake surface for.
     player.disable_space_map = true
 
-    local entry = (storage.topology or {})[instance()]
-    if entry and entry.editor == true then
-        attempt("putting " .. player.name .. " in the editor", function()
-            player.admin = true
-            player.set_controller{type = defines.controllers.editor}
-        end)
-        storage.viewing[player.name] = nil
-        return
-    end
-
-    -- The space server has no surface a body can live on: its platforms are built, and a
-    -- character there is not a playable body. Look through the remote controller.
-    if instance() == "space" then
-        storage.viewing[player.name] = true
-        put_remote(player)
-        return
-    end
-
+    -- Every server gives the player its own character: these are separate lives, not one
+    -- shared body. No editor, no god controller, no remote fallback.
     storage.viewing[player.name] = nil
     player.toggle_menu_leaves_remote_view = true
 
     local character = player.character
     if character and character.valid and surface_is_home(character.surface) then
-        if character.surface == player.physical_surface then
-            if player.controller_type ~= defines.controllers.character then
-                attempt("putting " .. player.name .. " on their character", function()
-                    player.set_controller{
-                        type = defines.controllers.character,
-                        character = player.character,
-                    }
-                end)
-            end
-            return
+        if player.controller_type ~= defines.controllers.character then
+            attempt("putting " .. player.name .. " on their character", function()
+                player.set_controller{
+                    type = defines.controllers.character,
+                    character = player.character,
+                }
+            end)
         end
-        -- The body is on another of this server's surfaces. Do not teleport it on join.
-        storage.viewing[player.name] = true
-        put_remote(player)
         return
     end
 
-    -- This world holds no character for the player, or holds a copy from another server's
-    -- save. Each server gives its own body on the surface the player joined on: detach the
-    -- copy (not destroy it, which is a world change the client does not make) and create a
-    -- character here.
+    -- This world holds a copy from another server's life. Detach it and give this server
+    -- its own character on the surface the player joined on.
     if character and character.valid then
-        attempt("detaching " .. player.name .. "'s foreign character", function()
+        local detached = attempt("detaching " .. player.name .. "'s foreign character", function()
             player.character = nil
         end)
+        if not detached then
+            pcall(function()
+                game.disconnect_player(player,
+                    "This server could not give you its own body. Try again.")
+            end)
+            return
+        end
     end
 
     if surface_is_home(player.physical_surface) then
@@ -270,8 +253,7 @@ local function apply_join_rule(player)
         end)
     end
 
-    if player.character and player.character.valid
-        and player.character.surface == player.physical_surface then
+    if player.character and player.character.valid then
         attempt("putting " .. player.name .. " on their character", function()
             player.set_controller{
                 type = defines.controllers.character,
@@ -281,8 +263,12 @@ local function apply_join_rule(player)
         return
     end
 
-    storage.viewing[player.name] = true
-    put_remote(player)
+    -- Never leave the player in the bodyless physical controller (god mode) or the remote:
+    -- the server has failed to give them their own body.
+    pcall(function()
+        game.disconnect_player(player,
+            "This server could not give you its own body. Try again.")
+    end)
 end
 
 --------------------------------------------------------------------------------

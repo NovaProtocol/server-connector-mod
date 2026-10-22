@@ -1,4 +1,12 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.33.0
+Date: 2026-10-22
+  Changed:
+    - Every server gives the player its own character on its own surface. The editor, god
+      and remote fallbacks are gone from the join rule: a foreign copy is detached and a new
+      character is created; if that cannot happen the player is disconnected rather than left
+      in the bodyless physical controller. Each server is a separate life.
+---------------------------------------------------------------------------------------------------
 Version: 0.32.9
 Date: 2026-10-22
   Fixed:
