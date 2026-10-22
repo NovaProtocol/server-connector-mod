@@ -1,4 +1,11 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.33.6
+Date: 2026-10-22
+  Changed:
+    - The mod's outbound facts (telemetry, platforms, queued events) are written to stdout
+      once a second as SCMOD|kind|json, so the node no longer needs an RCON round trip to
+      read them. Inbound calls remain RCON; nothing is written to stdin.
+---------------------------------------------------------------------------------------------------
 Version: 0.33.5
 Date: 2026-10-22
   Fixed:

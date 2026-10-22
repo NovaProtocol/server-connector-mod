@@ -21,6 +21,7 @@ local convert = require("__server-connector-mod__.control.convert")
 local server = require("__server-connector-mod__.control.server")
 local map = require("__server-connector-mod__.control.map")
 local research = require("__server-connector-mod__.control.research")
+local outbound = require("__server-connector-mod__.control.outbound")
 
 local MOD = state.MOD
 local SCHEMA = state.SCHEMA
@@ -50,6 +51,10 @@ script.on_nth_tick(60, function()
     -- The map is shown only while the map view is open, and there is no event for opening
     -- it, so the list is refreshed (and shown or hidden) on this pass.
     guard("the server map", map.tick)
+
+    -- Outbound facts go to stdout, once a second: the report, the platforms and the queued
+    -- events. This is a log line, not a script command; it has no effect on the game.
+    guard("outbound", outbound.tick)
 end)
 
 -- The speed this world is kept at, put back on the game as the world comes up. The game
