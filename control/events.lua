@@ -90,6 +90,27 @@ end)
 -- A join is the one moment a controller can be changed safely: the client runs the same
 -- event. Nothing here moves a character to another surface -- a server-side teleport on join
 -- is a world change the client does not see, and it desyncs.
+-- A platform changing state is the server-side event the manager needs: docking, leaving,
+-- arriving. It is pushed immediately over localhost UDP, not left for a poll.
+script.on_event(defines.events.on_space_platform_changed_state, function(event)
+    guard("a platform state change", function()
+        local platform = event.platform
+        if not platform or not platform.valid then
+            return
+        end
+
+        outbound.push("platform", {
+            instance = state.instance(),
+            name = platform.name,
+            index = platform.index,
+            state = tostring(platform.state),
+            location = platform.space_location and platform.space_location.name or nil,
+            connection = platform.space_connection and platform.space_connection.name or nil,
+            distance = platform.distance,
+        })
+    end)
+end)
+
 script.on_event(defines.events.on_player_joined_game, function(event)
     guard("a join", function()
         local player = game.get_player(event.player_index)

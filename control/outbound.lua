@@ -16,6 +16,21 @@ local platforms = require("__server-connector-mod__.control.platforms")
 
 local MARKER = "SCMOD"
 
+-- The one-container manager listens for server-side events on this port; the game reaches
+-- it on the container's loopback because both live in the same network namespace. This
+-- needs --enable-lua-udp on the game.
+local UDP_PORT = 8999
+
+-- A server-side event pushed to the app. Never for a player: this is the game telling the
+-- manager something happened (a platform docked), not a client action.
+local function push(kind, payload)
+    local ok, json = pcall(helpers.table_to_json, payload)
+    if not ok then
+        return
+    end
+    pcall(function() game.send_udp(UDP_PORT, json) end)
+end
+
 local function emit(kind, payload)
     local ok, json = pcall(helpers.table_to_json, payload)
     if not ok then
@@ -42,5 +57,6 @@ end
 
 return {
     emit = emit,
+    push = push,
     tick = tick,
 }
