@@ -1,4 +1,13 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.33.4
+Date: 2026-10-22
+  Changed:
+    - A join no longer touches the controller, the character, the editor, the remote or the
+      inventory. It only teleports the player's existing body onto the surface this server
+      holds. Every controller change was a world change the client did not make.
+    - The non-nauvis servers remove the nauvis surface (its chunks included) as part of the
+      foreign-surface check.
+---------------------------------------------------------------------------------------------------
 Version: 0.33.3
 Date: 2026-10-22
   Fixed:

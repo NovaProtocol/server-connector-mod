@@ -203,84 +203,30 @@ end
 
 -- What a player gets when they arrive, and whenever the manager says where their body is.
 --
--- The order matters: another server's body wins over anything this world holds, because a
--- character here would be a phantom the game made when they joined.
+-- The only thing this mod does to a joining player is move their body onto the surface this
+-- server exists to hold. It does not touch the controller, the character, the editor, the
+-- remote or the inventory: the client already owns all of that, and every change to it here
+-- was a world change the client did not make.
 local function apply_join_rule(player)
     if not known() then
         return
     end
 
-    -- The map is this mod's now: the vanilla space map would offer a planet with no surface
-    -- behind it, which is exactly the dead view there used to be a fake surface for.
-    player.disable_space_map = true
-
-    -- An instance configured as an editor stays an editor. That is its declared mode, not a
-    -- fallback: blueprint-world exists to be an editor.
-    local entry = (storage.topology or {})[instance()]
-    if entry and entry.editor == true then
-        attempt("putting " .. player.name .. " in the editor", function()
-            player.admin = true
-            player.set_controller{type = defines.controllers.editor}
-        end)
-        storage.viewing[player.name] = nil
-        return
-    end
-
-    -- Every other server gives the player its own character: these are separate lives, not
-    -- one shared body. No god controller, no remote fallback.
-    storage.viewing[player.name] = nil
-    player.toggle_menu_leaves_remote_view = true
-
     local character = player.character
-    if character and character.valid and surface_is_home(character.surface) then
-        if player.controller_type ~= defines.controllers.character then
-            attempt("putting " .. player.name .. " on their character", function()
-                player.set_controller{
-                    type = defines.controllers.character,
-                    character = player.character,
-                }
-            end)
-        end
+    if not character or not character.valid then
         return
     end
 
-    -- This world holds a copy from another server's life. Detach it and give this server
-    -- its own character on the surface the player joined on.
-    if character and character.valid then
-        local detached = attempt("detaching " .. player.name .. "'s foreign character", function()
-            player.character = nil
-        end)
-        if not detached then
-            pcall(function()
-                game.disconnect_player(player,
-                    "This server could not give you its own body. Try again.")
-            end)
-            return
-        end
-    end
-
-    if surface_is_home(player.physical_surface) then
-        attempt("creating " .. player.name .. "'s character", function()
-            player.create_character()
-        end)
-    end
-
-    if player.character and player.character.valid then
-        attempt("putting " .. player.name .. " on their character", function()
-            player.set_controller{
-                type = defines.controllers.character,
-                character = player.character,
-            }
-        end)
+    local surface = game.surfaces[instance()] or player.physical_surface
+    if not surface then
         return
     end
 
-    -- Never leave the player in the bodyless physical controller (god mode) or the remote:
-    -- the server has failed to give them their own body.
-    pcall(function()
-        game.disconnect_player(player,
-            "This server could not give you its own body. Try again.")
-    end)
+    if character.surface ~= surface then
+        attempt("moving " .. player.name .. " to " .. surface.name, function()
+            character.teleport(player.physical_position, surface)
+        end)
+    end
 end
 
 --------------------------------------------------------------------------------
