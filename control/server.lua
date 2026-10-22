@@ -214,8 +214,20 @@ local function apply_join_rule(player)
     -- behind it, which is exactly the dead view there used to be a fake surface for.
     player.disable_space_map = true
 
-    -- Every server gives the player its own character: these are separate lives, not one
-    -- shared body. No editor, no god controller, no remote fallback.
+    -- An instance configured as an editor stays an editor. That is its declared mode, not a
+    -- fallback: blueprint-world exists to be an editor.
+    local entry = (storage.topology or {})[instance()]
+    if entry and entry.editor == true then
+        attempt("putting " .. player.name .. " in the editor", function()
+            player.admin = true
+            player.set_controller{type = defines.controllers.editor}
+        end)
+        storage.viewing[player.name] = nil
+        return
+    end
+
+    -- Every other server gives the player its own character: these are separate lives, not
+    -- one shared body. No god controller, no remote fallback.
     storage.viewing[player.name] = nil
     player.toggle_menu_leaves_remote_view = true
 

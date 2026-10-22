@@ -1,4 +1,11 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.33.1
+Date: 2026-10-22
+  Fixed:
+    - An instance declared as an editor is an editor again. The editor branch is the
+      instance's declared mode, not a fallback; blueprint-world uses it. Every other server
+      still gives the player its own character.
+---------------------------------------------------------------------------------------------------
 Version: 0.33.0
 Date: 2026-10-22
   Changed:
