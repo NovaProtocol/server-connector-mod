@@ -203,22 +203,10 @@ local function apply_join_rule(player)
     end
 
     if body_is_elsewhere(player) then
-        -- Every joining player is handed a character by the game. On a server that is not
-        -- their body's home that character is a second body with an inventory, so it is
-        -- removed rather than left standing around.
-        if player.character and player.character.valid then
-            local items = "unknown"
-            pcall(function()
-                local inv = player.character.get_inventory(defines.inventory.character_main)
-                items = inv and inv.get_item_count() or 0
-            end)
-            log(string.format("[%s] destroying %s's character here (main inventory items: %s)",
-                instance(), player.name, tostring(items)))
-            attempt("destroying " .. player.name .. "'s character", function()
-                player.character.destroy()
-            end)
-        end
-
+        -- Leave the character where it is. Destroying it here is a world change made on join,
+        -- and the client does not make the same change at the same moment -- that is the
+        -- desync. The body's character stays on its own surface; this player only looks
+        -- through the remote controller.
         storage.viewing[player.name] = true
         attempt("putting " .. player.name .. " in the remote controller", function()
             player.set_controller{

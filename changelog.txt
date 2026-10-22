@@ -1,4 +1,13 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.32.3
+Date: 2026-10-22
+  Fixed:
+    - A remote viewer's character copy is left alone on join. Destroying it there was the
+      world change the client did not see, and the join still desynced with the copy's
+      inventory. The player is put in the remote controller; the copy stays on its surface.
+    - The server map frame is shown in the remote controller, not only on the chart. A viewer
+      could not reach the buttons that move them to another server.
+---------------------------------------------------------------------------------------------------
 Version: 0.32.2
 Date: 2026-10-22
   Fixed:
