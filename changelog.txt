@@ -1,4 +1,12 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.32.6
+Date: 2026-10-22
+  Fixed:
+    - A planet or custom save no longer keeps the space server's platform surfaces; they are
+      foreign there. The space save now keeps its platforms and removes every non-platform
+      surface, instead of skipping the cleanup entirely. Both run only with nobody connected,
+      so no join is made a world change.
+---------------------------------------------------------------------------------------------------
 Version: 0.32.5
 Date: 2026-10-22
   Changed:

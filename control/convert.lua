@@ -64,7 +64,29 @@ end
 -- plan meant by "no more fake surfaces". Only the game's own delete, only with nobody
 -- connected, and never a surface that still holds a character.
 local function remove_foreign_surfaces()
-    if not known() or not empty() or instance() == "space" then
+    if not known() or not empty() then
+        return
+    end
+
+    -- The space server owns its platforms, not a named planet. Everything that is not a
+    -- platform is another server's world and does not belong in this save.
+    if instance() == "space" then
+        for name, surface in pairs(game.surfaces) do
+            if not surface.platform and name ~= storage.spawn_surface then
+                local ok, characters = pcall(function()
+                    return surface.find_entities_filtered{type = "character"}
+                end)
+                if ok and type(characters) == "table" and #characters == 0 then
+                    local deleted, err = pcall(function() return game.delete_surface(name) end)
+                    if deleted then
+                        log(string.format("[%s] removed foreign surface %s", instance(), name))
+                    else
+                        log(string.format("[%s] could not remove foreign surface %s: %s",
+                            instance(), name, tostring(err)))
+                    end
+                end
+            end
+        end
         return
     end
 
@@ -74,7 +96,9 @@ local function remove_foreign_surfaces()
     end
 
     for name, surface in pairs(game.surfaces) do
-        if not keep[name] and not surface.platform and name ~= storage.spawn_surface then
+        -- A platform belongs to the space server. Keeping it here was how a planet save
+        -- still carried the fleet's platforms.
+        if not keep[name] and name ~= storage.spawn_surface then
             local ok, characters = pcall(function()
                 return surface.find_entities_filtered{type = "character"}
             end)
