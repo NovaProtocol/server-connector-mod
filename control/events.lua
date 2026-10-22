@@ -55,6 +55,15 @@ script.on_nth_tick(60, function()
     -- Outbound facts go to stdout, once a second: the report, the platforms and the queued
     -- events. This is a log line, not a script command; it has no effect on the game.
     guard("outbound", outbound.tick)
+
+    -- Research progress is pushed over UDP only when it moved, once a second.
+    guard("outbound research", outbound.tick_research)
+end)
+
+-- Platform positions move continuously in transit, so they go every 6 ticks (10 Hz), from
+-- the space server only. This is a read and a localhost datagram, not a world change.
+script.on_nth_tick(6, function()
+    guard("outbound platform positions", outbound.tick_positions)
 end)
 
 -- The speed this world is kept at, put back on the game as the world comes up. The game

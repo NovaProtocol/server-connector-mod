@@ -1,4 +1,11 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.33.7
+Date: 2026-10-22
+  Added:
+    - A platform changing state (docking, leaving, arriving) is pushed as a server-side
+      localhost UDP event to the one-container app, which exposes the last events at
+      GET /api/fleet/events.
+---------------------------------------------------------------------------------------------------
 Version: 0.33.6
 Date: 2026-10-22
   Changed:

@@ -8,6 +8,7 @@
 -- Required as "__server-connector-mod__.control.research".
 
 local state = require("__server-connector-mod__.control.state")
+local outbound = require("__server-connector-mod__.control.outbound")
 
 local instance = state.instance
 local main_force = state.main_force
@@ -21,6 +22,22 @@ local function note_research(kind, name)
         kind = kind,
         tech = name,
         tick = game.tick,
+    })
+
+    -- Queue and selection changes go over UDP at once: the manager has to put the same
+    -- research (and queue) on every planet, not wait for its next poll.
+    outbound.push("research_event", {
+        instance = instance(),
+        tick = game.tick,
+        event = kind,
+        tech = name,
+        queue = (function()
+            local out = {}
+            for _, queued in pairs(main_force().research_queue or {}) do
+                out[#out + 1] = queued.name
+            end
+            return out
+        end)(),
     })
 end
 
