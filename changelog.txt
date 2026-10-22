@@ -1,4 +1,10 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.32.5
+Date: 2026-10-22
+  Changed:
+    - A map click connects immediately again. Telling the manager first is kept, but the
+      held connect read as a dead button and the target's short remote view is preferable.
+---------------------------------------------------------------------------------------------------
 Version: 0.32.4
 Date: 2026-10-22
   Fixed:
