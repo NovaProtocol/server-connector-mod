@@ -59,6 +59,13 @@ local calls = {
         if state.same_topology(wanted, storage.topology) then
             if state.empty() then
                 convert.ensure_surfaces()
+                -- The forms are part of the unchanged topology too. A declared flat surface
+                -- that already exists still has to be replaced, or an old mixed world is
+                -- kept for ever because the manager keeps sending the same topology.
+                local own = (storage.topology or {})[state.instance()]
+                if own and type(own.forms) == "table" and #own.forms > 0 then
+                    convert.create_custom_surfaces(own.forms)
+                end
             end
             return {instance = state.instance(), destinations = #state.destinations(), unchanged = true}
         end

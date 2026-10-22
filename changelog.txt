@@ -1,4 +1,12 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.33.2
+Date: 2026-10-22
+  Fixed:
+    - The unchanged-topology branch now applies the declared surface forms too. It only ran
+      the foreign-surface cleanup, so a declared flat surface that already existed was never
+      replaced when the manager kept sending the same topology. This is why blueprint-world
+      stayed mixed.
+---------------------------------------------------------------------------------------------------
 Version: 0.33.1
 Date: 2026-10-22
   Fixed:
