@@ -314,7 +314,12 @@ local function report()
     end
     local surfaces = {}
     for name, _ in pairs(game.surfaces) do
-        surfaces[#surfaces + 1] = name
+        -- nauvis exists in every converted save because the homeworld cannot be deleted; it
+        -- is stripped to nothing there. It is a surface this server serves only on the
+        -- nauvis server, so it is not listed anywhere else.
+        if name ~= "nauvis" or instance() == "nauvis" then
+            surfaces[#surfaces + 1] = name
+        end
     end
     table.sort(surfaces)
 

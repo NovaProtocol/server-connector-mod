@@ -1,4 +1,11 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.32.8
+Date: 2026-10-22
+  Changed:
+    - The reported surface list omits nauvis on every server except the nauvis server. The
+      homeworld cannot be deleted, so a stripped, empty copy is in every converted save; it
+      is not a surface that server serves.
+---------------------------------------------------------------------------------------------------
 Version: 0.32.7
 Date: 2026-10-22
   Changed:
