@@ -1,4 +1,60 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.35.7
+Date: 2026-10-24
+  Fixed:
+    - Planet servers hold the fleet's platform copies again, as the hub plus the same
+      number of cargo bays as the real platform, with no asteroids and no way to damage
+      them.
+    - Copies are made, kept and pruned only from the manager's RCON list. The boot,
+      configuration-change and leave handlers no longer touch platforms, so a client
+      never applies a platform change of its own and has nothing to diverge on.
+    - The platform list now reports each platform's cargo-bay count.
+---------------------------------------------------------------------------------------------------
+Version: 0.35.6
+Date: 2026-10-24
+  Fixed:
+    - Old planet platform copies now cancel a previously scheduled deletion and destroy one
+      tick later, so the copy and its asteroid chunks are actually removed.
+---------------------------------------------------------------------------------------------------
+Version: 0.35.5
+Date: 2026-10-24
+  Fixed:
+    - The asteroid sweep runs only on planet instances; space and custom instances such as
+      blueprint-world are left alone.
+    - Old fake platform copies are destroyed immediately (destroy(0)) instead of being
+      scheduled for deletion, so their asteroid chunks go with them.
+---------------------------------------------------------------------------------------------------
+Version: 0.35.4
+Date: 2026-10-24
+  Fixed:
+    - Planet servers remove old fake platform copies on init, configuration change and
+      the last player leaving. The 0.35.3 cleanup only ran when the manager pushed a
+      changed platform list, so copies already on a planet survived the update.
+---------------------------------------------------------------------------------------------------
+Version: 0.35.3
+Date: 2026-10-24
+  Changed:
+    - Planet servers hold no platform copies. The copies were fake platforms at a space
+      location: they spawned asteroid chunks, the sweep removed them, and their state
+      diverged from the server while a player hopped planets -- desyncing on rejoin.
+      The real platforms live on the space server; use the space map.
+---------------------------------------------------------------------------------------------------
+Version: 0.35.2
+Date: 2026-10-23
+  Fixed:
+    - The fake-platform protection reads cargo bays from the platform surface. The
+      LuaSpacePlatform class has no cargo_bays key, so 0.35.1 refused the platforms call
+      and the hub protection threw.
+---------------------------------------------------------------------------------------------------
+Version: 0.35.1
+Date: 2026-10-23
+  Fixed:
+    - Fake platform copies are no longer deleted by asteroid chunks. The copy's hub and
+      cargo bays are made indestructible, and the existing one-second sweep keeps
+      destroying the chunks. The engine has no per-platform asteroid spawn switch:
+      hidden only removes it from the remote-view list, and paused only stops thrust and
+      schedule.
+---------------------------------------------------------------------------------------------------
 Version: 0.35.0
 Date: 2026-10-23
   Added:

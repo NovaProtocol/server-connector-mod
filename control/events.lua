@@ -145,7 +145,12 @@ end)
 -- its surface changes for later. The last player leaving is that later.
 script.on_event(defines.events.on_player_left_game, function()
     guard("a leave", function()
-        if not storage.pending_surfaces or not state.empty() then
+        if not state.empty() then
+            return
+        end
+
+        -- The last player leaving is the safe window for a deferred surface change.
+        if not storage.pending_surfaces then
             return
         end
         storage.pending_surfaces = nil

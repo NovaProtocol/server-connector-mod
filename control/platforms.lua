@@ -36,17 +36,86 @@ local function set_position(platform, field, value)
     end
 end
 
+-- A fake platform must not be deleted by an asteroid chunk that survives the sweep.
+--
+-- The engine has no per-platform asteroid spawn switch: LuaSpacePlatform.hidden only
+-- removes it from the remote-view list, and paused only stops thrust and schedule. The
+-- only control is LuaEntity::destructible, and the hub is what keeps a platform alive;
+-- the cargo bays carry the copy's cargo, so they are protected too.
+local function protect_copy(platform, name)
+    local function protect(entity, what)
+        if not entity or not entity.valid then
+            return
+        end
+        local ok, err = pcall(function() entity.destructible = false end)
+        if not ok then
+            log(string.format("[%s] could not protect the %s of %s: %s",
+                instance(), what, name, tostring(err)))
+        end
+    end
+
+    protect(platform.hub, "hub")
+
+    -- LuaSpacePlatform has no cargo_bays key; the bays are entities on its surface.
+    local surface = platform.surface
+    if surface then
+        local ok, bays = pcall(function()
+            return surface.find_entities_filtered{name = "cargo-bay"}
+        end)
+        if ok then
+            for _, bay in pairs(bays or {}) do
+                protect(bay, "cargo bay")
+            end
+        end
+    end
+end
+
 --------------------------------------------------------------------------------
 -- the fleet's platforms, as copies
 --------------------------------------------------------------------------------
 
+-- Give a copy the same number of cargo bays as the real platform.
+--
+-- A copy is a hub and its cargo bays -- the bays are what a platform's cargo capacity is
+-- made of, and a copy showing only the hub reads as a different platform. Only missing
+-- bays are added: a copy is a view, and tearing a bay off one risks the cargo it holds.
+local function ensure_bays(platform, count)
+    count = math.max(0, math.floor(tonumber(count) or 0))
+    if count == 0 then
+        return
+    end
+
+    local surface = platform.surface
+    if not surface then
+        return
+    end
+
+    local ok, existing = pcall(function()
+        return surface.find_entities_filtered{name = "cargo-bay"}
+    end)
+    local have = (ok and existing) and #existing or 0
+    local force = main_force()
+
+    for index = have + 1, count do
+        local angle = (index - 1) * (2 * math.pi / math.max(count, 1))
+        local radius = 4 + math.floor((index - 1) / 8) * 2
+        local position = {x = math.cos(angle) * radius, y = math.sin(angle) * radius}
+        pcall(function()
+            surface.create_entity{name = "cargo-bay", position = position, force = force.name}
+        end)
+    end
+end
+
 -- Make, keep or remove this server's copies of the fleet's platforms.
 --
 -- An order, not a decision: the list comes from the manager, which is the only thing
--- that can see the real platforms wherever they are. A planet server's copy is a hub
--- and its cargo -- the starter pack and nothing else, no inserters, no chemical plants
--- -- with no asteroids and nothing that can damage it, because nothing here runs a
+-- that can see the real platforms wherever they are. A planet server's copy is a hub and
+-- cargo bays -- the starter pack and nothing else, no asteroid collectors, no chemical
+-- plants -- with no asteroids and nothing that can damage it, because nothing here runs a
 -- platform. It is a place to look at and to launch to.
+--
+-- Only a planet gets copies: the space server is where the real platforms live, and a
+-- custom world has no business holding one. Called over RCON, so only the server runs it.
 local function mirror_platforms(entries)
     if not known() then
         return {instance = instance(), skipped = "no identity"}
@@ -58,13 +127,13 @@ local function mirror_platforms(entries)
         return {instance = instance(), skipped = "somebody is connected"}
     end
 
-    -- The space server is where the platforms really are, so it is not a copy of
-    -- anything and must not be made to match a list derived from itself. Applying it
-    -- back is a loop: a list one poll old drags the real platform back to where it was,
-    -- and a pause read from it re-pauses it -- which is exactly what the copies and the
-    -- real platform were doing to each other.
     if instance() == "space" then
         return {instance = instance(), skipped = "the real platforms live here"}
+    end
+
+    local own = (storage.topology or {})[instance()]
+    if not own or own.kind ~= "planet" then
+        return {instance = instance(), skipped = "not a planet"}
     end
 
     entries = entries or {}
@@ -79,6 +148,13 @@ local function mirror_platforms(entries)
         if type(entry) == "table" and entry.name then
             wanted[entry.name] = entry
         end
+    end
+
+    -- An empty order is not an order to remove everything: the calls that fire at boot
+    -- and on a mod change pass no list, and acting on that would wipe the copies. The
+    -- manager is the only caller that prunes, and it always sends the real list.
+    if seen == 0 then
+        return {instance = instance(), skipped = "no list"}
     end
 
     local force = main_force()
@@ -136,12 +212,14 @@ local function mirror_platforms(entries)
             if entry.paused ~= nil and platform.paused ~= entry.paused then
                 set_position(platform, "paused", entry.paused)
             end
+
+            ensure_bays(platform, entry.bays)
         else
             local planet = entry.location or instance()
             -- Both required fields, named as the game names them: `planet` is a space
             -- location and `starter_pack` is the item the game itself uses for one
             -- (asked for with plate, not guessed -- the probe reports it). The starter
-            -- pack is also what gives the copy its hub, which is all a copy is.
+            -- pack is also what gives the copy its hub.
             local ok, platform = pcall(function()
                 return force.create_space_platform{
                     planet = planet,
@@ -158,6 +236,8 @@ local function mirror_platforms(entries)
                 -- Never asteroids: they belong to the space server, and a planet server
                 -- spawning them would be running a platform.
                 pcall(function() platform.destroy_asteroid_chunks{} end)
+                ensure_bays(platform, entry.bays)
+                protect_copy(platform, name)
 
                 made[#made + 1] = name
                 log(string.format("[%s] made a copy of %s, at %s", instance(), name, planet))
@@ -189,8 +269,8 @@ end
 
 -- What this server's platforms are.
 --
--- Read-only. Every field here is one the runtime docs list for LuaSpacePlatform, and
--- nothing is derived or invented: a planet server reports none, which is a real answer.
+-- Read-only. Every field here is one the runtime docs list for LuaSpacePlatform or its
+-- hub, and nothing is invented: a planet server reports none, which is a real answer.
 -- The copies come from this list, and what to do with them is the manager's decision.
 local function platforms()
     local out = {}
@@ -203,7 +283,46 @@ local function platforms()
             connection = platform.space_connection and platform.space_connection.name or nil,
             distance = platform.distance,
             paused = platform.paused,
+            bays = (function()
+                local surface = platform.surface
+                if not surface then
+                    return nil
+                end
+                local ok, bays = pcall(function()
+                    return surface.find_entities_filtered{name = "cargo-bay"}
+                end)
+                if ok and bays then
+                    return #bays
+                end
+                return nil
+            end)(),
             hub = platform.hub ~= nil,
+            hub_destructible = (function()
+                local ok, value = pcall(function()
+                    return platform.hub and platform.hub.destructible
+                end)
+                if ok then
+                    return value
+                end
+                return nil
+            end)(),
+            cargo_bay_destructible = (function()
+                local surface = platform.surface
+                if not surface then
+                    return nil
+                end
+                local ok, bays = pcall(function()
+                    return surface.find_entities_filtered{name = "cargo-bay"}
+                end)
+                if not ok or not bays or not bays[1] then
+                    return nil
+                end
+                local ok2, value = pcall(function() return bays[1].destructible end)
+                if ok2 then
+                    return value
+                end
+                return nil
+            end)(),
             hidden = platform.hidden,
             deleting_in = platform.scheduled_for_deletion,
             asteroids = (function()

@@ -185,7 +185,10 @@ end
 -- is at, and a platform has to be at one to exist. So the sweep runs, every second, and is
 -- cheap because there is nothing there to destroy.
 local function sweep_asteroids()
-    if instance() == "space" then
+    -- Planets only: the space server keeps real asteroid fields, and a custom instance
+    -- (blueprint-world) is not part of the split world.
+    local own = (storage.topology or {})[instance()]
+    if not own or own.kind ~= "planet" then
         return
     end
 
