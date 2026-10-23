@@ -36,6 +36,22 @@ local function find_platform(payload)
     if not name and type(payload.platform) == "string" then
         name = payload.platform
     end
+
+    -- A name can belong to several platforms. The manager sends the ordinal within that
+    -- name (sorted by index), which is the same order the copy builder pairs on, so the
+    -- cargo lands on the copy the manager meant rather than on whichever came first.
+    local ordinal = tonumber(payload.ordinal)
+    if name and ordinal then
+        local matches = {}
+        for _, platform in pairs(main_force().platforms or {}) do
+            if platform.name == name then
+                matches[#matches + 1] = platform
+            end
+        end
+        table.sort(matches, function(a, b) return a.index < b.index end)
+        return matches[ordinal]
+    end
+
     for _, platform in pairs(main_force().platforms or {}) do
         if (index ~= nil and platform.index == index) or (name ~= nil and platform.name == name) then
             return platform

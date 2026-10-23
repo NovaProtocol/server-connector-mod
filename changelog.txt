@@ -1,4 +1,14 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.35.10
+Date: 2026-10-24
+  Fixed:
+    - Cargo and request sync addressed a copy by name. A name can belong to several
+      platforms, so the first match won and a duplicate could receive another platform's
+      cargo. The manager now sends the ordinal within the name, and the mod selects the
+      platform by that order.
+    - The manager's platform store keyed entries by name and collapsed duplicates; it now
+      keys by name and index, so the platform page shows every platform.
+---------------------------------------------------------------------------------------------------
 Version: 0.35.9
 Date: 2026-10-24
   Fixed:
