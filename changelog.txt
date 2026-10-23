@@ -1,4 +1,10 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.35.18
+Date: 2026-10-23
+  Fixed:
+    - copy_is_protected was defined before bay_list, so the mirror errored with "attempt to
+      call global 'bay_list' (a nil value)" on a planet and the copy was left untouched.
+---------------------------------------------------------------------------------------------------
 Version: 0.35.17
 Date: 2026-10-23
   Fixed:

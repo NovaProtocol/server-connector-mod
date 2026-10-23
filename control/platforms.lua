@@ -72,19 +72,6 @@ local function protect_copy(platform, name)
     end
 end
 
-local function copy_is_protected(platform)
-    local hub = platform.hub
-    if hub and (hub.destructible or hub.minable_flag or hub.operable) then
-        return false
-    end
-    for _, bay in ipairs(bay_list(platform) or {}) do
-        if bay.destructible or bay.minable_flag or bay.operable then
-            return false
-        end
-    end
-    return true
-end
-
 -- A deconstruction order on a copy is cancelled where it is issued. `minable_flag`
 -- already refuses the mine; this stops the order sitting there and being retried when a
 -- build or a restart changes the flag.
@@ -127,6 +114,19 @@ end
 local function bay_count(platform)
     local bays = bay_list(platform)
     return bays and #bays or nil
+end
+
+local function copy_is_protected(platform)
+    local hub = platform.hub
+    if hub and (hub.destructible or hub.minable_flag or hub.operable) then
+        return false
+    end
+    for _, bay in ipairs(bay_list(platform) or {}) do
+        if bay.destructible or bay.minable_flag or bay.operable then
+            return false
+        end
+    end
+    return true
 end
 
 local function asteroid_count(platform)
