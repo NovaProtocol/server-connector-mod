@@ -253,6 +253,7 @@ local function meta()
             bays = platforms.bay_count(platform),
             asteroids = platforms.asteroid_count(platform),
             other = platforms.other_entities(platform),
+            layout = platforms.layout_of(platform),
             request_hash = hash(requests_of(platform)),
         }
     end
@@ -273,6 +274,12 @@ local function meta_page(payload)
     local page = {}
     for index = offset + 1, math.min(offset + limit, #all) do
         page[#page + 1] = all[index]
+    end
+
+    -- The layout is for the manager's copy push, which rides the 10 Hz UDP meta.
+    -- A page goes over RCON, where a long layout makes the reply too big to decode.
+    for _, entry in ipairs(page) do
+        entry.layout = nil
     end
 
     local next_offset = offset + #page

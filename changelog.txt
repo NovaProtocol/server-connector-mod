@@ -1,4 +1,11 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.35.17
+Date: 2026-10-23
+  Fixed:
+    - The full bay layout in the RCON platform list made the space server's reply too large
+      to decode ("invalid character '{' after top-level value"), which stopped every copy
+      push. The layout now rides the 10 Hz UDP platform meta; the RCON list stays small.
+---------------------------------------------------------------------------------------------------
 Version: 0.35.16
 Date: 2026-10-23
   Fixed:
