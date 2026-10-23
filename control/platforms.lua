@@ -141,8 +141,15 @@ local function mirror_platforms(entries)
     -- Either an array or a table keyed by something else: the JSON is decoded by the
     -- game's own helper, and which shape comes back is the helper's business, not
     -- something to be assumed. The count is reported for the same reason.
-    local wanted = {}
+    --
+    -- Grouped by name, because platform names are not unique: the fleet has several
+    -- platforms called [item=calcite] and one called LOL. Keying by name collapsed them
+    -- and left the planet short of copies. Within a name, the real index orders them, so
+    -- the nth real platform pairs with the nth copy and the pairing is the same on every
+    -- push and after a restart.
     local seen = 0
+    local by_name = {}
+    local wanted = 0
     for _, entry in pairs(entries) do
         seen = seen + 1
         if type(entry) == "table" and entry.name then
@@ -156,7 +163,9 @@ local function mirror_platforms(entries)
             if entry.connection == "" then
                 entry.connection = nil
             end
-            wanted[entry.name] = entry
+            by_name[entry.name] = by_name[entry.name] or {}
+            table.insert(by_name[entry.name], entry)
+            wanted = wanted + 1
         end
     end
 
@@ -167,92 +176,106 @@ local function mirror_platforms(entries)
         return {instance = instance(), skipped = "no list"}
     end
 
+    for _, group in pairs(by_name) do
+        table.sort(group, function(a, b)
+            return (tonumber(a.index) or 0) < (tonumber(b.index) or 0)
+        end)
+    end
+
     local force = main_force()
     local made, kept, removed = {}, {}, {}
 
-    -- Gone from the list means gone here: the real platform was deleted or destroyed,
-    -- and a copy of something that no longer exists is a lie players can stand on.
-    local doomed = {}
+    local existing = {}
     for _, platform in pairs(force.platforms or {}) do
-        if not wanted[platform.name] then
-            doomed[#doomed + 1] = platform
-        end
+        existing[platform.name] = existing[platform.name] or {}
+        table.insert(existing[platform.name], platform)
     end
-    for _, platform in ipairs(doomed) do
-        local name = platform.name
-        if pcall(function() platform.destroy() end) then
-            removed[#removed + 1] = name
-            log(string.format("[%s] %s is gone from the fleet, removing the copy", instance(), name))
-        else
-            log(string.format("[%s] could not remove the copy of %s", instance(), name))
-        end
+    for _, group in pairs(existing) do
+        table.sort(group, function(a, b) return a.index < b.index end)
     end
 
-    for name, entry in pairs(wanted) do
-        local platform = nil
-        for _, candidate in pairs(force.platforms or {}) do
-            if candidate.name == name then
-                platform = candidate
-                break
+    -- Gone from the list means gone here: the real platform was deleted or destroyed,
+    -- and a copy of something that no longer exists is a lie players can stand on. A
+    -- duplicate name keeps only as many copies as the fleet has of that name.
+    for name, group in pairs(existing) do
+        local keep = by_name[name] and #by_name[name] or 0
+        for index = keep + 1, #group do
+            local platform = group[index]
+            if pcall(function() platform.destroy() end) then
+                removed[#removed + 1] = name
+                log(string.format("[%s] %s is gone from the fleet, removing the copy", instance(), name))
+            else
+                log(string.format("[%s] could not remove the copy of %s", instance(), name))
             end
         end
+        if keep == 0 then
+            existing[name] = nil
+        end
+    end
 
-        if platform then
-            kept[#kept + 1] = name
+    for name, group in pairs(by_name) do
+        local have = existing[name] or {}
+        for index = 1, #group do
+            local entry = group[index]
+            local platform = have[index]
 
-            -- Where it is and where it is going, from the real one. Each write is
-            -- wrapped and only made when it differs: these are the game's own setters
-            -- on a platform that is, here, only a copy, and a copy that cannot be
-            -- moved is still a copy.
-            if entry.connection and (platform.space_connection == nil
-                or platform.space_connection.name ~= entry.connection) then
-                set_position(platform, "space_connection", entry.connection)
-            end
+            if platform then
+                kept[#kept + 1] = name
 
-            if entry.location and (platform.space_location == nil
-                or platform.space_location.name ~= entry.location) then
-                set_position(platform, "space_location", entry.location)
-            end
-
-            -- After the connection: writing one sets the distance to 0.5.
-            if type(entry.distance) == "number" and platform.distance ~= entry.distance then
-                set_position(platform, "distance", entry.distance)
-            end
-
-            if entry.paused ~= nil and platform.paused ~= entry.paused then
-                set_position(platform, "paused", entry.paused)
-            end
-
-            ensure_bays(platform, entry.bays)
-        else
-            local planet = entry.location or instance()
-            -- Both required fields, named as the game names them: `planet` is a space
-            -- location and `starter_pack` is the item the game itself uses for one
-            -- (asked for with plate, not guessed -- the probe reports it). The starter
-            -- pack is also what gives the copy its hub.
-            local ok, platform = pcall(function()
-                return force.create_space_platform{
-                    planet = planet,
-                    name = name,
-                    starter_pack = "space-platform-starter-pack",
-                }
-            end)
-
-            if ok and platform then
-                if not pcall(function() platform.apply_starter_pack(true) end) then
-                    log(string.format("[%s] %s was made without its hub", instance(), name))
+                -- Where it is and where it is going, from the real one. Each write is
+                -- wrapped and only made when it differs: these are the game's own setters
+                -- on a platform that is, here, only a copy, and a copy that cannot be
+                -- moved is still a copy.
+                if entry.connection and (platform.space_connection == nil
+                    or platform.space_connection.name ~= entry.connection) then
+                    set_position(platform, "space_connection", entry.connection)
                 end
 
-                -- Never asteroids: they belong to the space server, and a planet server
-                -- spawning them would be running a platform.
-                pcall(function() platform.destroy_asteroid_chunks{} end)
-                ensure_bays(platform, entry.bays)
-                protect_copy(platform, name)
+                if entry.location and (platform.space_location == nil
+                    or platform.space_location.name ~= entry.location) then
+                    set_position(platform, "space_location", entry.location)
+                end
 
-                made[#made + 1] = name
-                log(string.format("[%s] made a copy of %s, at %s", instance(), name, planet))
+                -- After the connection: writing one sets the distance to 0.5.
+                if type(entry.distance) == "number" and platform.distance ~= entry.distance then
+                    set_position(platform, "distance", entry.distance)
+                end
+
+                if entry.paused ~= nil and platform.paused ~= entry.paused then
+                    set_position(platform, "paused", entry.paused)
+                end
+
+                ensure_bays(platform, entry.bays)
             else
-                log(string.format("[%s] could not make a copy of %s: %s", instance(), name, tostring(platform)))
+                local planet = entry.location or instance()
+                -- Both required fields, named as the game names them: `planet` is a space
+                -- location and `starter_pack` is the item the game itself uses for one
+                -- (asked for with plate, not guessed -- the probe reports it). The starter
+                -- pack is also what gives the copy its hub.
+                local ok, created = pcall(function()
+                    return force.create_space_platform{
+                        planet = planet,
+                        name = name,
+                        starter_pack = "space-platform-starter-pack",
+                    }
+                end)
+
+                if ok and created then
+                    if not pcall(function() created.apply_starter_pack(true) end) then
+                        log(string.format("[%s] %s was made without its hub", instance(), name))
+                    end
+
+                    -- Never asteroids: they belong to the space server, and a planet server
+                    -- spawning them would be running a platform.
+                    pcall(function() created.destroy_asteroid_chunks{} end)
+                    ensure_bays(created, entry.bays)
+                    protect_copy(created, name)
+
+                    made[#made + 1] = name
+                    log(string.format("[%s] made a copy of %s, at %s", instance(), name, planet))
+                else
+                    log(string.format("[%s] could not make a copy of %s: %s", instance(), name, tostring(created)))
+                end
             end
         end
     end
@@ -267,15 +290,12 @@ local function mirror_platforms(entries)
     end
 
     log(string.format("[%s] the fleet sent %d platform(s), %d of them usable, %d copy(ies) here",
-        instance(), seen, (function()
-            local count = 0
-            for _ in pairs(wanted) do count = count + 1 end
-            return count
-        end)(), copies))
+        instance(), seen, wanted, copies))
 
     return {
         instance = instance(),
         seen = seen,
+        wanted = wanted,
         copies = copies,
         made = table.concat(made, ","),
         kept = table.concat(kept, ","),
@@ -286,8 +306,8 @@ end
 -- What this server's platforms are.
 --
 -- Read-only. Every field here is one the runtime docs list for LuaSpacePlatform or its
--- hub, and nothing is invented: a planet server reports none, which is a real answer.
--- The copies come from this list, and what to do with them is the manager's decision.
+-- hub, and nothing is invented. On a planet this is the list of that server's copies;
+-- what to do with them is the manager's decision.
 local function platforms()
     local out = {}
     for _, platform in pairs(main_force().platforms or {}) do

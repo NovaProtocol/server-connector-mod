@@ -1,4 +1,11 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.35.9
+Date: 2026-10-24
+  Fixed:
+    - Copies were matched by platform name, but the fleet has several platforms with the
+      same name, so a planet held 12 copies of 16 platforms. Copies are now grouped by
+      name and paired by the real platform's index, so every platform gets its own copy.
+---------------------------------------------------------------------------------------------------
 Version: 0.35.8
 Date: 2026-10-24
   Fixed:
