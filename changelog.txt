@@ -1,4 +1,11 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.35.15
+Date: 2026-10-23
+  Added:
+    - The mirror log now reports, after every empty-server push, how many copies differ from
+      the ship layout, hold any entity other than the hub/bays, or hold an asteroid. A clean
+      line is the check that the copies are the ship.
+---------------------------------------------------------------------------------------------------
 Version: 0.35.14
 Date: 2026-10-23
   Fixed:

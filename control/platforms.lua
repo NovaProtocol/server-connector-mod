@@ -345,6 +345,7 @@ local function mirror_platforms(entries)
 
     local force = main_force()
     local made, kept, removed = {}, {}, {}
+    local bad_layout, bad_other, bad_asteroids = 0, 0, 0
 
     local existing = {}
     for _, platform in pairs(force.platforms or {}) do
@@ -418,6 +419,15 @@ local function mirror_platforms(entries)
                 ensure_bays(platform, entry.bays, entry.layout)
                 destroy_other(platform)
                 pcall(function() platform.destroy_asteroid_chunks{} end)
+                if entry.layout and entry.layout ~= "" and layout_of(platform) ~= entry.layout then
+                    bad_layout = bad_layout + 1
+                end
+                if (other_entities(platform) or 0) ~= 0 then
+                    bad_other = bad_other + 1
+                end
+                if (asteroid_count(platform) or 0) ~= 0 then
+                    bad_asteroids = bad_asteroids + 1
+                end
             else
                 local planet = entry.location or instance()
                 -- Both required fields, named as the game names them: `planet` is a space
@@ -443,6 +453,15 @@ local function mirror_platforms(entries)
                     ensure_bays(created, entry.bays, entry.layout)
                     destroy_other(created)
                     protect_copy(created, name)
+                    if entry.layout and entry.layout ~= "" and layout_of(created) ~= entry.layout then
+                        bad_layout = bad_layout + 1
+                    end
+                    if (other_entities(created) or 0) ~= 0 then
+                        bad_other = bad_other + 1
+                    end
+                    if (asteroid_count(created) or 0) ~= 0 then
+                        bad_asteroids = bad_asteroids + 1
+                    end
 
                     made[#made + 1] = name
                     log(string.format("[%s] made a copy of %s, at %s", instance(), name, planet))
@@ -462,14 +481,18 @@ local function mirror_platforms(entries)
         copies = copies + 1
     end
 
-    log(string.format("[%s] the fleet sent %d platform(s), %d of them usable, %d copy(ies) here",
-        instance(), seen, wanted, copies))
+    log(string.format(
+        "[%s] the fleet sent %d platform(s), %d of them usable, %d copy(ies) here, %d layout mismatch(es), %d with other entities, %d with asteroids",
+        instance(), seen, wanted, copies, bad_layout, bad_other, bad_asteroids))
 
     return {
         instance = instance(),
         seen = seen,
         wanted = wanted,
         copies = copies,
+        layout_mismatches = bad_layout,
+        with_other = bad_other,
+        with_asteroids = bad_asteroids,
         made = table.concat(made, ","),
         kept = table.concat(kept, ","),
         removed = table.concat(removed, ","),
