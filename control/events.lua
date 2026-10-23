@@ -21,6 +21,7 @@ local convert = require("__server-connector-mod__.control.convert")
 local server = require("__server-connector-mod__.control.server")
 local map = require("__server-connector-mod__.control.map")
 local research = require("__server-connector-mod__.control.research")
+local platforms = require("__server-connector-mod__.control.platforms")
 local outbound = require("__server-connector-mod__.control.outbound")
 
 local MOD = state.MOD
@@ -111,6 +112,49 @@ end)
 -- is a world change the client does not see, and it desyncs.
 -- A platform changing state is the server-side event the manager needs: docking, leaving,
 -- arriving. It is pushed immediately over localhost UDP, not left for a poll.
+-- A copy is a view. If a player marks one of its entities for deconstruction, cancel it;
+-- the entity is also minable=false and operable=false, so the order should not have got
+-- far, but an order can be placed before a mirror push re-applies the flags.
+script.on_event(defines.events.on_marked_for_deconstruction, function(event)
+    guard("a deconstruction order", function()
+        platforms.cancel_copy_deconstruction(event.entity)
+    end)
+end)
+
+-- A building placed or removed on the real space platform changes the bay layout. Tell
+-- the manager at once rather than waiting for the next poll; the manager pushes the new
+-- list, and each planet applies it at its next empty window.
+local function announce_platform_layout(event, what)
+    guard(what, function()
+        if state.instance() ~= "space" then
+            return
+        end
+        local platform = event.platform
+        if not platform and event.entity and event.entity.valid then
+            platform = event.entity.surface and event.entity.surface.platform
+        end
+        if not platform or not platform.valid then
+            return
+        end
+        outbound.push("platform_layout", {
+            instance = state.instance(),
+            tick = game.tick,
+            name = platform.name,
+            index = platform.index,
+            bays = platforms.bay_count(platform),
+            layout_hash = platforms.layout_hash(platform),
+        })
+    end)
+end
+
+script.on_event(defines.events.on_space_platform_built_entity, function(event)
+    announce_platform_layout(event, "a platform build")
+end)
+
+script.on_event(defines.events.on_space_platform_mined_entity, function(event)
+    announce_platform_layout(event, "a platform mine")
+end)
+
 script.on_event(defines.events.on_space_platform_changed_state, function(event)
     guard("a platform state change", function()
         local platform = event.platform

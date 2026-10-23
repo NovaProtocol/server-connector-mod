@@ -1,4 +1,19 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.35.16
+Date: 2026-10-23
+  Fixed:
+    - Copy entities were only destructible=false, which does not stop mining, deconstruction
+      or opening the hub. The hub and bays now also set minable_flag=false and operable=false,
+      and a deconstruction order on a copy is cancelled.
+    - Cargo and request writes to a copy now refuse if its bay count no longer matches the
+      real ship, and an inventory insert/remove counts only what actually moved. A player
+      who removed bays could previously make an insert silently stop at the reduced cap.
+    - Kept copies were not re-protected after a repair; they are protected on every push.
+  Added:
+    - A build or mine on the real platform pushes its layout to the manager immediately,
+      instead of waiting for the next poll.
+    - The mirror log reports how many copies are unprotected.
+---------------------------------------------------------------------------------------------------
 Version: 0.35.15
 Date: 2026-10-23
   Added:

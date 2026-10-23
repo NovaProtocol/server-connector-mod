@@ -358,6 +358,17 @@ end
 -- mutations: the manager has already decided what changed
 --------------------------------------------------------------------------------
 
+-- A copy whose bays no longer match the ship must not receive cargo: its capacity is
+-- smaller than the real hub's, and an insert would silently stop at the cap. The mirror
+-- repairs the copy at the next empty window; until then the manager skips it.
+local function copy_is_whole(platform, payload)
+    local expected = tonumber(payload and payload.bays)
+    if expected == nil then
+        return true
+    end
+    return platforms.bay_count(platform) == expected
+end
+
 -- Apply the manager's cargo difference to this server's copy.
 --
 -- Inventory writes are replicated by the game, so this is the one live-safe mutation. It
@@ -368,6 +379,9 @@ local function apply_cargo_delta(payload)
     local platform = find_platform(payload)
     if not platform then
         return {ok = false, error = "no such platform"}
+    end
+    if not copy_is_whole(platform, payload) then
+        return {ok = false, skipped = "copy does not have the ship's bays"}
     end
 
     local inventory = hub_inventory(platform.hub)
@@ -384,13 +398,13 @@ local function apply_cargo_delta(payload)
                 quality = operation.quality or "normal",
                 count = math.abs(count),
             }
-            local ok
+            local changed
             if count > 0 then
-                ok = inventory.insert(item)
+                changed = inventory.insert(item)
             else
-                ok = inventory.remove(item)
+                changed = inventory.remove(item)
             end
-            if ok then
+            if changed and changed > 0 then
                 applied = applied + 1
             end
         end
@@ -413,6 +427,9 @@ local function apply_requests(payload)
     local platform = find_platform(payload)
     if not platform then
         return {ok = false, error = "no such platform"}
+    end
+    if not copy_is_whole(platform, payload) then
+        return {ok = false, skipped = "copy does not have the ship's bays"}
     end
 
     local point = request_point(platform.hub)

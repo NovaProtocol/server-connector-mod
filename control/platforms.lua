@@ -36,18 +36,20 @@ local function set_position(platform, field, value)
     end
 end
 
--- A fake platform must not be deleted by an asteroid chunk that survives the sweep.
---
--- The engine has no per-platform asteroid spawn switch: LuaSpacePlatform.hidden only
--- removes it from the remote-view list, and paused only stops thrust and schedule. The
--- only control is LuaEntity::destructible, and the hub is what keeps a platform alive;
--- the cargo bays carry the copy's cargo, so they are protected too.
+-- A fake platform must not be deleted by an asteroid chunk that survives the sweep, and a
+-- player must not be able to take it apart. `destructible` is damage only; `minable_flag`
+-- is the script-controlled switch that stops a player mining the hub or a bay, and
+-- `operable` stops the hub's GUI and quick-insert. A protected entity is a view.
 local function protect_copy(platform, name)
     local function protect(entity, what)
         if not entity or not entity.valid then
             return
         end
-        local ok, err = pcall(function() entity.destructible = false end)
+        local ok, err = pcall(function()
+            entity.destructible = false
+            entity.minable_flag = false
+            entity.operable = false
+        end)
         if not ok then
             log(string.format("[%s] could not protect the %s of %s: %s",
                 instance(), what, name, tostring(err)))
@@ -68,6 +70,34 @@ local function protect_copy(platform, name)
             end
         end
     end
+end
+
+local function copy_is_protected(platform)
+    local hub = platform.hub
+    if hub and (hub.destructible or hub.minable_flag or hub.operable) then
+        return false
+    end
+    for _, bay in ipairs(bay_list(platform) or {}) do
+        if bay.destructible or bay.minable_flag or bay.operable then
+            return false
+        end
+    end
+    return true
+end
+
+-- A deconstruction order on a copy is cancelled where it is issued. `minable_flag`
+-- already refuses the mine; this stops the order sitting there and being retried when a
+-- build or a restart changes the flag.
+local function cancel_copy_deconstruction(entity)
+    if not entity or not entity.valid or instance() == "space" then
+        return
+    end
+    local surface = entity.surface
+    if not surface or not surface.platform then
+        return
+    end
+    pcall(function() entity.cancel_deconstruction(entity.force) end)
+    protect_copy(surface.platform, surface.platform.name)
 end
 
 --------------------------------------------------------------------------------
@@ -345,7 +375,7 @@ local function mirror_platforms(entries)
 
     local force = main_force()
     local made, kept, removed = {}, {}, {}
-    local bad_layout, bad_other, bad_asteroids = 0, 0, 0
+    local bad_layout, bad_other, bad_asteroids, unprotected = 0, 0, 0, 0
 
     local existing = {}
     for _, platform in pairs(force.platforms or {}) do
@@ -419,6 +449,10 @@ local function mirror_platforms(entries)
                 ensure_bays(platform, entry.bays, entry.layout)
                 destroy_other(platform)
                 pcall(function() platform.destroy_asteroid_chunks{} end)
+                protect_copy(platform, name)
+                if not copy_is_protected(platform) then
+                    unprotected = unprotected + 1
+                end
                 if entry.layout and entry.layout ~= "" and layout_of(platform) ~= entry.layout then
                     bad_layout = bad_layout + 1
                 end
@@ -453,6 +487,9 @@ local function mirror_platforms(entries)
                     ensure_bays(created, entry.bays, entry.layout)
                     destroy_other(created)
                     protect_copy(created, name)
+                    if not copy_is_protected(created) then
+                        unprotected = unprotected + 1
+                    end
                     if entry.layout and entry.layout ~= "" and layout_of(created) ~= entry.layout then
                         bad_layout = bad_layout + 1
                     end
@@ -482,8 +519,8 @@ local function mirror_platforms(entries)
     end
 
     log(string.format(
-        "[%s] the fleet sent %d platform(s), %d of them usable, %d copy(ies) here, %d layout mismatch(es), %d with other entities, %d with asteroids",
-        instance(), seen, wanted, copies, bad_layout, bad_other, bad_asteroids))
+        "[%s] the fleet sent %d platform(s), %d of them usable, %d copy(ies) here, %d layout mismatch(es), %d with other entities, %d with asteroids, %d unprotected",
+        instance(), seen, wanted, copies, bad_layout, bad_other, bad_asteroids, unprotected))
 
     return {
         instance = instance(),
@@ -493,6 +530,7 @@ local function mirror_platforms(entries)
         layout_mismatches = bad_layout,
         with_other = bad_other,
         with_asteroids = bad_asteroids,
+        unprotected = unprotected,
         made = table.concat(made, ","),
         kept = table.concat(kept, ","),
         removed = table.concat(removed, ","),
@@ -676,4 +714,5 @@ return {
     bay_count = bay_count,
     asteroid_count = asteroid_count,
     other_entities = other_entities,
+    cancel_copy_deconstruction = cancel_copy_deconstruction,
 }
