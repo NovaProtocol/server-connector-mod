@@ -146,6 +146,16 @@ local function mirror_platforms(entries)
     for _, entry in pairs(entries) do
         seen = seen + 1
         if type(entry) == "table" and entry.name then
+            -- The manager's JSON always carries these keys. An empty string is what a
+            -- docked or in-transit platform has, and Lua treats it as true, so it would
+            -- be written as a location name and the copy would fail with "Unknown
+            -- space-location name: ". Missing means missing.
+            if entry.location == "" then
+                entry.location = nil
+            end
+            if entry.connection == "" then
+                entry.connection = nil
+            end
             wanted[entry.name] = entry
         end
     end
@@ -251,16 +261,22 @@ local function mirror_platforms(entries)
     table.sort(kept)
     table.sort(removed)
 
-    log(string.format("[%s] the fleet sent %d platform(s), %d of them usable",
+    local copies = 0
+    for _ in pairs(force.platforms or {}) do
+        copies = copies + 1
+    end
+
+    log(string.format("[%s] the fleet sent %d platform(s), %d of them usable, %d copy(ies) here",
         instance(), seen, (function()
             local count = 0
             for _ in pairs(wanted) do count = count + 1 end
             return count
-        end)()))
+        end)(), copies))
 
     return {
         instance = instance(),
         seen = seen,
+        copies = copies,
         made = table.concat(made, ","),
         kept = table.concat(kept, ","),
         removed = table.concat(removed, ","),

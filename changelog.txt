@@ -1,4 +1,13 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.35.8
+Date: 2026-10-24
+  Fixed:
+    - A platform that is docked or in transit has no location or connection, and the
+      manager sends that as an empty string. The copy builder treated it as a name and
+      failed with "Unknown space-location name", so those platforms never got a copy.
+    - The mirror log now states how many copies the server actually holds, so a missing
+      copy is visible in the log rather than inferred.
+---------------------------------------------------------------------------------------------------
 Version: 0.35.7
 Date: 2026-10-24
   Fixed:
