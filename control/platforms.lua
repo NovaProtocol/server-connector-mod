@@ -74,29 +74,166 @@ end
 -- the fleet's platforms, as copies
 --------------------------------------------------------------------------------
 
--- Give a copy the same number of cargo bays as the real platform.
+local function bay_list(platform)
+    local surface = platform.surface
+    if not surface then
+        return nil
+    end
+    local ok, bays = pcall(function()
+        return surface.find_entities_filtered{name = "cargo-bay"}
+    end)
+    if not ok or not bays then
+        return nil
+    end
+    table.sort(bays, function(a, b)
+        if a.position.x ~= b.position.x then
+            return a.position.x < b.position.x
+        end
+        return a.position.y < b.position.y
+    end)
+    return bays
+end
+
+local function bay_count(platform)
+    local bays = bay_list(platform)
+    return bays and #bays or nil
+end
+
+local function asteroid_count(platform)
+    local ok, chunks = pcall(function()
+        return #platform.find_asteroid_chunks_filtered{}
+    end)
+    return ok and chunks or nil
+end
+
+-- The real ship's hub-and-bay shape, as bay offsets from the hub.
 --
--- A copy is a hub and its cargo bays -- the bays are what a platform's cargo capacity is
--- made of, and a copy showing only the hub reads as a different platform. Only missing
--- bays are added: a copy is a view, and tearing a bay off one risks the cargo it holds.
-local function ensure_bays(platform, count)
-    count = math.max(0, math.floor(tonumber(count) or 0))
-    if count == 0 then
+-- Positions, not just a count: a copy with the right number of bays in a ring is the
+-- right size and the wrong ship. The string is sorted so the same layout has the same
+-- text on both servers and can be compared directly.
+local function layout_of(platform)
+    local hub = platform.hub
+    local bays = bay_list(platform)
+    if not hub or not bays then
+        return nil
+    end
+    local parts = {}
+    for _, bay in ipairs(bays) do
+        parts[#parts + 1] = string.format("%.1f,%.1f",
+            bay.position.x - hub.position.x, bay.position.y - hub.position.y)
+    end
+    table.sort(parts)
+    return table.concat(parts, ";")
+end
+
+local function layout_hash(platform)
+    local text = layout_of(platform) or ""
+    local value = 5381
+    for index = 1, #text do
+        value = (value * 33 + string.byte(text, index)) % 4294967296
+    end
+    return value
+end
+
+-- Entities on a copy that are not the hub or a cargo bay. A copy is those two things and
+-- nothing else, so this should be zero; it is reported rather than assumed.
+local function other_entities(platform)
+    local surface = platform.surface
+    if not surface then
+        return nil
+    end
+    local ok, entities = pcall(function()
+        return surface.find_entities_filtered{}
+    end)
+    if not ok or not entities then
+        return nil
+    end
+    local count = 0
+    for _, entity in ipairs(entities) do
+        if entity.valid and entity.name ~= "space-platform-hub" and entity.name ~= "cargo-bay"
+            and entity.type ~= "asteroid-chunk" then
+            count = count + 1
+        end
+    end
+    return count
+end
+
+local function destroy_other(platform)
+    local surface = platform.surface
+    if not surface then
         return
     end
+    local ok, entities = pcall(function()
+        return surface.find_entities_filtered{}
+    end)
+    if not ok or not entities then
+        return
+    end
+    for _, entity in ipairs(entities) do
+        if entity.valid and entity.name ~= "space-platform-hub" and entity.name ~= "cargo-bay"
+            and entity.type ~= "asteroid-chunk" then
+            pcall(function() entity.destroy() end)
+        end
+    end
+end
 
+-- Give a copy the real platform's hub-and-bay layout.
+--
+-- `layout` is the real ship's bay offsets from its hub, sorted. The copy's hub is the
+-- anchor, so the same offsets put every bay where it is on the real ship. Existing bays
+-- are moved rather than destroyed where possible: they carry capacity and a copy's cargo
+-- is mirrored into the hub. With no layout (an older manager) fall back to the count, and
+-- then only add missing bays.
+local function ensure_bays(platform, count, layout)
     local surface = platform.surface
     if not surface then
         return
     end
 
-    local ok, existing = pcall(function()
-        return surface.find_entities_filtered{name = "cargo-bay"}
+    local targets = {}
+    for part in string.gmatch(layout or "", "([^;]+)") do
+        local x, y = string.match(part, "^(-?[%d%.]+),(-?[%d%.]+)$")
+        if x and y then
+            targets[#targets + 1] = {x = tonumber(x), y = tonumber(y)}
+        end
+    end
+    table.sort(targets, function(a, b)
+        if a.x ~= b.x then
+            return a.x < b.x
+        end
+        return a.y < b.y
     end)
-    local have = (ok and existing) and #existing or 0
+
+    local bays = bay_list(platform) or {}
+    local hub = platform.hub
     local force = main_force()
 
-    for index = have + 1, count do
+    if hub and #targets > 0 then
+        for index, offset in ipairs(targets) do
+            local position = {x = hub.position.x + offset.x, y = hub.position.y + offset.y}
+            local bay = bays[index]
+            if bay and bay.valid then
+                if math.abs(bay.position.x - position.x) > 0.01
+                    or math.abs(bay.position.y - position.y) > 0.01 then
+                    pcall(function() bay.teleport(position) end)
+                end
+            else
+                pcall(function()
+                    surface.create_entity{name = "cargo-bay", position = position, force = force.name}
+                end)
+            end
+        end
+        for index = #targets + 1, #bays do
+            local bay = bays[index]
+            if bay and bay.valid then
+                pcall(function() bay.destroy() end)
+            end
+        end
+        return
+    end
+
+    count = math.max(0, math.floor(tonumber(count) or 0))
+    for index = #bays + 1, count do
         local angle = (index - 1) * (2 * math.pi / math.max(count, 1))
         local radius = 4 + math.floor((index - 1) / 8) * 2
         local position = {x = math.cos(angle) * radius, y = math.sin(angle) * radius}
@@ -220,6 +357,26 @@ local function mirror_platforms(entries)
             local platform = have[index]
 
             if platform then
+                -- A copy is the hub and bays the fleet says, nothing else. If a player has
+                -- built on it, deconstructed a bay or moved one, the copy is not the ship
+                -- any more; rebuild it rather than carrying the difference until someone
+                -- notices. This runs only while nobody is connected.
+                local wrong = not platform.hub or other_entities(platform) ~= 0
+                if not wrong and entry.layout and entry.layout ~= "" then
+                    wrong = layout_of(platform) ~= entry.layout
+                elseif not wrong and entry.bays ~= nil then
+                    wrong = bay_count(platform) ~= math.floor(tonumber(entry.bays) or 0)
+                end
+
+                if wrong then
+                    log(string.format("[%s] rebuilding the copy of %s: it no longer matches the ship",
+                        instance(), name))
+                    pcall(function() platform.destroy() end)
+                    platform = nil
+                end
+            end
+
+            if platform then
                 kept[#kept + 1] = name
 
                 -- Where it is and where it is going, from the real one. Each write is
@@ -245,7 +402,9 @@ local function mirror_platforms(entries)
                     set_position(platform, "paused", entry.paused)
                 end
 
-                ensure_bays(platform, entry.bays)
+                ensure_bays(platform, entry.bays, entry.layout)
+                destroy_other(platform)
+                pcall(function() platform.destroy_asteroid_chunks{} end)
             else
                 local planet = entry.location or instance()
                 -- Both required fields, named as the game names them: `planet` is a space
@@ -268,7 +427,8 @@ local function mirror_platforms(entries)
                     -- Never asteroids: they belong to the space server, and a planet server
                     -- spawning them would be running a platform.
                     pcall(function() created.destroy_asteroid_chunks{} end)
-                    ensure_bays(created, entry.bays)
+                    ensure_bays(created, entry.bays, entry.layout)
+                    destroy_other(created)
                     protect_copy(created, name)
 
                     made[#made + 1] = name
@@ -319,19 +479,9 @@ local function platforms()
             connection = platform.space_connection and platform.space_connection.name or nil,
             distance = platform.distance,
             paused = platform.paused,
-            bays = (function()
-                local surface = platform.surface
-                if not surface then
-                    return nil
-                end
-                local ok, bays = pcall(function()
-                    return surface.find_entities_filtered{name = "cargo-bay"}
-                end)
-                if ok and bays then
-                    return #bays
-                end
-                return nil
-            end)(),
+            bays = bay_count(platform),
+            layout = layout_of(platform),
+            other = other_entities(platform),
             hub = platform.hub ~= nil,
             hub_destructible = (function()
                 local ok, value = pcall(function()
@@ -485,4 +635,9 @@ return {
     platforms = platforms,
     platform_api = platform_api,
     surface_api = surface_api,
+    layout_of = layout_of,
+    layout_hash = layout_hash,
+    bay_count = bay_count,
+    asteroid_count = asteroid_count,
+    other_entities = other_entities,
 }

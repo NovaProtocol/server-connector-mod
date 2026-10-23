@@ -13,6 +13,7 @@
 -- Required as "__server-connector-mod__.control.platform_api".
 
 local state = require("__server-connector-mod__.control.state")
+local platforms = require("__server-connector-mod__.control.platforms")
 
 local instance = state.instance
 local known = state.known
@@ -237,23 +238,6 @@ end
 -- meta: the cheap call
 --------------------------------------------------------------------------------
 
-local function count_bays(platform)
-    -- LuaSpacePlatform has no cargo_bays key; the bays are entities on its surface. The
-    -- old read was wrapped in pcall and returned nil every time, so the manager never saw
-    -- a bay count.
-    local surface = platform.surface
-    if not surface then
-        return nil
-    end
-    local ok, bays = pcall(function()
-        return surface.find_entities_filtered{name = "cargo-bay"}
-    end)
-    if ok and bays then
-        return #bays
-    end
-    return nil
-end
-
 local function meta()
     local out = {}
     for _, platform in pairs(main_force().platforms or {}) do
@@ -266,7 +250,9 @@ local function meta()
             distance = platform.distance,
             paused = platform.paused,
             hub = platform.hub and platform.hub.unit_number or nil,
-            bays = count_bays(platform),
+            bays = platforms.bay_count(platform),
+            asteroids = platforms.asteroid_count(platform),
+            other = platforms.other_entities(platform),
             request_hash = hash(requests_of(platform)),
         }
     end

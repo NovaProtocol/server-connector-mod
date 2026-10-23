@@ -1,4 +1,16 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.35.12
+Date: 2026-10-23
+  Changed:
+    - A planet copy now reproduces the real platform's hub-and-bay layout, not a ring of the
+      same number of bays. The manager sends the bay offsets from the real hub.
+    - Each empty-server mirror push compares the copy with the ship. A missing hub, a
+      different bay count/layout or any other entity rebuilds the copy; asteroids are
+      destroyed on every push.
+  Added:
+    - server-connector-mod-platforms reports each platform's bay count, layout hash,
+      asteroid count and other-entity count as JSON.
+---------------------------------------------------------------------------------------------------
 Version: 0.35.11
 Date: 2026-10-24
   Fixed:

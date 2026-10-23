@@ -217,6 +217,38 @@ commands.add_command(
     end
 )
 
+-- A read-only check for the copies: hub/bay layout, bay count, asteroid count and any
+-- other entity on the platform. The layout hash is the same value on the real ship and a
+-- copy of it, so the two can be compared without moving positions over the wire.
+commands.add_command(
+    MOD .. "-platforms",
+    "Report each platform's hub/bay layout hash, bay count, asteroid count and other entities as JSON.",
+    function(event)
+        local ok, err = pcall(function()
+            local list = {}
+            for _, platform in pairs(state.main_force().platforms or {}) do
+                list[#list + 1] = {
+                    name = platform.name,
+                    index = platform.index,
+                    bays = platforms.bay_count(platform),
+                    layout_hash = platforms.layout_hash(platform),
+                    asteroids = platforms.asteroid_count(platform),
+                    other = platforms.other_entities(platform),
+                }
+            end
+            local text = helpers.table_to_json(list)
+            if event.player_index and game.get_player(event.player_index) then
+                game.get_player(event.player_index).print(text)
+            elseif rcon then
+                rcon.print(text)
+            end
+        end)
+        if not ok then
+            log(string.format("[%s] -platforms failed: %s", MOD, tostring(err)))
+        end
+    end
+)
+
 -- One entry point for everything above: the node sends {"fn": "...", "args": [...]}
 -- and gets the result back as JSON. A single command rather than one per call, so
 -- the surface the node depends on is one name that does not move.
