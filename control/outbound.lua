@@ -43,7 +43,10 @@ local function push(kind, payload)
     if not ok then
         return
     end
-    pcall(function() helpers.send_udp(UDP_PORT, json) end)
+    local sent, err = pcall(function() helpers.send_udp(UDP_PORT, json) end)
+    if not sent then
+        log(string.format("[%s] udp %s failed: %s", state.instance(), kind, tostring(err)))
+    end
 end
 
 -- Every platform's serialized position. `distance` is the fractional position along the
@@ -146,11 +149,37 @@ local function tick_audit()
     if not state.known() then
         return
     end
-    push("platform_audit", {
-        instance = state.instance(),
-        tick = game.tick,
-        totals = platform_api.audit(),
-    })
+
+    -- audit() returns {instance, tick, totals}; the push needs the totals table itself, not
+    -- the wrapper. That mismatch was why the scheduled audit never reached the manager.
+    local audit = platform_api.audit()
+    local totals = audit and audit.totals or {}
+    local keys = {}
+    for key in pairs(totals) do
+        keys[#keys + 1] = key
+    end
+    table.sort(keys)
+
+    -- A full fleet's totals are larger than one comfortable datagram, so this is paged the
+    -- same way a hub dump is. The manager reassembles by instance and chunk count.
+    local per = 40
+    local chunks = math.max(1, math.ceil(#keys / per))
+    for chunk = 1, chunks do
+        local page = {}
+        for index = (chunk - 1) * per + 1, math.min(chunk * per, #keys) do
+            page[keys[index]] = totals[keys[index]]
+        end
+
+        log(string.format("[%s] udp platform_audit %d/%d (%d stacks)",
+            state.instance(), chunk, chunks, #page))
+        push("platform_audit", {
+            instance = state.instance(),
+            tick = game.tick,
+            totals = page,
+            chunk = chunk,
+            chunks = chunks,
+        })
+    end
 end
 
 -- Research progress every second, only when it moved. The delta is what the others add;
