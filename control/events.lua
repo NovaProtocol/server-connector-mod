@@ -52,10 +52,6 @@ script.on_nth_tick(60, function()
     -- it, so the list is refreshed (and shown or hidden) on this pass.
     guard("the server map", map.tick)
 
-    -- Outbound facts go to stdout, once a second: the report, the platforms and the queued
-    -- events. This is a log line, not a script command; it has no effect on the game.
-    guard("outbound", outbound.tick)
-
     -- Research progress is pushed over UDP only when it moved, once a second.
     guard("outbound research", outbound.tick_research)
 end)
