@@ -174,6 +174,7 @@ local calls = {
     -- The platform helper surface (platform_api). The node and the manager call these
     -- directly for a manual read, a full dump or a computed difference.
     platform_meta = platform_api.meta,
+    platform_meta_page = platform_api.meta_page,
     platform_hub_dump = platform_api.dump,
     platform_audit = platform_api.audit,
     platform_cargo = platform_api.cargo,

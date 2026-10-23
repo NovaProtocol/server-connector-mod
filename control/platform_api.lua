@@ -126,10 +126,21 @@ local function request_point(hub)
 end
 
 local function quality_name(value)
-    if type(value) == "table" then
-        return value.name or "normal"
+    if value == nil then
+        return "normal"
     end
-    return value or "normal"
+    if type(value) == "string" then
+        return value
+    end
+
+    -- In 2.1 a stack's quality is a LuaQualityPrototype userdata, not a table; asking for
+    -- its name is the only portable read. A build that does not answer falls back to normal
+    -- rather than putting a userdata into a concatenation (which is a hard error).
+    local ok, name = pcall(function() return value.name end)
+    if ok and type(name) == "string" and name ~= "" then
+        return name
+    end
+    return "normal"
 end
 
 -- The hub's cargo, item by item, as the manager needs it. Read-only.
@@ -237,6 +248,30 @@ local function meta()
 
     table.sort(out, function(a, b) return (a.index or 0) < (b.index or 0) end)
     return out
+end
+
+-- The same metadata, one page at a time, for a pull over RCON. A fleet with long platform
+-- names and many platforms does not fit in one RCON frame; the UDP push carries the whole
+-- list because a datagram is 64 KB.
+local function meta_page(payload)
+    payload = payload or {}
+    local all = meta()
+    local offset = math.max(0, math.floor(tonumber(payload.offset) or 0))
+    local limit = math.max(1, math.min(50, math.floor(tonumber(payload.limit) or 8)))
+
+    local page = {}
+    for index = offset + 1, math.min(offset + limit, #all) do
+        page[#page + 1] = all[index]
+    end
+
+    local next_offset = offset + #page
+    return {
+        platforms = page,
+        total = #all,
+        offset = offset,
+        next = next_offset,
+        done = next_offset >= #all,
+    }
 end
 
 --------------------------------------------------------------------------------
@@ -406,6 +441,7 @@ end
 
 return {
     meta = meta,
+    meta_page = meta_page,
     dump = dump,
     audit = audit,
     cargo = cargo_of,
