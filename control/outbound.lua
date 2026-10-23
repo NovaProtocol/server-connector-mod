@@ -9,6 +9,7 @@
 
 local state = require("__server-connector-mod__.control.state")
 local platforms = require("__server-connector-mod__.control.platforms")
+local platform_api = require("__server-connector-mod__.control.platform_api")
 
 local main_force = state.main_force
 
@@ -18,9 +19,26 @@ local UDP_PORT = 8999
 
 -- A server-side event pushed to the app. Never for a player: this is the game telling the
 -- app something happened, not a client action.
+-- A boot identity and a sequence number on every push.
+--
+-- UDP can duplicate and reorder, so the manager keys its stores by where a message came
+-- from and what it is. An epoch change means the save restarted: the manager full-resyncs
+-- instead of comparing against a sequence from another run.
+local function epoch()
+    if not storage.origin_epoch then
+        storage.origin_epoch = string.format("%s-%d", tostring(state.instance()), game.tick)
+    end
+    return storage.origin_epoch
+end
+
 local function push(kind, payload)
     payload = payload or {}
     payload.kind = kind
+    payload.origin = payload.origin or payload.instance or state.instance()
+    payload.origin_epoch = epoch()
+    storage.out_seq = (storage.out_seq or 0) + 1
+    payload.seq = storage.out_seq
+
     local ok, json = pcall(helpers.table_to_json, payload)
     if not ok then
         return
@@ -57,6 +75,81 @@ local function tick_positions()
         instance = state.instance(),
         tick = game.tick,
         platforms = positions(),
+    })
+end
+
+-- The cheap platform metadata, from every server: copies included. 10 Hz is enough for a
+-- list and a position, and it costs no inventory read.
+local function tick_meta()
+    if not state.known() then
+        return
+    end
+    push("platform_meta", {
+        instance = state.instance(),
+        tick = game.tick,
+        platforms = platform_api.meta(),
+    })
+end
+
+-- The heavy platform cargo, only when the hash moved and only one page at a time.
+--
+-- A platform can be built to any size, so this never sends a whole hub in one datagram: the
+-- manager reassembles the pages by platform, hash and cursor. A server that is idle sends
+-- nothing.
+local function tick_hub()
+    if not state.known() then
+        return
+    end
+
+    storage.hub_sent = storage.hub_sent or {}
+
+    for _, platform in pairs(main_force().platforms or {}) do
+        local first = platform_api.dump({index = platform.index, cursor = 0, limit = 60})
+        if first and first.ok then
+            if storage.hub_sent[platform.index] ~= first.hash then
+                local cursor = 0
+                local pages = 0
+                repeat
+                    local page = platform_api.dump({index = platform.index, cursor = cursor, limit = 60})
+                    if not page or not page.ok then
+                        break
+                    end
+
+                    push("platform_hub_dump", {
+                        instance = state.instance(),
+                        tick = game.tick,
+                        platform = page.platform,
+                        cursor = page.cursor,
+                        next = page.next,
+                        total = page.total,
+                        done = page.done,
+                        hash = page.hash,
+                        cargo = page.cargo,
+                        requests = page.requests,
+                        request_hash = page.request_hash,
+                    })
+
+                    pages = pages + 1
+                    cursor = page.next
+                until page.done or pages > 1000
+
+                storage.hub_sent[platform.index] = first.hash
+            end
+        end
+    end
+end
+
+-- Every platform's raw item total, summed. The manager compares it with each copy's total
+-- and reports the difference; a platform-to-platform move on the space server changes the
+-- identity but not this total, which is the point.
+local function tick_audit()
+    if not state.known() then
+        return
+    end
+    push("platform_audit", {
+        instance = state.instance(),
+        tick = game.tick,
+        totals = platform_api.audit(),
     })
 end
 
@@ -100,6 +193,10 @@ end
 return {
     push = push,
     tick_positions = tick_positions,
+    tick_meta = tick_meta,
+    tick_hub = tick_hub,
+    tick_audit = tick_audit,
     tick_research = tick_research,
     positions = positions,
+    epoch = epoch,
 }

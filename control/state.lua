@@ -10,7 +10,7 @@
 -- and two copies of the state helpers would be two different beliefs.
 
 local MOD = "server-connector"
-local SCHEMA = 2
+local SCHEMA = 3
 
 --------------------------------------------------------------------------------
 -- storage
@@ -25,6 +25,8 @@ local function ensure_storage()
     storage.routed = storage.routed or {}       -- player name -> last surface routed from
     storage.anchored = storage.anchored or {}   -- player name -> the platform they belong on
     storage.cleared = storage.cleared or {}     -- surface name -> what was taken off it
+    storage.hub_sent = storage.hub_sent or {}   -- platform index -> the cargo hash last sent
+    storage.out_seq = storage.out_seq or 0      -- the sequence number of the last UDP push
 end
 
 --------------------------------------------------------------------------------
@@ -180,6 +182,9 @@ local function set_instance(id)
         storage.viewing = {}
         storage.routed = {}
         storage.anchored = {}
+        storage.hub_sent = {}
+        storage.out_seq = 0
+        storage.origin_epoch = nil
     end
     log("[" .. MOD .. "] instance=" .. tostring(id))
 end

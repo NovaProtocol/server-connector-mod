@@ -60,6 +60,20 @@ end)
 -- the space server only. This is a read and a localhost datagram, not a world change.
 script.on_nth_tick(6, function()
     guard("outbound platform positions", outbound.tick_positions)
+
+    -- Cheap metadata from every server, copies included: index, position, state, bays and
+    -- the request hash. No inventory is read here.
+    guard("outbound platform meta", outbound.tick_meta)
+end)
+
+-- The heavy hub cargo, only when it changed, and the aggregate audit. Both are reads plus
+-- one localhost datagram; neither changes the world.
+script.on_nth_tick(600, function()
+    guard("outbound platform hubs", outbound.tick_hub)
+end)
+
+script.on_nth_tick(3600, function()
+    guard("outbound platform audit", outbound.tick_audit)
 end)
 
 -- The speed this world is kept at, put back on the game as the world comes up. The game

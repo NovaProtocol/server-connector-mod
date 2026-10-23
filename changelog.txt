@@ -1,4 +1,27 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.35.0
+Date: 2026-10-23
+  Added:
+    - platform_meta(): the cheap platform call (identity, position, state, bays, request hash),
+      pushed at 10 Hz from every server, copies included.
+    - platform_hub_dump({index, cursor, limit}): the heavy call, paged so a platform of any
+      size never goes in one datagram; cargo and requests, with a hash and a done flag.
+    - platform_audit(): raw item totals summed across platforms, for the manager's drift report.
+    - apply_cargo_delta({platform, ops}) and apply_requests({platform, requests}): the only
+      mutations; the manager computes the difference, Lua applies it.
+    - Every UDP push now carries origin, origin_epoch and seq, so a save restart is visible to
+      the manager.
+  Changed:
+    - Cargo dumps are sent only when the hub hash changed (checked every 10 s); metadata is
+      the 10 Hz stream. The manager reassembles pages and does all diffing and fan-out.
+---------------------------------------------------------------------------------------------------
+Version: 0.34.0
+Date: 2026-10-22
+  Changed:
+    - No data path uses stdout/log any more. The mod is pure RCON (calls into the game) plus
+      localhost UDP (events, platform positions, research). The once-a-second report and
+      platform JSON on stdout is gone.
+---------------------------------------------------------------------------------------------------
 Version: 0.33.9
 Date: 2026-10-22
   Fixed:

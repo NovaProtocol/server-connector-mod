@@ -12,6 +12,7 @@ local state = require("__server-connector-mod__.control.state")
 local convert = require("__server-connector-mod__.control.convert")
 local server = require("__server-connector-mod__.control.server")
 local platforms = require("__server-connector-mod__.control.platforms")
+local platform_api = require("__server-connector-mod__.control.platform_api")
 local research = require("__server-connector-mod__.control.research")
 local map = require("__server-connector-mod__.control.map")
 
@@ -169,6 +170,16 @@ local calls = {
 
     -- What this server's platforms are (platforms.platforms).
     platforms = platforms.platforms,
+
+    -- The platform helper surface (platform_api). The node and the manager call these
+    -- directly for a manual read, a full dump or a computed difference.
+    platform_meta = platform_api.meta,
+    platform_hub_dump = platform_api.dump,
+    platform_audit = platform_api.audit,
+    platform_cargo = platform_api.cargo,
+    platform_requests = platform_api.requests,
+    apply_cargo_delta = platform_api.apply_cargo_delta,
+    apply_requests = platform_api.apply_requests,
 
     -- The creation call, tried rather than assumed (platforms.platform_api).
     platform_api = platforms.platform_api,
