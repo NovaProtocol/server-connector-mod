@@ -32,7 +32,7 @@ local function push(kind, payload)
     if not ok then
         return
     end
-    pcall(function() game.send_udp(UDP_PORT, json) end)
+    pcall(function() helpers.send_udp(UDP_PORT, json) end)
 end
 
 -- Every platform's serialized position, for the space server only. `distance` is the
