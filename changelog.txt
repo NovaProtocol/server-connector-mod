@@ -1,4 +1,12 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.35.14
+Date: 2026-10-23
+  Fixed:
+    - Copies are protected (destructible=false), and a protected platform survived
+      destroy(0) even though the call reported success. Removing a copy now clears
+      destructible on its hub and bays, cancels any earlier schedule and destroys on the
+      next tick, which is the pattern that worked in 0.35.6.
+---------------------------------------------------------------------------------------------------
 Version: 0.35.13
 Date: 2026-10-23
   Fixed:

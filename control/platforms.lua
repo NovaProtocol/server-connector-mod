@@ -243,6 +243,30 @@ local function ensure_bays(platform, count, layout)
     end
 end
 
+
+-- Remove a copy. The hub and bays are protected (destructible=false); a protected copy
+-- survives destroy(0), which looked like a successful call and left the platform in place.
+-- Make them destructible, cancel any earlier schedule and destroy on the next tick -- the
+-- pattern the 0.35.6 cleanup used and the one that actually removed them.
+local function destroy_copy(platform)
+    if not platform or not platform.valid then
+        return true
+    end
+    if platform.hub then
+        pcall(function() platform.hub.destructible = true end)
+    end
+    for _, bay in ipairs(bay_list(platform) or {}) do
+        pcall(function() bay.destructible = true end)
+    end
+    pcall(function() platform.cancel_deletion() end)
+    local ok, err = pcall(function() platform.destroy(1) end)
+    if not ok then
+        log(string.format("[%s] could not destroy the copy of %s: %s",
+            instance(), platform.name, tostring(err)))
+    end
+    return ok
+end
+
 -- Make, keep or remove this server's copies of the fleet's platforms.
 --
 -- An order, not a decision: the list comes from the manager, which is the only thing
@@ -338,12 +362,11 @@ local function mirror_platforms(entries)
         local keep = by_name[name] and #by_name[name] or 0
         for index = keep + 1, #group do
             local platform = group[index]
-            local destroyed, err = pcall(function() platform.destroy(0) end)
-            if destroyed then
+            if destroy_copy(platform) then
                 removed[#removed + 1] = name
                 log(string.format("[%s] %s is gone from the fleet, removing the copy", instance(), name))
             else
-                log(string.format("[%s] could not remove the copy of %s: %s", instance(), name, tostring(err)))
+                log(string.format("[%s] could not remove the copy of %s", instance(), name))
             end
         end
         if keep == 0 then
@@ -362,11 +385,7 @@ local function mirror_platforms(entries)
                 -- missing bay, a player's building -- is repaired in place below; destroying
                 -- and recreating on every difference left two sets of copies on the server.
                 log(string.format("[%s] rebuilding the copy of %s: it has no hub", instance(), name))
-                local destroyed, err = pcall(function() platform.destroy(0) end)
-                if not destroyed then
-                    log(string.format("[%s] could not remove the broken copy of %s: %s",
-                        instance(), name, tostring(err)))
-                end
+                destroy_copy(platform)
                 platform = nil
             end
 
