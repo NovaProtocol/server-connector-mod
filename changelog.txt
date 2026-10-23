@@ -1,4 +1,11 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.35.11
+Date: 2026-10-24
+  Fixed:
+    - The platform metadata read a cargo_bays key the platform class does not have, so
+      every bay count was nil. It is counted from the cargo-bay entities on the platform
+      surface, and the platform page now shows it.
+---------------------------------------------------------------------------------------------------
 Version: 0.35.10
 Date: 2026-10-24
   Fixed:

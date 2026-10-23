@@ -238,9 +238,18 @@ end
 --------------------------------------------------------------------------------
 
 local function count_bays(platform)
-    local ok, bays = pcall(function() return #platform.cargo_bays end)
-    if ok and type(bays) == "number" then
-        return bays
+    -- LuaSpacePlatform has no cargo_bays key; the bays are entities on its surface. The
+    -- old read was wrapped in pcall and returned nil every time, so the manager never saw
+    -- a bay count.
+    local surface = platform.surface
+    if not surface then
+        return nil
+    end
+    local ok, bays = pcall(function()
+        return surface.find_entities_filtered{name = "cargo-bay"}
+    end)
+    if ok and bays then
+        return #bays
     end
     return nil
 end
