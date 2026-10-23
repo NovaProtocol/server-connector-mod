@@ -52,14 +52,14 @@ playing, which is why the node talks to this mod through its own command instead
 | `delete_surface(name)` | Removes one custom surface. Refuses the primary and anybody connected. |
 | `surfaces()` | What surfaces this world has, and which of them are platforms. |
 | `settle()` | Brings the world into line: crash site, surfaces, spawn point. Nobody connected only. |
-| `mirror_platforms(entries)` | Makes, keeps or removes this server's copies of the fleet's platforms. Nobody connected only. |
+| `mirror_platforms(entries)` | Makes, keeps or removes this server's copies of the fleet's platforms: hub, matching cargo bays, no asteroids. Called over RCON, nobody connected only. |
 | `platforms()` | What this server's platforms are. Read-only. |
-| `platform_meta()` | Cheap platform metadata: index, name, state, position fields, bay count and the request hash. No inventory. |
+| `platform_meta()` | Cheap platform metadata: index, name, state, position fields, cargo-bay count from the surface and the request hash. No inventory. |
 | `platform_hub_dump({index, cursor, limit})` | One page of a hub's cargo and requests, with `next`, `total`, `hash` and `done`. |
 | `platform_cargo(index)` / `platform_requests(index)` | The unpaged hub read, for a manual call. |
 | `platform_audit()` | Raw item totals summed across every platform on this server. |
-| `apply_cargo_delta({platform, ops})` | Applies a manager-computed cargo difference; positive inserts, negative removes. |
-| `apply_requests({platform, requests})` | Replaces a copy's requests; refused while anybody is connected. |
+| `apply_cargo_delta({platform, ordinal, ops})` | Applies a manager-computed cargo difference; positive inserts, negative removes. `ordinal` selects among platforms that share a name. |
+| `apply_requests({platform, ordinal, requests})` | Replaces a copy's requests, selected the same way; refused while anybody is connected. |
 | `platform_api()` | Which platform calls and names this build actually has. Read-only. |
 | `surface_api()` | Which surface calls this build actually has. |
 | `report()` | Instance, tick, bodies, speed, connected players, destinations, surfaces and unlocked planets. |
