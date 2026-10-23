@@ -1,4 +1,12 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.35.13
+Date: 2026-10-23
+  Fixed:
+    - A copy that differs only in bay layout or extra entities is repaired in place instead
+      of being destroyed and recreated. The recreate path used destroy() without a deletion
+      argument, left the old copy on the server and made the copy count grow on every push.
+    - Removing a copy uses destroy(0), and a failed removal is logged with the error.
+---------------------------------------------------------------------------------------------------
 Version: 0.35.12
 Date: 2026-10-23
   Changed:

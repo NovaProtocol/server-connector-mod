@@ -338,11 +338,12 @@ local function mirror_platforms(entries)
         local keep = by_name[name] and #by_name[name] or 0
         for index = keep + 1, #group do
             local platform = group[index]
-            if pcall(function() platform.destroy() end) then
+            local destroyed, err = pcall(function() platform.destroy(0) end)
+            if destroyed then
                 removed[#removed + 1] = name
                 log(string.format("[%s] %s is gone from the fleet, removing the copy", instance(), name))
             else
-                log(string.format("[%s] could not remove the copy of %s", instance(), name))
+                log(string.format("[%s] could not remove the copy of %s: %s", instance(), name, tostring(err)))
             end
         end
         if keep == 0 then
@@ -356,24 +357,17 @@ local function mirror_platforms(entries)
             local entry = group[index]
             local platform = have[index]
 
-            if platform then
-                -- A copy is the hub and bays the fleet says, nothing else. If a player has
-                -- built on it, deconstructed a bay or moved one, the copy is not the ship
-                -- any more; rebuild it rather than carrying the difference until someone
-                -- notices. This runs only while nobody is connected.
-                local wrong = not platform.hub or other_entities(platform) ~= 0
-                if not wrong and entry.layout and entry.layout ~= "" then
-                    wrong = layout_of(platform) ~= entry.layout
-                elseif not wrong and entry.bays ~= nil then
-                    wrong = bay_count(platform) ~= math.floor(tonumber(entry.bays) or 0)
+            if platform and (not platform.valid or not platform.hub) then
+                -- A copy without its hub cannot be repaired. Everything else -- a moved or
+                -- missing bay, a player's building -- is repaired in place below; destroying
+                -- and recreating on every difference left two sets of copies on the server.
+                log(string.format("[%s] rebuilding the copy of %s: it has no hub", instance(), name))
+                local destroyed, err = pcall(function() platform.destroy(0) end)
+                if not destroyed then
+                    log(string.format("[%s] could not remove the broken copy of %s: %s",
+                        instance(), name, tostring(err)))
                 end
-
-                if wrong then
-                    log(string.format("[%s] rebuilding the copy of %s: it no longer matches the ship",
-                        instance(), name))
-                    pcall(function() platform.destroy() end)
-                    platform = nil
-                end
+                platform = nil
             end
 
             if platform then
