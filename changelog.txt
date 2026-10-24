@@ -1,4 +1,11 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.27
+Date: 2026-10-24
+  Added:
+    - on_space_platform_created reports a new starter-pack platform to the manager directly,
+      and on_rocket_launched rescans for any platform the fleet list does not contain.
+      This replaces waiting for the planet mirror to discover it.
+---------------------------------------------------------------------------------------------------
 Version: 0.36.26
 Date: 2026-10-24
   Fixed:

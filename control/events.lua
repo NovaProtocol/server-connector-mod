@@ -175,6 +175,54 @@ script.on_event(defines.events.on_space_platform_mined_entity, function(event)
     announce_platform_layout(event, "a platform mine")
 end)
 
+-- A starter pack creates a platform immediately, and that platform must be the real
+-- one on the space server. Handling creation directly avoids waiting for the planet
+-- mirror to notice an unknown hub, which was the path that kept losing it.
+local function report_new_platform(platform)
+    if instance() == "space" then
+        return
+    end
+    if not platform or not platform.valid then
+        return
+    end
+    local location = platform.space_location and platform.space_location.name or instance()
+    outbound.push("platform_create", {
+        instance = instance(),
+        name = platform.name,
+        location = location,
+        tick = game.tick,
+    })
+end
+
+if defines.events.on_space_platform_created then
+    script.on_event(defines.events.on_space_platform_created, function(event)
+        guard("a platform creation", function()
+            report_new_platform(event.platform)
+        end)
+    end)
+end
+
+-- A backstop for a build that does not fire on_space_platform_created: a rocket launch
+-- re-checks this world's platforms against the fleet list and reports anything new.
+script.on_event(defines.events.on_rocket_launched, function()
+    guard("a rocket launch", function()
+        if instance() == "space" then
+            return
+        end
+        local known = {}
+        for _, entry in pairs(storage.fleet_platforms or {}) do
+            if type(entry) == "table" and entry.name then
+                known[entry.name] = true
+            end
+        end
+        for _, platform in pairs(state.main_force().platforms or {}) do
+            if not known[platform.name] then
+                report_new_platform(platform)
+            end
+        end
+    end)
+end)
+
 script.on_event(defines.events.on_space_platform_changed_state, function(event)
     guard("a platform state change", function()
         local platform = event.platform

@@ -336,6 +336,7 @@ local function mirror_platforms(entries)
     end
 
     entries = entries or {}
+    storage.fleet_platforms = entries
 
     -- Either an array or a table keyed by something else: the JSON is decoded by the
     -- game's own helper, and which shape comes back is the helper's business, not
