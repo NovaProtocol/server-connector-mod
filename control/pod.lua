@@ -347,6 +347,33 @@ local function test(kind, platform_name, item, count)
         return result
     end
 
+    if kind == "rocket_to_platform" then
+        local silo = find_rocket_silo()
+        if not silo then
+            return {ok = false, error = "no rocket silo on this planet"}
+        end
+        local rocket = silo.get_inventory(defines.inventory.rocket_silo_rocket)
+        if not rocket then
+            return {ok = false, error = "the silo has no rocket inventory"}
+        end
+        local inserted = rocket.insert{name = item, count = count, quality = "normal"} or 0
+        if inserted < count then
+            return {ok = false, error = "the silo rocket did not accept the cargo"}
+        end
+        local hatch, hatches = available_hatch(hub)
+        if not hatch then
+            return {ok = false, error = "no free input hatch on the copy hub (" .. tostring(hatches) .. " hatches)"}
+        end
+        local destination = {type = defines.cargo_destination.station, station = hub, hatch = hatch}
+        local launched, result = pcall(function() return silo.launch_rocket(destination) end)
+        log(string.format("[%s] podtest rocket_to_platform %s x%d on %s: %s %s",
+            instance(), item, count, platform_name, tostring(launched), tostring(result)))
+        if not launched or result == false then
+            return {ok = false, error = "launch_rocket refused: " .. tostring(result)}
+        end
+        return {ok = true, status = silo.rocket_silo_status}
+    end
+
     if kind == "synthetic_add" or kind == "synthetic_remove" then
         local direction = kind == "synthetic_add" and "add" or "remove"
         local desc = descriptor(platform)

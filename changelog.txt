@@ -1,4 +1,10 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.8
+Date: 2026-10-24
+  Added:
+    - rocket_to_platform pod test: load the silo rocket and launch it at the copy hub with
+      rocket_silo.launch_rocket, which is the real planet-to-platform path.
+---------------------------------------------------------------------------------------------------
 Version: 0.36.7
 Date: 2026-10-24
   Changed:
