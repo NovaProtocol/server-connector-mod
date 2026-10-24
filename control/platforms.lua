@@ -12,6 +12,7 @@
 -- Required as "__server-connector-mod__.control.platforms".
 
 local state = require("__server-connector-mod__.control.state")
+local outbound = require("__server-connector-mod__.control.outbound")
 
 local MOD = state.MOD
 local known = state.known
@@ -391,17 +392,54 @@ local function mirror_platforms(entries)
     -- duplicate name keeps only as many copies as the fleet has of that name.
     for name, group in pairs(existing) do
         local keep = by_name[name] and #by_name[name] or 0
-        for index = keep + 1, #group do
-            local platform = group[index]
-            if destroy_copy(platform) then
-                removed[#removed + 1] = name
-                log(string.format("[%s] %s is gone from the fleet, removing the copy", instance(), name))
-            else
-                log(string.format("[%s] could not remove the copy of %s", instance(), name))
-            end
-        end
+
         if keep == 0 then
-            existing[name] = nil
+            -- A platform here that the fleet list does not know about is either a stale
+            -- copy or a real one a player has just made by launching a starter pack. A copy
+            -- is protected; a native platform is not. Ask the manager to have the space
+            -- server create it, and keep it until the fleet list contains it. Deleting it
+            -- is how a starter pack launched on a planet used to vanish.
+            for _, platform in ipairs(group) do
+                if platform.hub and not copy_is_protected(platform) then
+                    local location = platform.space_location and platform.space_location.name or instance()
+                    outbound.push("platform_create", {
+                        instance = instance(),
+                        name = name,
+                        location = location,
+                        tick = game.tick,
+                    })
+                    kept[#kept + 1] = name
+                    log(string.format("[%s] asking the space server to adopt %s", instance(), name))
+                elseif destroy_copy(platform) then
+                    removed[#removed + 1] = name
+                    log(string.format("[%s] %s is gone from the fleet, removing the copy", instance(), name))
+                else
+                    log(string.format("[%s] could not remove the copy of %s", instance(), name))
+                end
+            end
+            if keep == 0 then
+                existing[name] = nil
+            end
+        else
+            for index = keep + 1, #group do
+                local platform = group[index]
+                if platform.hub and not copy_is_protected(platform) then
+                    local location = platform.space_location and platform.space_location.name or instance()
+                    outbound.push("platform_create", {
+                        instance = instance(),
+                        name = name,
+                        location = location,
+                        tick = game.tick,
+                    })
+                    kept[#kept + 1] = name
+                    log(string.format("[%s] asking the space server to adopt %s", instance(), name))
+                elseif destroy_copy(platform) then
+                    removed[#removed + 1] = name
+                    log(string.format("[%s] %s has no place in the fleet, removing the extra copy", instance(), name))
+                else
+                    log(string.format("[%s] could not remove the extra copy of %s", instance(), name))
+                end
+            end
         end
     end
 
@@ -535,6 +573,51 @@ local function mirror_platforms(entries)
         kept = table.concat(kept, ","),
         removed = table.concat(removed, ","),
     }
+end
+
+-- A real platform, created where the platforms really live.
+--
+-- The planet mirror asks for this when a player launches a starter pack: the native
+-- platform exists in the planet's save, but the space server is the authority and has to
+-- create the real one. Idempotent by name, and refused while anybody is connected because
+-- creating a platform under a client is a world change the client never sees.
+local function create_platform(entry)
+    if instance() ~= "space" then
+        return {ok = false, error = "only the space server creates real platforms"}
+    end
+    if type(entry) ~= "table" or type(entry.name) ~= "string" or entry.name == "" then
+        return {ok = false, error = "a platform needs a name"}
+    end
+    if not empty() then
+        return {ok = false, skipped = "somebody is connected"}
+    end
+
+    local force = main_force()
+    for _, platform in pairs(force.platforms or {}) do
+        if platform.name == entry.name then
+            return {ok = true, name = entry.name, existed = true}
+        end
+    end
+
+    local planet = entry.location
+    if type(planet) ~= "string" or planet == "" or planet == "space" then
+        planet = "nauvis"
+    end
+
+    local ok, created = pcall(function()
+        return force.create_space_platform{
+            planet = planet,
+            name = entry.name,
+            starter_pack = "space-platform-starter-pack",
+        }
+    end)
+    if not ok or not created then
+        return {ok = false, error = tostring(created)}
+    end
+
+    local hub = pcall(function() created.apply_starter_pack(true) end)
+    log(string.format("[%s] created platform %s at %s", instance(), entry.name, planet))
+    return {ok = true, name = entry.name, location = planet, hub = hub}
 end
 
 -- What this server's platforms are.
@@ -704,6 +787,7 @@ end
 
 return {
     mirror_platforms = mirror_platforms,
+    create_platform = create_platform,
     platforms = platforms,
     platform_api = platform_api,
     surface_api = surface_api,

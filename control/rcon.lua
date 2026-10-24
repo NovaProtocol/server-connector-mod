@@ -169,6 +169,10 @@ local calls = {
     -- (platforms.mirror_platforms).
     mirror_platforms = platforms.mirror_platforms,
 
+    -- Create a real platform on the space server, from a starter pack launched elsewhere
+    -- (platforms.create_platform).
+    platform_create = platforms.create_platform,
+
     -- What this server's platforms are (platforms.platforms).
     platforms = platforms.platforms,
 

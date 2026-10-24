@@ -1,4 +1,13 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.22
+Date: 2026-10-24
+  Fixed:
+    - A starter pack launched on a planet no longer deletes the platform the game creates
+      there. A native platform the fleet list does not know is kept and reported; the
+      manager has the space server create the real platform, and the next mirror pass turns
+      the planet's platform into its protected copy. Previously the planet mirror treated
+      it as a stale copy and destroyed it.
+---------------------------------------------------------------------------------------------------
 Version: 0.36.21
 Date: 2026-10-24
   Fixed:
