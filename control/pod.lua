@@ -25,6 +25,7 @@
 
 local state = require("__server-connector-mod__.control.state")
 local outbound = require("__server-connector-mod__.control.outbound")
+local platform_api = require("__server-connector-mod__.control.platform_api")
 
 local known = state.known
 local instance = state.instance
@@ -173,7 +174,8 @@ local function started(event)
 
     -- A planet landing pad or rocket silo: the pod is on its way to a copy hub.
     local destination = pod.cargo_pod_destination
-    local station = destination and destination.type == "station" and destination.station or nil
+    local station = destination and destination.type == defines.cargo_destination.station
+        and destination.station or nil
     if is_copy_hub(station) then
         local platform = platform_of(station)
         local cargo = pod_cargo(pod)
@@ -285,6 +287,33 @@ local function test(kind, platform_name, item, count)
         return {ok = false, error = "the copy has no hub"}
     end
 
+    if kind == "report" then
+        local pad = find_landing_pad()
+        local pad_cargo = {}
+        if pad then
+            local ok, inventory = pcall(function()
+                return pad.get_inventory(defines.inventory.cargo_landing_pad_main)
+            end)
+            if ok and inventory then
+                for index = 1, #inventory do
+                    local stack = inventory[index]
+                    if stack and stack.valid_for_read and stack.count > 0 then
+                        pad_cargo[#pad_cargo + 1] = {
+                            item = stack.name,
+                            quality = stack.quality and stack.quality.name or "normal",
+                            count = stack.count,
+                        }
+                    end
+                end
+            end
+        end
+        local copy = platform_api.cargo(platform)
+        local result = {ok = true, copy = copy, pad = pad_cargo, pad_found = pad ~= nil}
+        log(string.format("[%s] podtest report %s: %s", instance(), platform_name,
+            helpers.table_to_json(result)))
+        return result
+    end
+
     if kind == "synthetic_add" or kind == "synthetic_remove" then
         local direction = kind == "synthetic_add" and "add" or "remove"
         local desc = descriptor(platform)
@@ -312,19 +341,25 @@ local function test(kind, platform_name, item, count)
         if pod and insert_cargo(pod, item, count) then
             local hatch = hub.cargo_hatches and hub.cargo_hatches[1]
             if hatch then
-                pod.cargo_pod_destination = {type = "station", station = hub, hatch = hatch}
+                pod.cargo_pod_destination = {type = defines.cargo_destination.station, station = hub, hatch = hatch}
             else
-                pod.cargo_pod_destination = {type = "station", station = hub}
+                pod.cargo_pod_destination = {type = defines.cargo_destination.station, station = hub}
             end
         end
     elseif kind == "platform_to_planet" then
         pod = hub.create_cargo_pod{}
-        if pod and insert_cargo(pod, item, count) then
+        if pod then
+            local inventory = platform_api.hub_inventory(hub)
+            local removed = inventory and inventory.remove{name = item, count = count, quality = "normal"} or 0
+            if removed < count then
+                return {ok = false, error = "the copy hub does not hold enough " .. item}
+            end
+            insert_cargo(pod, item, count)
             local hatch = pad.cargo_hatches and pad.cargo_hatches[1]
             if hatch then
-                pod.cargo_pod_destination = {type = "station", station = pad, hatch = hatch}
+                pod.cargo_pod_destination = {type = defines.cargo_destination.station, station = pad, hatch = hatch}
             else
-                pod.cargo_pod_destination = {type = "station", station = pad}
+                pod.cargo_pod_destination = {type = defines.cargo_destination.station, station = pad}
             end
         end
     else

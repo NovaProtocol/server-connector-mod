@@ -1,4 +1,12 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.1
+Date: 2026-10-24
+  Fixed:
+    - Cargo pod destinations use defines.cargo_destination.station, not the string "station";
+      the string made the game refuse the destination.
+    - platform_to_planet test now removes the cargo from the copy hub first, so the copy and
+      the real hub both decrease; report mode shows both sides.
+---------------------------------------------------------------------------------------------------
 Version: 0.36.0
 Date: 2026-10-24
   Added:
