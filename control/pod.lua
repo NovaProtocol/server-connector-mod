@@ -251,6 +251,25 @@ local function find_landing_pad()
     return nil
 end
 
+local function available_hatch(entity)
+    local ok, hatches = pcall(function() return entity.cargo_hatches end)
+    if not ok or not hatches then
+        return nil, 0
+    end
+    local count = #hatches
+    for _, hatch in ipairs(hatches) do
+        local valid, reserved, busy, input = false, true, true, false
+        pcall(function() valid = hatch.valid end)
+        pcall(function() reserved = hatch.reserved end)
+        pcall(function() busy = hatch.busy end)
+        pcall(function() input = hatch.is_input_compatible end)
+        if valid and not reserved and not busy and input then
+            return hatch, count
+        end
+    end
+    return nil, count
+end
+
 local function find_rocket_silo()
     local surface = game.surfaces[instance()]
     if not surface then
@@ -357,11 +376,11 @@ local function test(kind, platform_name, item, count)
     if kind == "planet_to_platform" then
         pod = silo.create_cargo_pod{}
         if pod and insert_cargo(pod, item, count) then
-            local hatch = hub.cargo_hatches and hub.cargo_hatches[1]
+            local hatch, hatches = available_hatch(hub)
             if hatch then
                 pod.cargo_pod_destination = {type = defines.cargo_destination.station, station = hub, hatch = hatch}
             else
-                pod.cargo_pod_destination = {type = defines.cargo_destination.station, station = hub}
+                return {ok = false, error = "no free input hatch on the copy hub (" .. tostring(hatches) .. " hatches)"}
             end
         end
     elseif kind == "platform_to_planet" then
@@ -373,11 +392,11 @@ local function test(kind, platform_name, item, count)
                 return {ok = false, error = "the copy hub does not hold enough " .. item}
             end
             insert_cargo(pod, item, count)
-            local hatch = pad.cargo_hatches and pad.cargo_hatches[1]
+            local hatch, hatches = available_hatch(pad)
             if hatch then
                 pod.cargo_pod_destination = {type = defines.cargo_destination.station, station = pad, hatch = hatch}
             else
-                pod.cargo_pod_destination = {type = defines.cargo_destination.station, station = pad}
+                return {ok = false, error = "no free input hatch on the landing pad (" .. tostring(hatches) .. " hatches)"}
             end
         end
     else

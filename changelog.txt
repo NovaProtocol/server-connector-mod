@@ -1,4 +1,10 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.4
+Date: 2026-10-24
+  Fixed:
+    - The pod test picks an input-compatible, unreserved, non-busy cargo hatch. The first
+      hub hatch was reserved and the game refused it; the copy hub exposes 33.
+---------------------------------------------------------------------------------------------------
 Version: 0.36.3
 Date: 2026-10-24
   Fixed:
