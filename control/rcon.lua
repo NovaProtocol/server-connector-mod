@@ -173,6 +173,9 @@ local calls = {
     -- (platforms.create_platform).
     platform_create = platforms.create_platform,
 
+    -- Report an existing platform for adoption, the same datagram the rocket handler sends.
+    platform_report = platforms.report_platform,
+
     -- What this server's platforms are (platforms.platforms).
     platforms = platforms.platforms,
 

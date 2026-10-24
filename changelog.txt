@@ -1,4 +1,10 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.31
+Date: 2026-10-24
+  Added:
+    - platform_report, the same adoption datagram the rocket handler sends, callable over
+      RCON so the outbound/manager path can be tested without /c UDP.
+---------------------------------------------------------------------------------------------------
 Version: 0.36.30
 Date: 2026-10-24
   Added:

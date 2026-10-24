@@ -625,6 +625,25 @@ local function create_platform(entry)
     return {ok = true, name = entry.name, location = planet, hub = hub}
 end
 
+-- Report one existing platform to the manager for adoption. The same outbound datagram the
+-- rocket/creation handlers send, exposed for an operator test without /c UDP.
+local function report_platform(name)
+    for _, platform in pairs(main_force().platforms or {}) do
+        if platform.name == name then
+            local outbound = require("__server-connector-mod__.control.outbound")
+            local location = platform.space_location and platform.space_location.name or instance()
+            outbound.push("platform_create", {
+                instance = instance(),
+                name = name,
+                location = location,
+                tick = game.tick,
+            })
+            return {ok = true, name = name, location = location}
+        end
+    end
+    return {ok = false, error = "no such platform: " .. tostring(name)}
+end
+
 -- What this server's platforms are.
 --
 -- Read-only. Every field here is one the runtime docs list for LuaSpacePlatform or its
@@ -793,6 +812,7 @@ end
 return {
     mirror_platforms = mirror_platforms,
     create_platform = create_platform,
+    report_platform = report_platform,
     platforms = platforms,
     platform_api = platform_api,
     surface_api = surface_api,
