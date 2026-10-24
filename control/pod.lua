@@ -383,6 +383,28 @@ local function test(kind, platform_name, item, count)
         return {ok = true, status = silo.rocket_silo_status}
     end
 
+    if kind == "cleanup" then
+        local units = {373150022, 373150164, 373151285, 373151550, 373151598}
+        local wanted = {}
+        for _, unit in ipairs(units) do wanted[unit] = true end
+        local destroyed = {}
+        local surface = game.surfaces[instance()]
+        if surface then
+            local ok, pods = pcall(function()
+                return surface.find_entities_filtered{type = "cargo-pod"}
+            end)
+            for _, entity in ipairs((ok and pods) or {}) do
+                if entity.valid and wanted[entity.unit_number] then
+                    destroyed[#destroyed + 1] = entity.unit_number
+                    pcall(function() entity.destroy() end)
+                end
+            end
+        end
+        log(string.format("[%s] podtest cleanup destroyed %s", instance(),
+            helpers.table_to_json(destroyed)))
+        return {ok = true, destroyed = destroyed}
+    end
+
     if kind == "synthetic_add" or kind == "synthetic_remove" then
         local direction = kind == "synthetic_add" and "add" or "remove"
         local desc = descriptor(platform)
