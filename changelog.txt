@@ -1,4 +1,10 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.2
+Date: 2026-10-24
+  Added:
+    - The pod test reports the created pod's state and the hub/landing-pad cargo hatch counts, so a
+      pod that does not launch can be diagnosed.
+---------------------------------------------------------------------------------------------------
 Version: 0.36.1
 Date: 2026-10-24
   Fixed:

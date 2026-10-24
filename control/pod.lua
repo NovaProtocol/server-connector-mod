@@ -369,9 +369,21 @@ local function test(kind, platform_name, item, count)
     if not pod then
         return {ok = false, error = "the game did not create a cargo pod"}
     end
-    log(string.format("[%s] podtest %s %s x%d on %s, pod %s", instance(), kind, item, count,
-        platform_name, tostring(pod.unit_number)))
-    return {ok = true, pod = pod.unit_number}
+    local hub_hatches = hub.cargo_hatches and #hub.cargo_hatches or -1
+    local pad_hatches = pad.cargo_hatches and #pad.cargo_hatches or -1
+    local destination = nil
+    pcall(function() destination = pod.cargo_pod_destination end)
+    log(string.format("[%s] podtest %s %s x%d on %s, pod %s state %s hub_hatches %d pad_hatches %d",
+        instance(), kind, item, count, platform_name, tostring(pod.unit_number),
+        tostring(pod.cargo_pod_state), hub_hatches, pad_hatches))
+    return {
+        ok = true,
+        pod = pod.unit_number,
+        state = pod.cargo_pod_state,
+        destination = destination,
+        hub_hatches = hub_hatches,
+        pad_hatches = pad_hatches,
+    }
 end
 
 return {
