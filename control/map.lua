@@ -10,9 +10,10 @@ local state = require("__server-connector-mod__.control.state")
 
 local FRAME = "server-connector-map"
 
--- The last topology a player's map was built from. A module table, not storage: GUIs are not
--- saved, so neither is what they were built from.
-local seen = {}
+-- The topology a player's map was built from is kept in storage, keyed by name. A module
+-- table is not saved: a joining client starts with an empty one on every map load and would
+-- rebuild the GUI while the server, whose Lua state persists, would not. That is two extra
+-- builds on the client, and the custom-GUI element counters in the desync report.
 
 -- The map is the chart view. There is no event for opening it (render_mode is read-only), so
 -- this is asked when the list is refreshed, and the frame is shown or hidden.
@@ -49,7 +50,7 @@ local function destroy(player)
     end
 end
 
-local function build(player)
+local function build(player, sig)
     destroy(player)
 
     -- No caption: a frame with a title bar is a window the player can drag. This is a fixed
@@ -82,7 +83,8 @@ local function build(player)
         flow.add{type = "label", caption = "No other servers."}
     end
 
-    seen[player.index] = signature()
+    storage.map_seen = storage.map_seen or {}
+    storage.map_seen[player.name] = sig
 end
 
 -- Build, rebuild or show/hide one player's map.
@@ -96,9 +98,11 @@ local function refresh(player)
         return
     end
 
+    local sig = signature()
     local frame = player.gui.screen[FRAME]
-    if not frame or seen[player.index] ~= signature() then
-        build(player)
+    local previous = storage.map_seen and storage.map_seen[player.name]
+    if not frame or previous ~= sig then
+        build(player, sig)
         frame = player.gui.screen[FRAME]
     end
 

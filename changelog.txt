@@ -1,4 +1,16 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.21
+Date: 2026-10-24
+  Fixed:
+    - The server-list GUI rebuild signature is stored in `storage` by player name instead
+      of a module table. A client's Lua state is recreated on every join, so its module
+      table was empty and it rebuilt the GUI on each join while the server's persisted.
+      That is the +18 custom-GUI element indices in the desync report.
+  Fleet:
+    - The manager and node now require the exact connector version. A node rejects an
+      archive whose info.json does not match the requested version, refetches the pinned
+      release, and restarts a running server when the mod set changes.
+---------------------------------------------------------------------------------------------------
 Version: 0.36.20
 Date: 2026-10-24
   Reverted:
