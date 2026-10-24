@@ -87,11 +87,34 @@ local function tick_meta()
     if not state.known() then
         return
     end
+    local started = os.clock()
     push("platform_meta", {
         instance = state.instance(),
         tick = game.tick,
         platforms = platform_api.meta(),
     })
+    local spent = os.clock() - started
+    if spent > 0.005 then
+        log(string.format("[%s] slow cheap meta: %.1f ms", state.instance(), spent * 1000))
+    end
+end
+
+-- The full shape once a second: bay count, layout, asteroid/other counts and the request
+-- hash. The manager's copy push reads these; it does not need them at 10 Hz.
+local function tick_meta_full()
+    if not state.known() then
+        return
+    end
+    local started = os.clock()
+    push("platform_meta", {
+        instance = state.instance(),
+        tick = game.tick,
+        platforms = platform_api.meta_full(),
+    })
+    local spent = os.clock() - started
+    if spent > 0.01 then
+        log(string.format("[%s] slow full meta: %.1f ms", state.instance(), spent * 1000))
+    end
 end
 
 -- The heavy platform cargo, only when the hash moved and only one page at a time.
@@ -103,6 +126,7 @@ local function tick_hub()
     if not state.known() then
         return
     end
+    local started = os.clock()
 
     storage.hub_sent = storage.hub_sent or {}
 
@@ -140,6 +164,10 @@ local function tick_hub()
             end
         end
     end
+    local spent = os.clock() - started
+    if spent > 0.02 then
+        log(string.format("[%s] slow hub dump: %.1f ms", state.instance(), spent * 1000))
+    end
 end
 
 -- Every platform's raw item total, summed. The manager compares it with each copy's total
@@ -149,6 +177,7 @@ local function tick_audit()
     if not state.known() then
         return
     end
+    local started = os.clock()
 
     -- audit() returns {instance, tick, totals}; the push needs the totals table itself, not
     -- the wrapper. That mismatch was why the scheduled audit never reached the manager.
@@ -179,6 +208,10 @@ local function tick_audit()
             chunk = chunk,
             chunks = chunks,
         })
+    end
+    local spent = os.clock() - started
+    if spent > 0.02 then
+        log(string.format("[%s] slow audit: %.1f ms", state.instance(), spent * 1000))
     end
 end
 
@@ -223,6 +256,7 @@ return {
     push = push,
     tick_positions = tick_positions,
     tick_meta = tick_meta,
+    tick_meta_full = tick_meta_full,
     tick_hub = tick_hub,
     tick_audit = tick_audit,
     tick_research = tick_research,

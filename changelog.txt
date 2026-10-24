@@ -1,4 +1,20 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.35.19
+Date: 2026-10-23
+  Changed:
+    - The 10 Hz platform meta is now the cheap shape only: identity, position, state. The
+      bay count, layout, asteroid/other counts and request hash moved to a 1 Hz full meta.
+      Those walks were the mod's largest constant cost on the space server.
+    - The hub cargo dump runs every 30 s instead of 10 s; the aggregate audit every five
+      minutes instead of one.
+    - The real space platforms no longer count "other" entities in the full meta; that
+      walk is only meaningful for copies.
+    - The layout is taken from the build/mine event, so a new bay reaches the copies without
+      waiting for the next full meta.
+  Added:
+    - Log lines when the cheap meta, full meta, hub dump or audit exceed their budget, so a
+      mod cost is measured instead of suspected.
+---------------------------------------------------------------------------------------------------
 Version: 0.35.18
 Date: 2026-10-23
   Fixed:

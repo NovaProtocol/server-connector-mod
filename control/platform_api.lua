@@ -238,10 +238,14 @@ end
 -- meta: the cheap call
 --------------------------------------------------------------------------------
 
-local function meta()
+-- `full` is the slow shape: bay count, layout, asteroid/other counts and the request hash
+-- all walk entities or logistics. At 10 Hz those walks were the mod's biggest cost on the
+-- space server. The cheap shape is identity, position and state only; the manager gets the
+-- full one once a second and on a build/mine event.
+local function meta(full)
     local out = {}
     for _, platform in pairs(main_force().platforms or {}) do
-        out[#out + 1] = {
+        local entry = {
             index = platform.index,
             name = platform.name,
             state = tostring(platform.state),
@@ -250,16 +254,27 @@ local function meta()
             distance = platform.distance,
             paused = platform.paused,
             hub = platform.hub and platform.hub.unit_number or nil,
-            bays = platforms.bay_count(platform),
-            asteroids = platforms.asteroid_count(platform),
-            other = platforms.other_entities(platform),
-            layout = platforms.layout_of(platform),
-            request_hash = hash(requests_of(platform)),
         }
+        if full then
+            entry.bays = platforms.bay_count(platform)
+            entry.layout = platforms.layout_of(platform)
+            entry.request_hash = hash(requests_of(platform))
+            if instance() ~= "space" then
+                -- The real space platforms have ships on them by design; counting "other"
+                -- entities there is pure cost. Copies are the ones that should be empty.
+                entry.asteroids = platforms.asteroid_count(platform)
+                entry.other = platforms.other_entities(platform)
+            end
+        end
+        out[#out + 1] = entry
     end
 
     table.sort(out, function(a, b) return (a.index or 0) < (b.index or 0) end)
     return out
+end
+
+local function meta_full()
+    return meta(true)
 end
 
 -- The same metadata, one page at a time, for a pull over RCON. A fleet with long platform
@@ -267,7 +282,7 @@ end
 -- list because a datagram is 64 KB.
 local function meta_page(payload)
     payload = payload or {}
-    local all = meta()
+    local all = meta(true)
     local offset = math.max(0, math.floor(tonumber(payload.offset) or 0))
     local limit = math.max(1, math.min(50, math.floor(tonumber(payload.limit) or 8)))
 
@@ -476,6 +491,7 @@ end
 
 return {
     meta = meta,
+    meta_full = meta_full,
     meta_page = meta_page,
     dump = dump,
     audit = audit,

@@ -554,7 +554,6 @@ local function platforms()
             distance = platform.distance,
             paused = platform.paused,
             bays = bay_count(platform),
-            other = other_entities(platform),
             hub = platform.hub ~= nil,
             hub_destructible = (function()
                 local ok, value = pcall(function()

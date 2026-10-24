@@ -55,6 +55,10 @@ script.on_nth_tick(60, function()
 
     -- Research progress is pushed over UDP only when it moved, once a second.
     guard("outbound research", outbound.tick_research)
+
+    -- The full platform shape: bay count, layout and copy checks. Once a second is enough;
+    -- at 10 Hz it was walking every bay and every entity on the space server.
+    guard("outbound platform meta full", outbound.tick_meta_full)
 end)
 
 -- Platform positions move continuously in transit, so they go every 6 ticks (10 Hz), from
@@ -69,11 +73,15 @@ end)
 
 -- The heavy hub cargo, only when it changed, and the aggregate audit. Both are reads plus
 -- one localhost datagram; neither changes the world.
-script.on_nth_tick(600, function()
+-- Cargo changes do not need a 10 s stream; 30 s keeps the manager current without reading
+-- every hub five times more often than the audit.
+script.on_nth_tick(1800, function()
     guard("outbound platform hubs", outbound.tick_hub)
 end)
 
-script.on_nth_tick(3600, function()
+-- The aggregate audit is a safety net, not a live feed. Five minutes leaves the per-pod
+-- path and the resync in charge of ordinary cargo.
+script.on_nth_tick(18000, function()
     guard("outbound platform audit", outbound.tick_audit)
 end)
 
@@ -142,6 +150,7 @@ local function announce_platform_layout(event, what)
             name = platform.name,
             index = platform.index,
             bays = platforms.bay_count(platform),
+            layout = platforms.layout_of(platform),
             layout_hash = platforms.layout_hash(platform),
         })
     end)
