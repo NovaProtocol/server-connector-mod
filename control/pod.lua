@@ -418,7 +418,7 @@ local function test(kind, platform_name, item, count)
     end
 
     if kind == "cleanup" then
-        local units = {373150022, 373150164, 373151285, 373151550, 373151598, 373152448}
+        local units = {373150022, 373150164, 373151285, 373151550, 373151598, 373152448, 373152952, 373152973}
         local wanted = {}
         for _, unit in ipairs(units) do wanted[unit] = true end
         local destroyed = {}
