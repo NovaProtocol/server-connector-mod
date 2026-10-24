@@ -91,16 +91,11 @@ local function tick_meta()
     if not state.known() or not streams_enabled() then
         return
     end
-    local started = game.tick
     push("platform_meta", {
         instance = state.instance(),
         tick = game.tick,
         platforms = platform_api.meta(),
     })
-    local spent = game.tick - started
-    if spent > 0 then
-        log(string.format("[%s] slow cheap meta: %d tick(s)", state.instance(), spent))
-    end
 end
 
 -- The full shape once a second: bay count, layout, asteroid/other counts and the request
@@ -109,16 +104,11 @@ local function tick_meta_full()
     if not state.known() or not streams_enabled() then
         return
     end
-    local started = game.tick
     push("platform_meta", {
         instance = state.instance(),
         tick = game.tick,
         platforms = platform_api.meta_full(),
     })
-    local spent = game.tick - started
-    if spent > 0 then
-        log(string.format("[%s] slow full meta: %d tick(s)", state.instance(), spent))
-    end
 end
 
 -- The heavy platform cargo, only when the hash moved and only one page at a time.
@@ -130,8 +120,6 @@ local function tick_hub()
     if not state.known() or not streams_enabled() then
         return
     end
-    local started = game.tick
-
     storage.hub_sent = storage.hub_sent or {}
 
     for _, platform in pairs(main_force().platforms or {}) do
@@ -170,10 +158,6 @@ local function tick_hub()
             end
         end
     end
-    local spent = game.tick - started
-    if spent > 0 then
-        log(string.format("[%s] slow hub dump: %d tick(s)", state.instance(), spent))
-    end
 end
 
 -- Every platform's raw item total, summed. The manager compares it with each copy's total
@@ -183,8 +167,6 @@ local function tick_audit()
     if not state.known() or not streams_enabled() then
         return
     end
-    local started = game.tick
-
     -- audit() returns {instance, tick, totals}; the push needs the totals table itself, not
     -- the wrapper. That mismatch was why the scheduled audit never reached the manager.
     local audit = platform_api.audit()
@@ -214,10 +196,6 @@ local function tick_audit()
             chunk = chunk,
             chunks = chunks,
         })
-    end
-    local spent = game.tick - started
-    if spent > 0 then
-        log(string.format("[%s] slow audit: %d tick(s)", state.instance(), spent))
     end
 end
 

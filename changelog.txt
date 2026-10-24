@@ -1,4 +1,12 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.20
+Date: 2026-10-24
+  Reverted:
+    - Removed the os.clock/game.tick timing instrumentation and the slow-call logs.
+    - Removed the joining check, the 10-second mirror block after join/leave, and the join
+      move log. The mirror and join rule are back to their pre-guard behavior.
+    - The platform streams, the os fix and the platform cadence remain.
+---------------------------------------------------------------------------------------------------
 Version: 0.36.19
 Date: 2026-10-24
   Added:

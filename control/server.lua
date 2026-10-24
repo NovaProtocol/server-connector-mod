@@ -223,9 +223,6 @@ local function apply_join_rule(player)
     end
 
     if character.surface ~= surface then
-        log(string.format("[%s] join: moving %s from %s to %s",
-            instance(), player.name,
-            character.surface and character.surface.name or "nil", surface.name))
         attempt("moving " .. player.name .. " to " .. surface.name, function()
             character.teleport(player.physical_position, surface)
         end)
