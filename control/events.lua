@@ -224,6 +224,31 @@ script.on_event(defines.events.on_rocket_launched, function()
     end)
 end)
 
+-- A logistic request change on a platform hub. This is the event the polling was standing
+-- in for: the hub's request filters changed, so the copies need the new set and their
+-- logistics can queue the rockets.
+if defines.events.on_entity_logistic_slot_changed then
+    script.on_event(defines.events.on_entity_logistic_slot_changed, function(event)
+        guard("a logistic slot change", function()
+            local entity = event.entity
+            if not entity or not entity.valid then
+                return
+            end
+            local surface = entity.surface
+            local platform = surface and surface.platform
+            if not platform or not platform.valid then
+                return
+            end
+            outbound.push("platform_requests", {
+                instance = instance(),
+                name = platform.name,
+                index = platform.index,
+                tick = game.tick,
+            })
+        end)
+    end)
+end
+
 script.on_event(defines.events.on_space_platform_changed_state, function(event)
     guard("a platform state change", function()
         local platform = event.platform
