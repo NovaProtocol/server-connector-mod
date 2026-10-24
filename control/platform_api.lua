@@ -242,7 +242,7 @@ end
 -- all walk entities or logistics. At 10 Hz those walks were the mod's biggest cost on the
 -- space server. The cheap shape is identity, position and state only; the manager gets the
 -- full one once a second and on a build/mine event.
-local function meta(full)
+local function meta(full, logistic)
     local out = {}
     for _, platform in pairs(main_force().platforms or {}) do
         local entry = {
@@ -258,13 +258,17 @@ local function meta(full)
         if full then
             entry.bays = platforms.bay_count(platform)
             entry.layout = platforms.layout_of(platform)
-            entry.request_hash = hash(requests_of(platform))
             if instance() ~= "space" then
                 -- The real space platforms have ships on them by design; counting "other"
                 -- entities there is pure cost. Copies are the ones that should be empty.
                 entry.asteroids = platforms.asteroid_count(platform)
                 entry.other = platforms.other_entities(platform)
             end
+        end
+        if full or logistic then
+            local requests = requests_of(platform)
+            entry.requests = requests
+            entry.request_hash = hash(requests)
         end
         out[#out + 1] = entry
     end
@@ -274,7 +278,14 @@ local function meta(full)
 end
 
 local function meta_full()
-    return meta(true)
+    return meta(true, true)
+end
+
+-- Logistic-only shape, cheap enough for 1 Hz: requests and their hash, no bay, layout or
+-- asteroid walks. The full shape still carries these at 5 s; this is the fast path that
+-- keeps the manager's request view current.
+local function meta_logistic()
+    return meta(false, true)
 end
 
 -- The same metadata, one page at a time, for a pull over RCON. A fleet with long platform
@@ -508,6 +519,7 @@ end
 return {
     meta = meta,
     meta_full = meta_full,
+    meta_logistic = meta_logistic,
     meta_page = meta_page,
     dump = dump,
     audit = audit,

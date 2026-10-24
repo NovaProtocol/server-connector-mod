@@ -111,6 +111,20 @@ local function tick_meta_full()
     })
 end
 
+-- Logistic-only meta at 1 Hz: requests and their hash, no layout or bay walk. The full
+-- shape still goes every five seconds; this keeps the request view current without paying
+-- the full shape's cost ten times as often.
+local function tick_logistic()
+    if not state.known() or not streams_enabled() then
+        return
+    end
+    push("platform_meta", {
+        instance = state.instance(),
+        tick = game.tick,
+        platforms = platform_api.meta_logistic(),
+    })
+end
+
 -- The heavy platform cargo, only when the hash moved and only one page at a time.
 --
 -- A platform can be built to any size, so this never sends a whole hub in one datagram: the
@@ -253,6 +267,7 @@ return {
     tick_positions = tick_positions,
     tick_meta = tick_meta,
     tick_meta_full = tick_meta_full,
+    tick_logistic = tick_logistic,
     tick_hub = tick_hub,
     tick_audit = tick_audit,
     tick_research = tick_research,

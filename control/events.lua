@@ -79,6 +79,11 @@ script.on_nth_tick(30, function()
     guard("outbound platform positions", outbound.tick_positions)
 end)
 
+-- Requests are the expensive part of the full meta, so they get their own 1 Hz stream.
+script.on_nth_tick(60, function()
+    guard("outbound platform logistic", outbound.tick_logistic)
+end)
+
 -- The heavy hub cargo, only when it changed, and the aggregate audit. Both are reads plus
 -- one localhost datagram; neither changes the world. The dump is every 30 s, the audit
 -- every five minutes.

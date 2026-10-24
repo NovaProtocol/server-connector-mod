@@ -1,4 +1,11 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.35
+Date: 2026-10-24
+  Changed:
+    - Added a 1 Hz logistic-only platform_meta stream carrying requests and request_hash,
+      leaving the cheap 10 Hz identity/position stream and the 5 s full layout stream alone.
+    - The manager now ingests the request list from platform_meta.
+---------------------------------------------------------------------------------------------------
 Version: 0.36.34
 Date: 2026-10-24
   Changed:
