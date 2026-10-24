@@ -407,7 +407,11 @@ local function mirror_platforms(entries)
             -- server create it, and keep it until the fleet list contains it. Deleting it
             -- is how a starter pack launched on a planet used to vanish.
             for _, platform in ipairs(group) do
-                if platform.hub and not copy_is_protected(platform) then
+                if platform.hub then
+                    -- Any platform here that the fleet does not know about is kept and
+                    -- reported, protected or not. A native starter-pack platform can have
+                    -- the same protection flags as one of our copies; deciding by those
+                    -- flags destroyed the very platform this branch is meant to adopt.
                     local location = platform.space_location and platform.space_location.name or instance()
                     report_platform_create(name, location)
                     kept[#kept + 1] = name
@@ -425,11 +429,11 @@ local function mirror_platforms(entries)
         else
             for index = keep + 1, #group do
                 local platform = group[index]
-                if platform.hub and not copy_is_protected(platform) then
+                if platform.hub then
                     local location = platform.space_location and platform.space_location.name or instance()
                     report_platform_create(name, location)
                     kept[#kept + 1] = name
-                    log(string.format("[%s] asking the space server to adopt %s", instance(), name))
+                    log(string.format("[%s] asking the space server to adopt the extra %s", instance(), name))
                 elseif destroy_copy(platform) then
                     removed[#removed + 1] = name
                     log(string.format("[%s] %s has no place in the fleet, removing the extra copy", instance(), name))

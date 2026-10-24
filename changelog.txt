@@ -1,4 +1,11 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.25
+Date: 2026-10-24
+  Fixed:
+    - An unknown hub platform on a planet is kept and reported even when its protection
+      flags look like a copy's. copy_is_protected() matched native starter-pack platforms,
+      so the mirror destroyed them instead of asking the space server to adopt them.
+---------------------------------------------------------------------------------------------------
 Version: 0.36.24
 Date: 2026-10-24
   Changed:
