@@ -106,6 +106,10 @@ end)
 -- writes its speed to nothing, so without this a restart is 1x until the manager says
 -- otherwise, and the manager is a poll away.
 local function restore_speed()
+    -- A save taken while tick-paused carries that flag. The manager also clears it after a
+    -- start, but the save itself should never open frozen; clearing here covers a manual
+    -- game start and the manager's own boot path.
+    game.tick_paused = false
     local speed = tonumber(storage.speed)
     if speed and speed > 0 then
         game.speed = speed
