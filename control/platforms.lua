@@ -408,14 +408,23 @@ local function mirror_platforms(entries)
             -- server create it, and keep it until the fleet list contains it. Deleting it
             -- is how a starter pack launched on a planet used to vanish.
             for _, platform in ipairs(group) do
-                -- Any platform here that the fleet does not know about is kept and reported.
-                -- Not by protection flags and not by hub: a native starter-pack platform can
-                -- look like a protected copy and can exist before its hub is available, and
-                -- both tests destroyed the platform this branch is meant to adopt.
-                local location = platform.space_location and platform.space_location.name or instance()
-                report_platform_create(name, location)
-                kept[#kept + 1] = name
-                log(string.format("[%s] asking the space server to adopt %s", instance(), name))
+                -- A copy the mod made and the fleet no longer lists is stale: remove it.
+                -- Anything else here is a native platform the fleet has not adopted, so keep
+                -- it and report it. Protection flags and hubs are not reliable for this.
+                if storage.copies and storage.copies[name] then
+                    if destroy_copy(platform) then
+                        removed[#removed + 1] = name
+                        storage.copies[name] = nil
+                        log(string.format("[%s] %s left the fleet, removing the copy", instance(), name))
+                    else
+                        log(string.format("[%s] could not remove the copy of %s", instance(), name))
+                    end
+                else
+                    local location = platform.space_location and platform.space_location.name or instance()
+                    report_platform_create(name, location)
+                    kept[#kept + 1] = name
+                    log(string.format("[%s] asking the space server to adopt %s", instance(), name))
+                end
             end
             if keep == 0 then
                 existing[name] = nil
@@ -423,10 +432,19 @@ local function mirror_platforms(entries)
         else
             for index = keep + 1, #group do
                 local platform = group[index]
-                local location = platform.space_location and platform.space_location.name or instance()
-                report_platform_create(name, location)
-                kept[#kept + 1] = name
-                log(string.format("[%s] asking the space server to adopt the extra %s", instance(), name))
+                if storage.copies and storage.copies[name] then
+                    if destroy_copy(platform) then
+                        removed[#removed + 1] = name
+                        log(string.format("[%s] %s has no place in the fleet, removing the extra copy", instance(), name))
+                    else
+                        log(string.format("[%s] could not remove the extra copy of %s", instance(), name))
+                    end
+                else
+                    local location = platform.space_location and platform.space_location.name or instance()
+                    report_platform_create(name, location)
+                    kept[#kept + 1] = name
+                    log(string.format("[%s] asking the space server to adopt the extra %s", instance(), name))
+                end
             end
         end
     end
@@ -527,6 +545,8 @@ local function mirror_platforms(entries)
                     end
 
                     made[#made + 1] = name
+                    storage.copies = storage.copies or {}
+                    storage.copies[name] = true
                     log(string.format("[%s] made a copy of %s, at %s", instance(), name, planet))
                 else
                     log(string.format("[%s] could not make a copy of %s: %s", instance(), name, tostring(created)))

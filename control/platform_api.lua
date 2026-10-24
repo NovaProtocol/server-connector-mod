@@ -439,12 +439,11 @@ local function apply_cargo_delta(payload)
     }
 end
 
--- Replace a copy's requests. This is a world change, so it waits for an empty server.
+-- Replace a copy's requests. Applied while players are connected: the join desync was
+-- the per-client GUI rebuild, not this write, and refusing it left the copy unable to
+-- queue rockets whenever its owner was standing on the planet.
 local function apply_requests(payload)
     payload = payload or {}
-    if not state.empty() then
-        return {ok = false, skipped = "somebody is connected"}
-    end
 
     local platform = find_platform(payload)
     if not platform then

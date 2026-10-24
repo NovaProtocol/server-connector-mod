@@ -1,4 +1,14 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.29
+Date: 2026-10-24
+  Fixed:
+    - A platform deleted on the space server now removes its copy on every planet. The mod
+      records the copies it creates, so a stale copy is removed while an unknown native
+      platform is still kept and adopted.
+    - Platform requests are written to the copy while players are connected. The previous
+      empty-server guard meant a hub's new requests never reached the clone, so its
+      logistics never queued rockets.
+---------------------------------------------------------------------------------------------------
 Version: 0.36.28
 Date: 2026-10-24
   Fixed:
