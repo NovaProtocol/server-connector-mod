@@ -372,7 +372,7 @@ local function test(kind, platform_name, item, count)
         if not source_hatch then
             return {ok = false, error = "no free output hatch on the source hub (" .. tostring(source_hatches) .. ")"}
         end
-        local pod = source_hatch:create_cargo_pod()
+        local pod = source.hub.create_cargo_pod{cargo_hatch = source_hatch}
         if not pod then
             return {ok = false, error = "the game did not create a cargo pod"}
         end
@@ -492,7 +492,7 @@ local function test(kind, platform_name, item, count)
         if not source_hatch then
             return {ok = false, error = "no free output hatch on the copy hub (" .. tostring(source_hatches) .. ")"}
         end
-        local pod = source_hatch:create_cargo_pod()
+        local pod = source.hub.create_cargo_pod{cargo_hatch = source_hatch}
         if not pod then
             return {ok = false, error = "the game did not create a cargo pod"}
         end
@@ -549,7 +549,7 @@ local function test(kind, platform_name, item, count)
         if not source_hatch then
             return {ok = false, error = "no free output hatch on the source (" .. tostring(source_hatches) .. ")"}
         end
-        pod = source_hatch:create_cargo_pod()
+        pod = source.create_cargo_pod{cargo_hatch = source_hatch}
         if pod and insert_cargo(pod, item, count) then
             local hatch, hatches = available_hatch(hub)
             if hatch then
@@ -571,7 +571,7 @@ local function test(kind, platform_name, item, count)
         if not source_hatch then
             return {ok = false, error = "no free output hatch on the copy hub (" .. tostring(source_hatches) .. ")"}
         end
-        pod = source_hatch:create_cargo_pod()
+        pod = hub.create_cargo_pod{cargo_hatch = source_hatch}
         if pod then
             local inventory = platform_api.hub_inventory(hub)
             local removed = inventory and inventory.remove{name = item, count = count, quality = "normal"} or 0

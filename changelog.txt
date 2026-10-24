@@ -1,4 +1,11 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.17
+Date: 2026-10-24
+  Fixed:
+    - Pod tests use the owning entity's create_cargo_pod{cargo_hatch=...}, which reserves the
+      source hatch; the hatch's own method rejected the call and the entity method without a
+      hatch left the pod awaiting_launch.
+---------------------------------------------------------------------------------------------------
 Version: 0.36.16
 Date: 2026-10-24
   Fixed:
