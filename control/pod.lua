@@ -376,8 +376,13 @@ local function test(kind, platform_name, item, count)
     if kind == "planet_to_platform" then
         -- The game will not use a non-operable hub as a cargo station. Test the hypothesis
         -- before deciding how to keep the hub read-only for players and usable for pods.
-        pcall(function() hub.operable = true end)
-        log(string.format("[%s] podtest hub operable=%s", instance(), tostring(hub.operable)))
+        pcall(function()
+            hub.destructible = true
+            hub.minable_flag = true
+            hub.operable = true
+        end)
+        log(string.format("[%s] podtest hub destructible=%s minable=%s operable=%s",
+            instance(), tostring(hub.destructible), tostring(hub.minable_flag), tostring(hub.operable)))
         pod = silo and silo.create_cargo_pod{} or nil
         if not pod then
             pod = pad.create_cargo_pod{}

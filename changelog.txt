@@ -1,4 +1,10 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.7
+Date: 2026-10-24
+  Changed:
+    - Pod test clears all three protection flags on the copy hub before creating the pod, to
+      tell a non-station from a protected-station rejection.
+---------------------------------------------------------------------------------------------------
 Version: 0.36.6
 Date: 2026-10-24
   Changed:
