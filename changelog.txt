@@ -1,4 +1,10 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.19
+Date: 2026-10-24
+  Added:
+    - The join rule logs when it moves a character and which surface it came from. The
+      teleport was silent on success, so the rejoin desync could not be attributed.
+---------------------------------------------------------------------------------------------------
 Version: 0.36.18
 Date: 2026-10-24
   Fixed:
