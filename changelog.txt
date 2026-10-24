@@ -1,4 +1,11 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.35.20
+Date: 2026-10-23
+  Changed:
+    - The continuous platform position/meta stream is 2 Hz instead of 10 Hz; the board does
+      not redraw fast enough to use the difference.
+    - The hub dump no longer reads the first page twice.
+---------------------------------------------------------------------------------------------------
 Version: 0.35.19
 Date: 2026-10-23
   Changed:

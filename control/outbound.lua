@@ -131,13 +131,15 @@ local function tick_hub()
     storage.hub_sent = storage.hub_sent or {}
 
     for _, platform in pairs(main_force().platforms or {}) do
-        local first = platform_api.dump({index = platform.index, cursor = 0, limit = 60})
-        if first and first.ok then
-            if storage.hub_sent[platform.index] ~= first.hash then
+        local page = platform_api.dump({index = platform.index, cursor = 0, limit = 60})
+        if page and page.ok then
+            if storage.hub_sent[platform.index] ~= page.hash then
                 local cursor = 0
                 local pages = 0
                 repeat
-                    local page = platform_api.dump({index = platform.index, cursor = cursor, limit = 60})
+                    if cursor ~= 0 then
+                        page = platform_api.dump({index = platform.index, cursor = cursor, limit = 60})
+                    end
                     if not page or not page.ok then
                         break
                     end
@@ -160,7 +162,7 @@ local function tick_hub()
                     cursor = page.next
                 until page.done or pages > 1000
 
-                storage.hub_sent[platform.index] = first.hash
+                storage.hub_sent[platform.index] = page.hash
             end
         end
     end

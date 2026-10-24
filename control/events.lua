@@ -61,9 +61,9 @@ script.on_nth_tick(60, function()
     guard("outbound platform meta full", outbound.tick_meta_full)
 end)
 
--- Platform positions move continuously in transit, so they go every 6 ticks (10 Hz), from
--- the space server only. This is a read and a localhost datagram, not a world change.
-script.on_nth_tick(6, function()
+-- Platform positions move continuously in transit; 2 Hz is enough for the board. Ten hertz
+-- was seven datagrams a second across the fleet for a UI that redraws far slower.
+script.on_nth_tick(30, function()
     guard("outbound platform positions", outbound.tick_positions)
 
     -- Cheap metadata from every server, copies included: index, position, state, bays and
@@ -72,7 +72,8 @@ script.on_nth_tick(6, function()
 end)
 
 -- The heavy hub cargo, only when it changed, and the aggregate audit. Both are reads plus
--- one localhost datagram; neither changes the world.
+-- one localhost datagram; neither changes the world. The dump is every 30 s, the audit
+-- every five minutes.
 -- Cargo changes do not need a 10 s stream; 30 s keeps the manager current without reading
 -- every hub five times more often than the audit.
 script.on_nth_tick(1800, function()
