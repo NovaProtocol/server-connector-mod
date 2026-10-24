@@ -251,6 +251,20 @@ local function find_landing_pad()
     return nil
 end
 
+local function find_rocket_silo()
+    local surface = game.surfaces[instance()]
+    if not surface then
+        return nil
+    end
+    local ok, silos = pcall(function()
+        return surface.find_entities_filtered{name = "rocket-silo"}
+    end)
+    if ok and silos then
+        return silos[1]
+    end
+    return nil
+end
+
 local function insert_cargo(pod, item, count)
     local inventory
     for _, name in ipairs({"cargo_unit", "cargo"}) do
@@ -334,10 +348,14 @@ local function test(kind, platform_name, item, count)
     if not pad then
         return {ok = false, error = "no cargo landing pad on this planet"}
     end
+    local silo = find_rocket_silo()
+    if kind == "planet_to_platform" and not silo then
+        return {ok = false, error = "no rocket silo on this planet"}
+    end
 
     local pod
     if kind == "planet_to_platform" then
-        pod = pad.create_cargo_pod{}
+        pod = silo.create_cargo_pod{}
         if pod and insert_cargo(pod, item, count) then
             local hatch = hub.cargo_hatches and hub.cargo_hatches[1]
             if hatch then

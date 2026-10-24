@@ -1,4 +1,11 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.3
+Date: 2026-10-24
+  Fixed:
+    - planet_to_platform test uses a rocket silo, not a cargo landing pad. A landing-pad pod
+      to a space platform hub is not accepted by the game; the station is cleared and the pod
+      waits.
+---------------------------------------------------------------------------------------------------
 Version: 0.36.2
 Date: 2026-10-24
   Added:
