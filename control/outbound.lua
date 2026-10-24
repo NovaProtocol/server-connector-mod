@@ -98,19 +98,6 @@ local function tick_meta()
     })
 end
 
--- The full shape once a second: bay count, layout, asteroid/other counts and the request
--- hash. The manager's copy push reads these; it does not need them at 10 Hz.
-local function tick_meta_full()
-    if not state.known() or not streams_enabled() then
-        return
-    end
-    push("platform_meta", {
-        instance = state.instance(),
-        tick = game.tick,
-        platforms = platform_api.meta_full(),
-    })
-end
-
 -- Logistic-only meta at 1 Hz: requests and their hash, no layout or bay walk. The full
 -- shape still goes every five seconds; this keeps the request view current without paying
 -- the full shape's cost ten times as often.
@@ -266,7 +253,6 @@ return {
     streams_enabled = streams_enabled,
     tick_positions = tick_positions,
     tick_meta = tick_meta,
-    tick_meta_full = tick_meta_full,
     tick_logistic = tick_logistic,
     tick_hub = tick_hub,
     tick_audit = tick_audit,

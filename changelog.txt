@@ -1,4 +1,12 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.36
+Date: 2026-10-24
+  Changed:
+    - No periodic layout/bay push. A real-platform build or mine still announces the full
+      layout immediately; a boot is the only forced full copy.
+    - Fleet start brings the space server up first and waits for its platform meta before
+      starting the planets, then force-pushes layout and resyncs cargo/requests once.
+---------------------------------------------------------------------------------------------------
 Version: 0.36.35
 Date: 2026-10-24
   Changed:

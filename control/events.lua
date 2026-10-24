@@ -58,12 +58,9 @@ script.on_nth_tick(60, function()
     -- Research progress is pushed over UDP only when it moved, once a second.
     guard("outbound research", outbound.tick_research)
 
-    -- The full platform shape: bay count, layout and copy checks. A build/mine event
-    -- carries the new layout at once, so five seconds is enough for the periodic refresh;
-    -- at 10 Hz it was walking every bay and every entity on the space server.
-    if game.tick % 300 == 0 then
-        guard("outbound platform meta full", outbound.tick_meta_full)
-    end
+    -- There is deliberately no periodic layout/bay push here. A build or mine on the real
+    -- platform carries the new layout at once, and a server boot gets the full snapshot.
+    -- Re-sending every platform's shape on a timer was periodic building traffic.
 end)
 
 -- Platform positions move continuously in transit; 2 Hz is enough for the board. Ten hertz
