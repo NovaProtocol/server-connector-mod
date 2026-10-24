@@ -1,4 +1,10 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.14
+Date: 2026-10-24
+  Fixed:
+    - space_platform_to_platform uses the first real item in the source hub instead of
+      requiring space-platform-foundation, which the source may not hold.
+---------------------------------------------------------------------------------------------------
 Version: 0.36.13
 Date: 2026-10-24
   Fixed:

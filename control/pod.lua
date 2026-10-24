@@ -330,15 +330,31 @@ local function test(kind, platform_name, item, count)
             return {ok = false, error = "both platforms need a hub"}
         end
         local inventory = platform_api.hub_inventory(source.hub)
-        local removed = inventory and inventory.remove{name = "space-platform-foundation", count = count, quality = "normal"} or 0
-        if removed < count then
-            return {ok = false, error = "source hub does not hold enough space-platform-foundation"}
+        if not inventory then
+            return {ok = false, error = "source hub has no inventory"}
+        end
+        local test_item, test_quality, test_count = nil, "normal", 0
+        for index = 1, #inventory do
+            local stack = inventory[index]
+            if stack and stack.valid_for_read and stack.count > 0 then
+                test_item = stack.name
+                test_quality = stack.quality and stack.quality.name or "normal"
+                test_count = math.min(count, stack.count)
+                break
+            end
+        end
+        if not test_item then
+            return {ok = false, error = "source hub is empty"}
+        end
+        local removed = inventory.remove{name = test_item, count = test_count, quality = test_quality} or 0
+        if removed < test_count then
+            return {ok = false, error = "source hub did not give up the cargo"}
         end
         local pod = source.hub.create_cargo_pod{}
         if not pod then
             return {ok = false, error = "the game did not create a cargo pod"}
         end
-        insert_cargo(pod, "space-platform-foundation", count)
+        insert_cargo(pod, test_item, test_count)
         local hatch, hatches = available_hatch(destination.hub)
         if not hatch then
             return {ok = false, error = "no free input hatch on the destination hub (" .. tostring(hatches) .. ")"}
