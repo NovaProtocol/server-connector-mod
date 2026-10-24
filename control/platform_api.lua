@@ -267,7 +267,12 @@ local function meta(full, logistic)
         end
         if full or logistic then
             local requests = requests_of(platform)
-            entry.requests = requests
+            -- An empty table would serialize as a JSON object, not the array the manager
+            -- decodes, and a failed decode drops the whole meta message. Omit it and let
+            -- the empty hash tell the manager to clear the cached list.
+            if #requests > 0 then
+                entry.requests = requests
+            end
             entry.request_hash = hash(requests)
         end
         out[#out + 1] = entry

@@ -1,4 +1,10 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.37
+Date: 2026-10-24
+  Fixed:
+    - Empty request lists are omitted from the meta and the manager clears its cached list on
+      the empty-request hash, so stale fake-platform requests no longer persist.
+---------------------------------------------------------------------------------------------------
 Version: 0.36.36
 Date: 2026-10-24
   Changed:
