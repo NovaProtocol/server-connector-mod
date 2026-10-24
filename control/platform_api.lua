@@ -471,13 +471,30 @@ local function apply_requests(payload)
         }
     end
 
-    local written, err = pcall(function()
-        local sections = point.sections
-        if sections and #sections > 0 then
-            sections[1].filters = filters
-        else
-            point.sections = {{filters = filters}}
+    -- A hub can have several logistic sections, and only a manual section accepts
+    -- filter writes. Writing sections[1] blindly was refused with "trying to change
+    -- logistic section that is not manual".
+    local section = nil
+    for _, candidate in pairs(point.sections or {}) do
+        local group = candidate.group
+        local name = group and group.name
+        if name == "manual" then
+            section = candidate
+            break
         end
+    end
+    if not section then
+        local ok, created = pcall(function() return point.add_section() end)
+        if ok and created then
+            section = created
+        end
+    end
+    if not section then
+        return {ok = false, error = "no manual logistic section"}
+    end
+
+    local written, err = pcall(function()
+        section.filters = filters
     end)
 
     if not written then

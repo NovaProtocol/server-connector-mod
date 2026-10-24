@@ -1,4 +1,12 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.32
+Date: 2026-10-24
+  Fixed:
+    - apply_requests writes a manual logistic section instead of sections[1], which was
+      refused with "trying to change logistic section that is not manual".
+    - The manager decodes the first JSON value from the mod's page output instead of
+      rejecting trailing data, so resync can read platform_meta_page and hub dumps.
+---------------------------------------------------------------------------------------------------
 Version: 0.36.31
 Date: 2026-10-24
   Added:
