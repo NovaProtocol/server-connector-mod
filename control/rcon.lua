@@ -13,6 +13,7 @@ local convert = require("__server-connector-mod__.control.convert")
 local server = require("__server-connector-mod__.control.server")
 local platforms = require("__server-connector-mod__.control.platforms")
 local platform_api = require("__server-connector-mod__.control.platform_api")
+local pod = require("__server-connector-mod__.control.pod")
 local research = require("__server-connector-mod__.control.research")
 local map = require("__server-connector-mod__.control.map")
 
@@ -213,6 +214,30 @@ commands.add_command(
         end)
         if not ok then
             log(string.format("[%s] -status failed: %s", MOD, tostring(err)))
+        end
+    end
+)
+
+-- Test the planet <-> platform cargo bridge with a real cargo pod, or with a synthetic queue
+-- event when there is no landing pad to launch from.
+commands.add_command(
+    MOD .. "-podtest",
+    "Cargo bridge test: planet_to_platform|platform_to_planet <platform> <item> <count>, or synthetic_add|synthetic_remove <platform> <item> <count>.",
+    function(event)
+        local args = {}
+        for word in string.gmatch(event.parameter or "", "%S+") do
+            args[#args + 1] = word
+        end
+        local ok, result = pcall(pod.test, args[1], args[2], args[3], tonumber(args[4]) or 1)
+        if not ok then
+            result = {ok = false, error = tostring(result)}
+        end
+        local text = helpers.table_to_json(result)
+        log(string.format("[%s] podtest result: %s", MOD, text))
+        if event.player_index and game.get_player(event.player_index) then
+            game.get_player(event.player_index).print(text)
+        elseif rcon then
+            rcon.print(text)
         end
     end
 )

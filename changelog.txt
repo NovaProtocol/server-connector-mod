@@ -1,4 +1,18 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.0
+Date: 2026-10-24
+  Added:
+    - Planet <-> platform cargo bridge. A pod leaving a copy hub removes the same cargo from
+      the real hub; a pod arriving at a copy hub adds it. Pods between real space hubs are the
+      game's native logistics and are left alone.
+    - The bridge queues each move in storage and re-sends for 60 seconds; the manager
+      de-duplicates by event id for an hour. There is no RCON acknowledgement because an ack
+      would write script storage from outside the game while a player is connected.
+    - The manager applies the delta to the real hub on the space server with the copy's name
+      and ordinal.
+    - server-connector-mod-podtest can create a real cargo pod from a planet landing pad to a
+      copy hub, or from a copy hub to a landing pad, and can enqueue a synthetic add/remove.
+---------------------------------------------------------------------------------------------------
 Version: 0.35.21
 Date: 2026-10-23
   Changed:

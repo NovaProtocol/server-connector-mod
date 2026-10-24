@@ -22,6 +22,7 @@ local server = require("__server-connector-mod__.control.server")
 local map = require("__server-connector-mod__.control.map")
 local research = require("__server-connector-mod__.control.research")
 local platforms = require("__server-connector-mod__.control.platforms")
+local pod = require("__server-connector-mod__.control.pod")
 local outbound = require("__server-connector-mod__.control.outbound")
 
 local MOD = state.MOD
@@ -87,6 +88,12 @@ end)
 -- path and the resync in charge of ordinary cargo.
 script.on_nth_tick(18000, function()
     guard("outbound platform audit", outbound.tick_audit)
+end)
+
+-- Re-send cargo-pod events for a minute. The queue write is on every peer (the tick is
+-- deterministic); the manager de-duplicates by event id.
+script.on_nth_tick(600, function()
+    guard("the pod queue", pod.tick)
 end)
 
 -- The speed this world is kept at, put back on the game as the world comes up. The game
@@ -185,6 +192,21 @@ script.on_event(defines.events.on_space_platform_changed_state, function(event)
             distance = platform.distance,
         })
     end)
+end)
+
+-- Planet <-> platform cargo. A pod leaving a copy hub is removed from the real hub; a pod
+-- arriving at a copy hub is added. The real space hubs are native platform logistics and are
+-- ignored. The queue is re-sent for a minute; the manager de-duplicates.
+script.on_event(defines.events.on_cargo_pod_started_ascending, function(event)
+    guard("a cargo pod start", function() pod.started(event) end)
+end)
+
+script.on_event(defines.events.on_cargo_pod_finished_ascending, function(event)
+    guard("a cargo pod ascent", function() pod.started(event) end)
+end)
+
+script.on_event(defines.events.on_cargo_pod_delivered_cargo, function(event)
+    guard("a cargo pod delivery", function() pod.delivered(event) end)
 end)
 
 script.on_event(defines.events.on_player_joined_game, function(event)
