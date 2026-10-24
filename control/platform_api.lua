@@ -474,18 +474,18 @@ local function apply_requests(payload)
     -- A hub can have several logistic sections, and only a manual section accepts
     -- filter writes. Writing sections[1] blindly was refused with "trying to change
     -- logistic section that is not manual".
+    -- LuaLogisticSection.group is a string, and the authoritative manual test is
+    -- is_manual (type == defines.logistic_section_type.manual).
     local section = nil
     for _, candidate in pairs(point.sections or {}) do
-        local group = candidate.group
-        local name = group and group.name
-        if name == "manual" then
+        if candidate.is_manual then
             section = candidate
             break
         end
     end
     if not section then
         local ok, created = pcall(function() return point.add_section() end)
-        if ok and created then
+        if ok and created and created.is_manual then
             section = created
         end
     end

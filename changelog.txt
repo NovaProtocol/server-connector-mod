@@ -1,4 +1,11 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.33
+Date: 2026-10-24
+  Fixed:
+    - apply_requests selects a manual logistic section using LuaLogisticSection.is_manual.
+      LuaLogisticSection.group is a string, not an object, so the previous group.name check
+      never matched and writes were refused.
+---------------------------------------------------------------------------------------------------
 Version: 0.36.32
 Date: 2026-10-24
   Fixed:
