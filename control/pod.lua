@@ -374,6 +374,10 @@ local function test(kind, platform_name, item, count)
 
     local pod
     if kind == "planet_to_platform" then
+        -- The game will not use a non-operable hub as a cargo station. Test the hypothesis
+        -- before deciding how to keep the hub read-only for players and usable for pods.
+        pcall(function() hub.operable = true end)
+        log(string.format("[%s] podtest hub operable=%s", instance(), tostring(hub.operable)))
         pod = silo.create_cargo_pod{}
         if pod and insert_cargo(pod, item, count) then
             local hatch, hatches = available_hatch(hub)

@@ -1,4 +1,10 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.5
+Date: 2026-10-24
+  Changed:
+    - Pod test makes the copy hub operable before creating a planet-to-platform pod, to
+      confirm whether non-operable is what makes the game clear the station.
+---------------------------------------------------------------------------------------------------
 Version: 0.36.4
 Date: 2026-10-24
   Fixed:
