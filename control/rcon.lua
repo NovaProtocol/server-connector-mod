@@ -217,6 +217,23 @@ commands.add_command(
     end
 )
 
+-- A diagnostic switch for the platform UDP streams. Off makes the manager stop receiving
+-- platform updates; everything else the mod does (console, mirror, join rules) keeps
+-- working. Turn it back on when done.
+commands.add_command(
+    MOD .. "-streams",
+    "Turn this server's platform UDP streams on or off. Usage: /server-connector-mod-streams on|off",
+    function(event)
+        local value = string.lower(event.parameter or "")
+        if value ~= "on" and value ~= "off" then
+            if rcon then rcon.print("usage: on|off") end
+            return
+        end
+        storage.platform_streams = value == "on"
+        if rcon then rcon.print("platform streams " .. value) end
+    end
+)
+
 -- A read-only check for the copies: hub/bay layout, bay count, asteroid count and any
 -- other entity on the platform. The layout hash is the same value on the real ship and a
 -- copy of it, so the two can be compared without moving positions over the wire.

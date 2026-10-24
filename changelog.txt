@@ -1,4 +1,13 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.35.21
+Date: 2026-10-23
+  Changed:
+    - The full platform meta runs every five seconds, not every second. A build/mine event
+      still carries the layout immediately.
+  Added:
+    - /server-connector-mod-streams on|off is a per-server diagnostic. Off stops the platform
+      UDP streams so the game's own cost can be measured; everything else keeps working.
+---------------------------------------------------------------------------------------------------
 Version: 0.35.20
 Date: 2026-10-23
   Changed:

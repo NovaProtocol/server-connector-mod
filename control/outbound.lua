@@ -70,8 +70,12 @@ end
 
 -- Positions move continuously in transit, so they go every 6 ticks (10 Hz), from the
 -- space server only.
+local function streams_enabled()
+    return storage.platform_streams ~= false
+end
+
 local function tick_positions()
-    if not state.known() or state.instance() ~= "space" then
+    if not state.known() or state.instance() ~= "space" or not streams_enabled() then
         return
     end
     push("platform_positions", {
@@ -84,7 +88,7 @@ end
 -- The cheap platform metadata, from every server: copies included. 10 Hz is enough for a
 -- list and a position, and it costs no inventory read.
 local function tick_meta()
-    if not state.known() then
+    if not state.known() or not streams_enabled() then
         return
     end
     local started = os.clock()
@@ -102,7 +106,7 @@ end
 -- The full shape once a second: bay count, layout, asteroid/other counts and the request
 -- hash. The manager's copy push reads these; it does not need them at 10 Hz.
 local function tick_meta_full()
-    if not state.known() then
+    if not state.known() or not streams_enabled() then
         return
     end
     local started = os.clock()
@@ -123,7 +127,7 @@ end
 -- manager reassembles the pages by platform, hash and cursor. A server that is idle sends
 -- nothing.
 local function tick_hub()
-    if not state.known() then
+    if not state.known() or not streams_enabled() then
         return
     end
     local started = os.clock()
@@ -176,7 +180,7 @@ end
 -- and reports the difference; a platform-to-platform move on the space server changes the
 -- identity but not this total, which is the point.
 local function tick_audit()
-    if not state.known() then
+    if not state.known() or not streams_enabled() then
         return
     end
     local started = os.clock()
@@ -256,6 +260,7 @@ end
 
 return {
     push = push,
+    streams_enabled = streams_enabled,
     tick_positions = tick_positions,
     tick_meta = tick_meta,
     tick_meta_full = tick_meta_full,
