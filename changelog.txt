@@ -1,4 +1,13 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.12
+Date: 2026-10-24
+  Added:
+    - podtest force_drop: a real copy-hub pod to the planet surface (the force-drop/remove path).
+    - podtest space_platform_to_platform: a real hub-to-hub pod on the space server, the native
+      platform-to-platform path the bridge intentionally ignores.
+    - platform_to_planet sets the landing pad and copy hub operable/destructible/minable before
+      the pod, to test the station with no protection-side effect.
+---------------------------------------------------------------------------------------------------
 Version: 0.36.11
 Date: 2026-10-24
   Fixed:

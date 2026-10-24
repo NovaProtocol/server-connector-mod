@@ -316,6 +316,40 @@ local function test(kind, platform_name, item, count)
     if not known() then
         return {ok = false, error = "no identity"}
     end
+
+    if kind == "space_platform_to_platform" then
+        if instance() ~= "space" then
+            return {ok = false, error = "run this one on the space server"}
+        end
+        local source = find_platform(platform_name)
+        local destination = find_platform(item) -- item is the destination platform name
+        if not source or not destination then
+            return {ok = false, error = "source or destination platform not found"}
+        end
+        if not source.hub or not destination.hub then
+            return {ok = false, error = "both platforms need a hub"}
+        end
+        local inventory = platform_api.hub_inventory(source.hub)
+        local removed = inventory and inventory.remove{name = "space-platform-foundation", count = count, quality = "normal"} or 0
+        if removed < count then
+            return {ok = false, error = "source hub does not hold enough space-platform-foundation"}
+        end
+        local pod = source.hub.create_cargo_pod{}
+        if not pod then
+            return {ok = false, error = "the game did not create a cargo pod"}
+        end
+        insert_cargo(pod, "space-platform-foundation", count)
+        local hatch, hatches = available_hatch(destination.hub)
+        if not hatch then
+            return {ok = false, error = "no free input hatch on the destination hub (" .. tostring(hatches) .. ")"}
+        end
+        pod.cargo_pod_destination = {type = defines.cargo_destination.station, station = destination.hub, hatch = hatch}
+        local state = pod.cargo_pod_state
+        log(string.format("[%s] podtest %s %s to %s x%d, pod %s state %s",
+            instance(), kind, platform_name, item, count, tostring(pod.unit_number), tostring(state)))
+        return {ok = true, pod = pod.unit_number, state = state}
+    end
+
     if instance() == "space" then
         return {ok = false, error = "run the pod test on a planet"}
     end
@@ -405,6 +439,33 @@ local function test(kind, platform_name, item, count)
         return {ok = true, destroyed = destroyed}
     end
 
+    if kind == "force_drop" then
+        pcall(function()
+            hub.destructible = true
+            hub.minable_flag = true
+            hub.operable = true
+        end)
+        local inventory = platform_api.hub_inventory(hub)
+        local removed = inventory and inventory.remove{name = item, count = count, quality = "normal"} or 0
+        if removed < count then
+            return {ok = false, error = "the copy hub does not hold enough " .. item}
+        end
+        local pod = hub.create_cargo_pod{}
+        if not pod then
+            return {ok = false, error = "the game did not create a cargo pod"}
+        end
+        insert_cargo(pod, item, count)
+        local surface = game.surfaces[instance()]
+        pod.cargo_pod_destination = {
+            type = defines.cargo_destination.surface,
+            surface = surface.name,
+            position = {x = 0, y = 0},
+        }
+        log(string.format("[%s] podtest force_drop %s x%d from %s, pod %s state %s",
+            instance(), item, count, platform_name, tostring(pod.unit_number), tostring(pod.cargo_pod_state)))
+        return {ok = true, pod = pod.unit_number, state = pod.cargo_pod_state}
+    end
+
     if kind == "synthetic_add" or kind == "synthetic_remove" then
         local direction = kind == "synthetic_add" and "add" or "remove"
         local desc = descriptor(platform)
@@ -454,6 +515,14 @@ local function test(kind, platform_name, item, count)
             end
         end
     elseif kind == "platform_to_planet" then
+        pcall(function()
+            pad.destructible = true
+            pad.minable_flag = true
+            pad.operable = true
+            hub.destructible = true
+            hub.minable_flag = true
+            hub.operable = true
+        end)
         pod = hub.create_cargo_pod{}
         if pod then
             local inventory = platform_api.hub_inventory(hub)
