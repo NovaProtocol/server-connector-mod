@@ -378,7 +378,10 @@ local function test(kind, platform_name, item, count)
         -- before deciding how to keep the hub read-only for players and usable for pods.
         pcall(function() hub.operable = true end)
         log(string.format("[%s] podtest hub operable=%s", instance(), tostring(hub.operable)))
-        pod = silo.create_cargo_pod{}
+        pod = silo and silo.create_cargo_pod{} or nil
+        if not pod then
+            pod = pad.create_cargo_pod{}
+        end
         if pod and insert_cargo(pod, item, count) then
             local hatch, hatches = available_hatch(hub)
             if hatch then

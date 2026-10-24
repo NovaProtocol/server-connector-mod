@@ -1,4 +1,10 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.6
+Date: 2026-10-24
+  Changed:
+    - The planet-to-platform test falls back to a landing-pad cargo pod when the silo has no
+      free hatch. The destination hub is the same, so the station/bridge path is unchanged.
+---------------------------------------------------------------------------------------------------
 Version: 0.36.5
 Date: 2026-10-24
   Changed:
