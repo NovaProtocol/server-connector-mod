@@ -270,6 +270,24 @@ local function available_hatch(entity)
     return nil, count
 end
 
+local function available_output_hatch(entity)
+    local ok, hatches = pcall(function() return entity.cargo_hatches end)
+    if not ok or not hatches then
+        return nil, 0
+    end
+    for _, hatch in ipairs(hatches) do
+        local valid, reserved, busy, output = false, true, true, false
+        pcall(function() valid = hatch.valid end)
+        pcall(function() reserved = hatch.reserved end)
+        pcall(function() busy = hatch.busy end)
+        pcall(function() output = hatch.is_output_compatible end)
+        if valid and not reserved and not busy and output then
+            return hatch, #hatches
+        end
+    end
+    return nil, #hatches
+end
+
 local function find_rocket_silo()
     local surface = game.surfaces[instance()]
     if not surface then
@@ -350,7 +368,11 @@ local function test(kind, platform_name, item, count)
         if removed < test_count then
             return {ok = false, error = "source hub did not give up the cargo"}
         end
-        local pod = source.hub.create_cargo_pod{}
+        local source_hatch, source_hatches = available_output_hatch(source.hub)
+        if not source_hatch then
+            return {ok = false, error = "no free output hatch on the source hub (" .. tostring(source_hatches) .. ")"}
+        end
+        local pod = source_hatch:create_cargo_pod()
         if not pod then
             return {ok = false, error = "the game did not create a cargo pod"}
         end
@@ -466,7 +488,11 @@ local function test(kind, platform_name, item, count)
         if removed < count then
             return {ok = false, error = "the copy hub does not hold enough " .. item}
         end
-        local pod = hub.create_cargo_pod{}
+        local source_hatch, source_hatches = available_output_hatch(hub)
+        if not source_hatch then
+            return {ok = false, error = "no free output hatch on the copy hub (" .. tostring(source_hatches) .. ")"}
+        end
+        local pod = source_hatch:create_cargo_pod()
         if not pod then
             return {ok = false, error = "the game did not create a cargo pod"}
         end
@@ -518,10 +544,12 @@ local function test(kind, platform_name, item, count)
         end)
         log(string.format("[%s] podtest hub destructible=%s minable=%s operable=%s",
             instance(), tostring(hub.destructible), tostring(hub.minable_flag), tostring(hub.operable)))
-        pod = silo and silo.create_cargo_pod{} or nil
-        if not pod then
-            pod = pad.create_cargo_pod{}
+        local source = silo or pad
+        local source_hatch, source_hatches = available_output_hatch(source)
+        if not source_hatch then
+            return {ok = false, error = "no free output hatch on the source (" .. tostring(source_hatches) .. ")"}
         end
+        pod = source_hatch:create_cargo_pod()
         if pod and insert_cargo(pod, item, count) then
             local hatch, hatches = available_hatch(hub)
             if hatch then
@@ -539,7 +567,11 @@ local function test(kind, platform_name, item, count)
             hub.minable_flag = true
             hub.operable = true
         end)
-        pod = hub.create_cargo_pod{}
+        local source_hatch, source_hatches = available_output_hatch(hub)
+        if not source_hatch then
+            return {ok = false, error = "no free output hatch on the copy hub (" .. tostring(source_hatches) .. ")"}
+        end
+        pod = source_hatch:create_cargo_pod()
         if pod then
             local inventory = platform_api.hub_inventory(hub)
             local removed = inventory and inventory.remove{name = item, count = count, quality = "normal"} or 0

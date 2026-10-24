@@ -1,4 +1,11 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.16
+Date: 2026-10-24
+  Fixed:
+    - Pod tests create the pod through the source cargo hatch's create_cargo_pod(), not the
+      owning entity's. The hatch method reserves the launch hatch and starts the pod; the
+      entity method left it awaiting_launch.
+---------------------------------------------------------------------------------------------------
 Version: 0.36.15
 Date: 2026-10-24
   Fixed:
