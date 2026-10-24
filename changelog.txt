@@ -1,4 +1,14 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.18
+Date: 2026-10-24
+  Fixed:
+    - Removed every os.clock() use. Factorio's Lua sandbox does not expose os, so the
+      platform metadata streams were erroring on every tick. Timing is now game.tick based.
+    - The copy mirror refuses while a client is joining (connected but not yet in
+      connected_players), and for 10 seconds after any join or leave. The mirror was running
+      during the map-load window and changing copy entity state after the client had
+      downloaded the map, which desynced vulcanus.
+---------------------------------------------------------------------------------------------------
 Version: 0.36.17
 Date: 2026-10-24
   Fixed:

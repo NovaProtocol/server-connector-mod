@@ -318,6 +318,16 @@ local function mirror_platforms(entries)
         return {instance = instance(), skipped = "somebody is connected"}
     end
 
+    -- A joining client is not in connected_players yet. The mirror must not run while the
+    -- client is still loading, and must stay away for a short window after a join/leave.
+    if state.joining() then
+        return {instance = instance(), skipped = "somebody is joining"}
+    end
+
+    if game.tick < (storage.mirror_blocked_until or 0) then
+        return {instance = instance(), skipped = "a player joined or left recently"}
+    end
+
     if instance() == "space" then
         return {instance = instance(), skipped = "the real platforms live here"}
     end

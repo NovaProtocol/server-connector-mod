@@ -213,6 +213,8 @@ script.on_event(defines.events.on_player_joined_game, function(event)
     guard("a join", function()
         local player = game.get_player(event.player_index)
         if player then
+            -- Keep copy/platform writes away from the map-loading and first-CRC window.
+            storage.mirror_blocked_until = game.tick + 600
             state.note("joined", player)
             server.apply_join_rule(player)
             map.refresh(player)
@@ -224,6 +226,8 @@ end)
 -- its surface changes for later. The last player leaving is that later.
 script.on_event(defines.events.on_player_left_game, function()
     guard("a leave", function()
+        -- A new client may already be joining; keep the mirror away for a short window.
+        storage.mirror_blocked_until = game.tick + 600
         if not state.empty() then
             return
         end

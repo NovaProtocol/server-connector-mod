@@ -76,6 +76,28 @@ local function empty()
     return players == nil or #players == 0
 end
 
+-- A player who is connected at the engine level but not yet in connected_players is
+-- loading the map. Copy/platform changes during that window are changes the client has
+-- already downloaded past.
+local function joining()
+    for _, player in pairs(game.players) do
+        local ok, connected = pcall(function() return player.connected end)
+        if ok and connected then
+            local listed = false
+            for _, online in pairs(game.connected_players) do
+                if online.index == player.index then
+                    listed = true
+                    break
+                end
+            end
+            if not listed then
+                return true
+            end
+        end
+    end
+    return false
+end
+
 local function destinations()
     local out = {}
     for id, entry in pairs(storage.topology or {}) do
@@ -397,6 +419,7 @@ return {
     instance = instance,
     known = known,
     empty = empty,
+    joining = joining,
     main_force = main_force,
     destinations = destinations,
     owned_surfaces = owned_surfaces,
