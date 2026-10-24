@@ -12,13 +12,24 @@
 -- Required as "__server-connector-mod__.control.platforms".
 
 local state = require("__server-connector-mod__.control.state")
-local outbound = require("__server-connector-mod__.control.outbound")
 
 local MOD = state.MOD
 local known = state.known
 local empty = state.empty
 local instance = state.instance
 local main_force = state.main_force
+
+-- Required lazily: outbound.lua requires platforms.lua, so a top-level require here is a
+-- cycle and Factorio refuses to load the mod. By the time a mirror runs, outbound is loaded.
+local function report_platform_create(name, location)
+    local outbound = require("__server-connector-mod__.control.outbound")
+    outbound.push("platform_create", {
+        instance = instance(),
+        name = name,
+        location = location,
+        tick = game.tick,
+    })
+end
 
 -- A write to a copy's position, said out loud when the game refuses it.
 --
@@ -402,12 +413,7 @@ local function mirror_platforms(entries)
             for _, platform in ipairs(group) do
                 if platform.hub and not copy_is_protected(platform) then
                     local location = platform.space_location and platform.space_location.name or instance()
-                    outbound.push("platform_create", {
-                        instance = instance(),
-                        name = name,
-                        location = location,
-                        tick = game.tick,
-                    })
+                    report_platform_create(name, location)
                     kept[#kept + 1] = name
                     log(string.format("[%s] asking the space server to adopt %s", instance(), name))
                 elseif destroy_copy(platform) then
@@ -425,12 +431,7 @@ local function mirror_platforms(entries)
                 local platform = group[index]
                 if platform.hub and not copy_is_protected(platform) then
                     local location = platform.space_location and platform.space_location.name or instance()
-                    outbound.push("platform_create", {
-                        instance = instance(),
-                        name = name,
-                        location = location,
-                        tick = game.tick,
-                    })
+                    report_platform_create(name, location)
                     kept[#kept + 1] = name
                     log(string.format("[%s] asking the space server to adopt %s", instance(), name))
                 elseif destroy_copy(platform) then

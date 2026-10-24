@@ -1,4 +1,11 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.23
+Date: 2026-10-24
+  Fixed:
+    - Removed the require cycle introduced in 0.36.22 (platforms -> outbound -> platforms)
+      by requiring outbound lazily when reporting a native platform. 0.36.22 failed to load:
+      "too many C levels" in platforms.lua.
+---------------------------------------------------------------------------------------------------
 Version: 0.36.22
 Date: 2026-10-24
   Fixed:
