@@ -1,4 +1,12 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.24
+Date: 2026-10-24
+  Changed:
+    - Removed the connected-player guards from the platform mirror and the space-side
+      platform creation. The join desync was the per-client GUI rebuild counter, not these
+      world changes. A starter-pack platform is now adopted even when its owner is standing
+      on the planet or the space server.
+---------------------------------------------------------------------------------------------------
 Version: 0.36.23
 Date: 2026-10-24
   Fixed:

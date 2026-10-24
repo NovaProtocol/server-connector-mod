@@ -15,7 +15,6 @@ local state = require("__server-connector-mod__.control.state")
 
 local MOD = state.MOD
 local known = state.known
-local empty = state.empty
 local instance = state.instance
 local main_force = state.main_force
 
@@ -324,12 +323,9 @@ local function mirror_platforms(entries)
         return {instance = instance(), skipped = "no identity"}
     end
 
-    -- Making or removing a platform from an order is a world change with no counterpart
-    -- on a client, which is a desync by construction.
-    if not empty() then
-        return {instance = instance(), skipped = "somebody is connected"}
-    end
-
+    -- Applied even while a player is connected. The join desync was the per-client GUI
+    -- rebuild counter, not the platform mirror; refusing here left a starter-pack platform
+    -- waiting forever whenever its owner was standing on the planet or the space server.
     if instance() == "space" then
         return {instance = instance(), skipped = "the real platforms live here"}
     end
@@ -580,8 +576,9 @@ end
 --
 -- The planet mirror asks for this when a player launches a starter pack: the native
 -- platform exists in the planet's save, but the space server is the authority and has to
--- create the real one. Idempotent by name, and refused while anybody is connected because
--- creating a platform under a client is a world change the client never sees.
+-- create the real one. Idempotent by name. It runs while players are connected: the join
+-- desync was the GUI rebuild, and waiting for an empty space server meant a starter pack
+-- launched while somebody watched the platform screen was never adopted.
 local function create_platform(entry)
     if instance() ~= "space" then
         return {ok = false, error = "only the space server creates real platforms"}
@@ -589,10 +586,6 @@ local function create_platform(entry)
     if type(entry) ~= "table" or type(entry.name) ~= "string" or entry.name == "" then
         return {ok = false, error = "a platform needs a name"}
     end
-    if not empty() then
-        return {ok = false, skipped = "somebody is connected"}
-    end
-
     local force = main_force()
     for _, platform in pairs(force.platforms or {}) do
         if platform.name == entry.name then
