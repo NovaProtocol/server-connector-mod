@@ -27,6 +27,7 @@ local outbound = require("__server-connector-mod__.control.outbound")
 
 local MOD = state.MOD
 local SCHEMA = state.SCHEMA
+local instance = state.instance
 
 -- Everything a handler does is wrapped in this.
 --

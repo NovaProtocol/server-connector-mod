@@ -1,4 +1,10 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.28
+Date: 2026-10-24
+  Fixed:
+    - events.lua used an undefined instance() in the new platform-created and rocket-launch
+      handlers. The rocket launch fired and failed with "attempt to call global 'instance'".
+---------------------------------------------------------------------------------------------------
 Version: 0.36.27
 Date: 2026-10-24
   Added:
