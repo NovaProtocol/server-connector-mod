@@ -1,4 +1,11 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.26
+Date: 2026-10-24
+  Fixed:
+    - Any platform the fleet list does not contain is kept and reported for adoption. The
+      hub test was also wrong: a native starter-pack platform can exist before a hub object
+      is visible, so the mirror destroyed it as a stale copy.
+---------------------------------------------------------------------------------------------------
 Version: 0.36.25
 Date: 2026-10-24
   Fixed:
