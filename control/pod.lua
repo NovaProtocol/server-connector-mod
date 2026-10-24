@@ -278,10 +278,19 @@ local function find_rocket_silo()
     local ok, silos = pcall(function()
         return surface.find_entities_filtered{name = "rocket-silo"}
     end)
-    if ok and silos then
-        return silos[1]
+    if not ok or not silos then
+        return nil
     end
-    return nil
+    local first = nil
+    for _, silo in ipairs(silos) do
+        if not first then first = silo end
+        local ready, status = pcall(function() return silo.rocket_silo_status end)
+        if ready and defines.rocket_silo_status.rocket_ready
+            and status == defines.rocket_silo_status.rocket_ready then
+            return silo
+        end
+    end
+    return first
 end
 
 local function insert_cargo(pod, item, count)

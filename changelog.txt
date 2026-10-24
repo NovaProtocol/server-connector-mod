@@ -1,4 +1,10 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.9
+Date: 2026-10-24
+  Changed:
+    - The rocket test selects a silo whose status is rocket_ready, rather than the first silo,
+      which may be empty.
+---------------------------------------------------------------------------------------------------
 Version: 0.36.8
 Date: 2026-10-24
   Added:
