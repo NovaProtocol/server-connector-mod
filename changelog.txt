@@ -1,4 +1,11 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.34
+Date: 2026-10-24
+  Changed:
+    - Cheap platform_meta now runs at 10 Hz; the position stream stays at 2 Hz.
+    - Handbook: the 30 s hub dump checks the hub inventory's weight first and skips the
+      per-stack dump when the weight is unchanged.
+---------------------------------------------------------------------------------------------------
 Version: 0.36.33
 Date: 2026-10-24
   Fixed:

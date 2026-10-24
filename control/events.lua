@@ -68,12 +68,15 @@ end)
 
 -- Platform positions move continuously in transit; 2 Hz is enough for the board. Ten hertz
 -- was seven datagrams a second across the fleet for a UI that redraws far slower.
+-- Cheap metadata from every server, copies included: identity, position and state only.
+-- It reads no inventory, so it can run at 10 Hz. Positions are a separate, heavier stream
+-- and stay at 2 Hz.
+script.on_nth_tick(6, function()
+    guard("outbound platform meta", outbound.tick_meta)
+end)
+
 script.on_nth_tick(30, function()
     guard("outbound platform positions", outbound.tick_positions)
-
-    -- Cheap metadata from every server, copies included: index, position, state, bays and
-    -- the request hash. No inventory is read here.
-    guard("outbound platform meta", outbound.tick_meta)
 end)
 
 -- The heavy hub cargo, only when it changed, and the aggregate audit. Both are reads plus

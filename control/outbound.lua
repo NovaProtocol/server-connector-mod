@@ -121,40 +121,51 @@ local function tick_hub()
         return
     end
     storage.hub_sent = storage.hub_sent or {}
+    storage.hub_weight = storage.hub_weight or {}
 
     for _, platform in pairs(main_force().platforms or {}) do
-        local page = platform_api.dump({index = platform.index, cursor = 0, limit = 60})
-        if page and page.ok then
-            if storage.hub_sent[platform.index] ~= page.hash then
-                local cursor = 0
-                local pages = 0
-                repeat
-                    if cursor ~= 0 then
-                        page = platform_api.dump({index = platform.index, cursor = cursor, limit = 60})
+        -- Weight is one engine-side scalar over the hub inventory. If it did not move,
+        -- nothing can have entered or left, so the expensive per-stack dump is skipped.
+        local inventory = platform_api.hub_inventory(platform.hub)
+        if inventory then
+            local weight = inventory.weight
+            if storage.hub_weight[platform.index] ~= weight then
+                storage.hub_weight[platform.index] = weight
+
+                local page = platform_api.dump({index = platform.index, cursor = 0, limit = 60})
+                if page and page.ok then
+                    if storage.hub_sent[platform.index] ~= page.hash then
+                        local cursor = 0
+                        local pages = 0
+                        repeat
+                            if cursor ~= 0 then
+                                page = platform_api.dump({index = platform.index, cursor = cursor, limit = 60})
+                            end
+                            if not page or not page.ok then
+                                break
+                            end
+
+                            push("platform_hub_dump", {
+                                instance = state.instance(),
+                                tick = game.tick,
+                                platform = page.platform,
+                                cursor = page.cursor,
+                                next = page.next,
+                                total = page.total,
+                                done = page.done,
+                                hash = page.hash,
+                                cargo = page.cargo,
+                                requests = page.requests,
+                                request_hash = page.request_hash,
+                            })
+
+                            pages = pages + 1
+                            cursor = page.next
+                        until page.done or pages > 1000
+
+                        storage.hub_sent[platform.index] = page.hash
                     end
-                    if not page or not page.ok then
-                        break
-                    end
-
-                    push("platform_hub_dump", {
-                        instance = state.instance(),
-                        tick = game.tick,
-                        platform = page.platform,
-                        cursor = page.cursor,
-                        next = page.next,
-                        total = page.total,
-                        done = page.done,
-                        hash = page.hash,
-                        cargo = page.cargo,
-                        requests = page.requests,
-                        request_hash = page.request_hash,
-                    })
-
-                    pages = pages + 1
-                    cursor = page.next
-                until page.done or pages > 1000
-
-                storage.hub_sent[platform.index] = page.hash
+                end
             end
         end
     end
