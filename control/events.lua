@@ -212,6 +212,32 @@ if defines.events.on_space_platform_created then
     end)
 end
 
+-- A starter pack placed as a ghost is not a LuaSpacePlatform yet, so
+-- on_space_platform_created does not see it. The hub ghost is the first thing that exists;
+-- report its platform so the manager can create the real one on the space server.
+local function report_platform_ghost(event, what)
+    guard(what, function()
+        local entity = event.entity
+        if not entity or not entity.valid or not entity.ghost then
+            return
+        end
+        if entity.name ~= "space-platform-hub" then
+            return
+        end
+        local platform = entity.surface and entity.surface.platform
+        if platform and platform.valid then
+            report_new_platform(platform)
+        end
+    end)
+end
+
+script.on_event(defines.events.on_built_entity, function(event)
+    report_platform_ghost(event, "a platform hub ghost")
+end)
+script.on_event(defines.events.on_robot_built_entity, function(event)
+    report_platform_ghost(event, "a robot platform hub ghost")
+end)
+
 -- A backstop for a build that does not fire on_space_platform_created: a rocket launch
 -- re-checks this world's platforms against the fleet list and reports anything new.
 script.on_event(defines.events.on_rocket_launched, function()

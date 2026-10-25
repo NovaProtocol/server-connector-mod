@@ -1,4 +1,10 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.46
+Date: 2026-10-24
+  Fixed:
+    - A space-platform hub ghost is reported as a new platform, so the manager can create
+      the real platform on the space server instead of leaving a ghost on a planet server.
+---------------------------------------------------------------------------------------------------
 Version: 0.36.45
 Date: 2026-10-24
   Added:
