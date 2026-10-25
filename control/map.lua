@@ -33,15 +33,16 @@ end
 local function build(player, sig)
     destroy(player)
 
-    -- No caption: a frame with a title bar is a window the player can drag. This is a fixed
-    -- strip pinned to the top of the screen.
+    -- A captioned frame is a draggable window, the same shape RateCalculator uses. It is
+    -- not pinned over the map search: the player can move it anywhere, and its position is
+    -- kept because the frame is only rebuilt when the destination list changes.
     local frame = player.gui.screen.add{
         type = "frame",
         name = FRAME,
         direction = "vertical",
+        caption = "Servers",
     }
-    frame.location = {x = 16, y = 0}
-    frame.add{type = "label", caption = "Servers"}
+    frame.auto_center = true
 
     local flow = frame.add{type = "flow", direction = "horizontal"}
     local count = 0

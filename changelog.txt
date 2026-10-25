@@ -1,4 +1,10 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.40
+Date: 2026-10-24
+  Changed:
+    - The in-game server strip is a captioned, draggable window instead of a fixed overlay.
+      It no longer sits over the map search and can be moved like RateCalculator's window.
+---------------------------------------------------------------------------------------------------
 Version: 0.36.39
 Date: 2026-10-24
   Fixed:
