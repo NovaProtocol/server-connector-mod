@@ -42,65 +42,75 @@ local function guard(what, fn)
     end
 end
 
-script.on_nth_tick(60, function()
-    if not state.known() then
-        return
+-- Every nth-tick handler is collected here and registered by a single dispatcher per
+-- interval at the end of this file. Factorio keeps only one handler per interval; two
+-- script.on_nth_tick(60, ...) calls silently replaced each other, which is how the asteroid
+-- sweep, map refresh and research push stopped running.
+local intervals = {}
+
+local function every(ticks, name, fn)
+    local handlers = intervals[ticks]
+    if not handlers then
+        handlers = {}
+        intervals[ticks] = handlers
     end
+    for _, handler in ipairs(handlers) do
+        if handler.name == name then
+            log(string.format("[%s] duplicate nth_tick handler %s at %d ticks", state.instance(), name, ticks))
+            return
+        end
+    end
+    handlers[#handlers + 1] = {name = name, fn = fn}
+end
 
-    -- A planet server and asteroids, once a second. Guarded, because a fault here would run
-    -- every second forever.
-    guard("the asteroid sweep", convert.sweep_asteroids)
+local function when_known(fn)
+    return function()
+        if state.known() then
+            fn()
+        end
+    end
+end
 
-    -- The map is shown only while the map view is open, and there is no event for opening
-    -- it, so the list is refreshed (and shown or hidden) on this pass.
-    guard("the server map", map.tick)
+-- A planet server and asteroids, once a second.
+every(60, "the asteroid sweep", when_known(convert.sweep_asteroids))
 
-    -- Research progress is pushed over UDP only when it moved, once a second.
-    guard("outbound research", outbound.tick_research)
+-- The map is shown only while the map view is open, and there is no event for opening it,
+-- so the list is refreshed (and shown or hidden) on this pass.
+every(60, "the server map", when_known(map.tick))
 
-    -- There is deliberately no periodic layout/bay push here. A build or mine on the real
-    -- platform carries the new layout at once, and a server boot gets the full snapshot.
-    -- Re-sending every platform's shape on a timer was periodic building traffic.
-end)
+-- Research progress is pushed over UDP only when it moved, once a second.
+every(60, "outbound research", when_known(outbound.tick_research))
+
+-- There is deliberately no periodic layout/bay push here. A build or mine on the real
+-- platform carries the new layout at once, and a server boot gets the full snapshot.
+-- Re-sending every platform's shape on a timer was periodic building traffic.
 
 -- Platform positions move continuously in transit; 2 Hz is enough for the board. Ten hertz
 -- was seven datagrams a second across the fleet for a UI that redraws far slower.
 -- Cheap metadata from every server, copies included: identity, position and state only.
 -- It reads no inventory, so it can run at 10 Hz. Positions are a separate, heavier stream
 -- and stay at 2 Hz.
-script.on_nth_tick(6, function()
-    guard("outbound platform meta", outbound.tick_meta)
-end)
+every(6, "outbound platform meta", outbound.tick_meta)
 
-script.on_nth_tick(30, function()
-    guard("outbound platform positions", outbound.tick_positions)
-end)
+every(30, "outbound platform positions", outbound.tick_positions)
 
 -- Requests are the expensive part of the full meta, so they get their own 1 Hz stream.
-script.on_nth_tick(60, function()
-    guard("outbound platform logistic", outbound.tick_logistic)
-end)
+every(60, "outbound platform logistic", outbound.tick_logistic)
 
 -- The heavy hub cargo, only when it changed, and the aggregate audit. Both are reads plus
 -- one localhost datagram; neither changes the world. The dump is every 30 s, the audit
 -- every five minutes.
 -- Cargo changes do not need a 10 s stream; 30 s keeps the manager current without reading
 -- every hub five times more often than the audit.
-script.on_nth_tick(1800, function()
-    guard("outbound platform hubs", outbound.tick_hub)
-end)
+every(1800, "outbound platform hubs", outbound.tick_hub)
 
 -- The aggregate audit is a safety net, not a live feed. Five minutes leaves the per-pod
 -- path and the resync in charge of ordinary cargo.
-script.on_nth_tick(18000, function()
-    guard("outbound platform audit", outbound.tick_audit)
-end)
+every(18000, "outbound platform audit", outbound.tick_audit)
 
 -- Re-send cargo-pod events for a minute. The queue write is on every peer (the tick is
 -- deterministic); the manager de-duplicates by event id.
-script.on_nth_tick(600, function()
-    guard("the pod queue", pod.tick)
-end)
+every(600, "the pod queue", pod.tick)
 
 -- The speed this world is kept at, put back on the game as the world comes up. The game
 -- writes its speed to nothing, so without this a restart is 1x until the manager says
@@ -380,3 +390,33 @@ script.on_event(defines.events.on_research_moved, function(event)
         research.note_research("research-moved", event.research and event.research.name)
     end)
 end)
+
+--------------------------------------------------------------------------------
+-- nth-tick dispatch
+--------------------------------------------------------------------------------
+
+local ordered_intervals = {}
+for ticks in pairs(intervals) do
+    ordered_intervals[#ordered_intervals + 1] = ticks
+end
+table.sort(ordered_intervals)
+
+local fired = {}
+for _, ticks in ipairs(ordered_intervals) do
+    local handlers = intervals[ticks]
+    local names = {}
+    for _, handler in ipairs(handlers) do
+        names[#names + 1] = handler.name
+    end
+    log(string.format("[%s] nth_tick %d: %s", instance(), ticks, table.concat(names, ", ")))
+
+    script.on_nth_tick(ticks, function()
+        for _, handler in ipairs(handlers) do
+            if not fired[handler.name] then
+                fired[handler.name] = true
+                log(string.format("[%s] nth_tick %d fired: %s", instance(), ticks, handler.name))
+            end
+            guard(handler.name, handler.fn)
+        end
+    end)
+end

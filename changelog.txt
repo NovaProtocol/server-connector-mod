@@ -1,4 +1,15 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.50
+Date: 2026-10-25
+  Fixed:
+    - Duplicate script.on_nth_tick(60) registrations overwrote each other, so the asteroid
+      sweep, map refresh and research push never ran. All intervals now go through one
+      collector and one dispatcher per interval.
+  Added:
+    - Startup log lists every nth-tick interval and handler; the first run of each handler is
+      logged once so a missing registration is visible.
+---------------------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------------------
 Version: 0.36.49
 Date: 2026-10-25
   Changed:
