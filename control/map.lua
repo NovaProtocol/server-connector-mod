@@ -15,6 +15,23 @@ local FRAME = "server-connector-map"
 -- rebuild the GUI while the server, whose Lua state persists, would not. That is two extra
 -- builds on the client, and the custom-GUI element counters in the desync report.
 
+-- The map is the chart view. There is no event for opening it, so the strip's position is
+-- recalculated on the same refresh pass: normal view sits at the top-left, map view shifts
+-- right so the search box is not covered.
+local function on_map(player)
+    if player.controller_type == defines.controllers.remote then
+        return true
+    end
+    local modes = defines.render_mode or {}
+    if modes.chart ~= nil then
+        return player.render_mode == modes.chart
+    end
+    if modes.game ~= nil then
+        return player.render_mode ~= modes.game
+    end
+    return false
+end
+
 local function signature()
     local parts = {}
     for _, destination in ipairs(state.destinations()) do
@@ -40,7 +57,7 @@ local function build(player, sig)
         name = FRAME,
         direction = "vertical",
     }
-    frame.location = {x = 220, y = 0}
+    frame.location = {x = 16, y = 0}
     frame.add{type = "label", caption = "Servers"}
 
     local flow = frame.add{type = "flow", direction = "horizontal"}
@@ -87,9 +104,8 @@ local function refresh(player)
     end
 
     if frame then
-        -- Always visible. The server's view of the client's render_mode is not reliable
-        -- enough to gate the strip: a wrong reading hides the only way to change servers.
         frame.visible = true
+        frame.location = on_map(player) and {x = 220, y = 0} or {x = 16, y = 0}
     end
 end
 

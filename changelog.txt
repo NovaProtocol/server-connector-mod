@@ -1,4 +1,16 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.43
+Date: 2026-10-24
+  Fixed:
+    - A copy of a platform with no layout now trims extra cargo bays instead of keeping
+      every bay from the old layout forever.
+---------------------------------------------------------------------------------------------------
+Version: 0.36.42
+Date: 2026-10-24
+  Changed:
+    - The server strip adapts its fixed position: top-left in the normal view, shifted right
+      in map view so the map search box stays clear. It is not draggable.
+---------------------------------------------------------------------------------------------------
 Version: 0.36.41
 Date: 2026-10-24
   Changed:

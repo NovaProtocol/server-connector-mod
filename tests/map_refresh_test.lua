@@ -69,6 +69,7 @@ map.refresh(player)
 assert(created == 1, "expected one GUI build, got " .. created)
 assert(screen["server-connector-map"], "the map frame was not built")
 assert(screen["server-connector-map"].visible, "the map frame was built but hidden")
+assert(screen["server-connector-map"].location.x == 16, "normal view should use the top-left")
 assert(storage.map_seen and storage.map_seen[player.name], "the build signature was not stored")
 
 -- A client joining again gets a fresh Lua state, but the saved storage and the GUI frame
@@ -77,4 +78,11 @@ map = dofile("control/map.lua")
 map.refresh(player)
 
 assert(created == 1, "the GUI was rebuilt after a client reload: " .. created)
+
+-- Opening the map does not rebuild the frame; it only shifts it clear of the search box.
+player.render_mode = "chart"
+map.refresh(player)
+assert(created == 1, "opening the map rebuilt the GUI")
+assert(screen["server-connector-map"].location.x == 220, "map view should shift right")
+
 print("map refresh is idempotent across a client reload")

@@ -282,6 +282,15 @@ local function ensure_bays(platform, count, layout)
             surface.create_entity{name = "cargo-bay", position = position, force = force.name}
         end)
     end
+    -- The fallback used to add only. A copy built from an older layout therefore kept
+    -- every extra bay forever when the real platform had no layout (for example a new
+    -- platform with zero bays). Trim to the count as well.
+    for index = count + 1, #bays do
+        local bay = bays[index]
+        if bay and bay.valid then
+            pcall(function() bay.destroy() end)
+        end
+    end
 end
 
 
