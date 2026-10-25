@@ -595,15 +595,11 @@ local function mirror_platforms(entries)
 end
 
 -- The new-space-platform button puts a starter-pack request in the rocket silo of the
--- surface the player happened to be on. A planet server has one main planet; a request
--- made from a copy/other surface is moved to a silo on that main planet so the player does
--- not have to travel there.
+-- surface the player happened to be on. That surface may be a copy, or a planet with no
+-- starter-hub production. Remove the local request and ask the manager to schedule it on
+-- the production planet (nauvis) instead; the space server then creates the real platform.
 local function move_launch_request(silo)
     if not silo or not silo.valid or silo.name ~= "rocket-silo" then
-        return
-    end
-    local main = state.primary_surface()
-    if not main or silo.surface == main then
         return
     end
 
@@ -623,37 +619,19 @@ local function move_launch_request(silo)
         return
     end
 
-    local target
-    for _, candidate in pairs(main.find_entities_filtered{name = "rocket-silo"} or {}) do
-        if candidate.valid then
-            target = candidate
-            break
-        end
-    end
-    if not target then
-        log(string.format("[%s] no rocket silo on %s to move the launch request to",
-            instance(), main.name))
-        return
-    end
-
-    local target_point = target.get_logistic_point(defines.logistic_member_index.rocket_silo_rocket)
-    local target_section = target_point and target_point.sections and target_point.sections[1]
-    if not target_section then
-        return
-    end
-
     for index, filter in pairs(section.filters or {}) do
         if filter and filter.name == "space-platform-starter-pack" then
             pcall(function() section.set_filter(index, nil) end)
         end
     end
-    pcall(function()
-        target_section.set_filter(#(target_section.filters or {}) + 1, {
-            name = "space-platform-starter-pack", count = 1, max_count = 1,
-        })
-    end)
-    log(string.format("[%s] moved the starter-pack launch request from %s to %s",
-        instance(), silo.surface.name, main.name))
+
+    local outbound = require("__server-connector-mod__.control.outbound")
+    outbound.push("platform_launch_request", {
+        instance = instance(),
+        surface = silo.surface and silo.surface.name or nil,
+        tick = game.tick,
+    })
+    log(string.format("[%s] handed the starter-pack launch request to the manager", instance()))
 end
 
 -- A real platform, created where the platforms really live.

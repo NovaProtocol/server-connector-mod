@@ -1,4 +1,10 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.47
+Date: 2026-10-25
+  Changed:
+    - A starter-pack launch request made on a non-production planet is removed locally and
+      sent to the manager, which schedules it on nauvis where the starter hub is produced.
+---------------------------------------------------------------------------------------------------
 Version: 0.36.46
 Date: 2026-10-24
   Fixed:
