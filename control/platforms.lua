@@ -319,6 +319,28 @@ local function destroy_copy(platform)
     return ok
 end
 
+-- A copy is made by this mod; a native platform is made by the game when a starter pack
+-- launches or a player uses the new-platform button. A copy must never enter the native
+-- platform path, or the mirror's own creation would ask for another copy for ever.
+local function is_copy(platform)
+    if not platform then
+        return false
+    end
+    if storage.creating_copy == platform.name then
+        return true
+    end
+    return storage.copies and storage.copies[platform.name] or false
+end
+
+-- Remove a platform that the game created natively on a planet. The space server owns the
+-- real one; the planet only gets a protected copy back from the normal mirror.
+local function remove_native_platform(platform)
+    if not platform or not platform.valid or is_copy(platform) then
+        return false
+    end
+    return destroy_copy(platform)
+end
+
 -- Make, keep or remove this server's copies of the fleet's platforms.
 --
 -- An order, not a decision: the list comes from the manager, which is the only thing
@@ -414,14 +436,13 @@ local function mirror_platforms(entries)
 
         if keep == 0 then
             -- A platform here that the fleet list does not know about is either a stale
-            -- copy or a real one a player has just made by launching a starter pack. A copy
-            -- is protected; a native platform is not. Ask the manager to have the space
-            -- server create it, and keep it until the fleet list contains it. Deleting it
-            -- is how a starter pack launched on a planet used to vanish.
+            -- copy or a native one a player just made. A stale copy is removed; a native
+            -- platform is removed too, and the space server is asked to create the real one
+            -- under the same name. The next mirror returns a protected copy.
             for _, platform in ipairs(group) do
                 -- A copy the mod made and the fleet no longer lists is stale: remove it.
-                -- Anything else here is a native platform the fleet has not adopted, so keep
-                -- it and report it. Protection flags and hubs are not reliable for this.
+                -- Anything else is a native platform; remove it and create the real one on
+                -- the space server.
                 if storage.copies and storage.copies[name] then
                     if destroy_copy(platform) then
                         removed[#removed + 1] = name
@@ -432,9 +453,12 @@ local function mirror_platforms(entries)
                     end
                 else
                     local location = platform.space_location and platform.space_location.name or instance()
-                    report_platform_create(name, location)
-                    kept[#kept + 1] = name
-                    log(string.format("[%s] asking the space server to adopt %s", instance(), name))
+                    if destroy_copy(platform) then
+                        report_platform_create(name, location)
+                        log(string.format("[%s] removed native %s and asked the space server to create it", instance(), name))
+                    else
+                        log(string.format("[%s] could not remove native %s", instance(), name))
+                    end
                 end
             end
             if keep == 0 then
@@ -452,9 +476,12 @@ local function mirror_platforms(entries)
                     end
                 else
                     local location = platform.space_location and platform.space_location.name or instance()
-                    report_platform_create(name, location)
-                    kept[#kept + 1] = name
-                    log(string.format("[%s] asking the space server to adopt the extra %s", instance(), name))
+                    if destroy_copy(platform) then
+                        report_platform_create(name, location)
+                        log(string.format("[%s] removed extra native %s and asked the space server to create it", instance(), name))
+                    else
+                        log(string.format("[%s] could not remove extra native %s", instance(), name))
+                    end
                 end
             end
         end
@@ -523,6 +550,7 @@ local function mirror_platforms(entries)
                 -- location and `starter_pack` is the item the game itself uses for one
                 -- (asked for with plate, not guessed -- the probe reports it). The starter
                 -- pack is also what gives the copy its hub.
+                storage.creating_copy = name
                 local ok, created = pcall(function()
                     return force.create_space_platform{
                         planet = planet,
@@ -530,6 +558,7 @@ local function mirror_platforms(entries)
                         starter_pack = "space-platform-starter-pack",
                     }
                 end)
+                storage.creating_copy = nil
 
                 if ok and created then
                     if not pcall(function() created.apply_starter_pack(true) end) then
@@ -594,83 +623,6 @@ local function mirror_platforms(entries)
     }
 end
 
--- The new-space-platform button puts a starter-pack request in the rocket silo of the
--- surface the player happened to be on. That surface may be a copy, or a planet with no
--- starter-hub production. Remove the local request and ask the manager to schedule it on
--- the production planet (nauvis) instead; the space server then creates the real platform.
-local function move_launch_request(event)
-    local silo = event and event.entity
-    if not silo or not silo.valid or silo.name ~= "rocket-silo" then
-        return
-    end
-
-    local point = silo.get_logistic_point(defines.logistic_member_index.rocket_silo_rocket)
-    local section = point and point.sections and point.sections[1]
-    if not section then
-        return
-    end
-
-    local requested = false
-    for _, filter in pairs(section.filters or {}) do
-        if filter and filter.name == "space-platform-starter-pack" then
-            requested = true
-        end
-    end
-    if not requested then
-        return
-    end
-
-    for index, filter in pairs(section.filters or {}) do
-        if filter and filter.name == "space-platform-starter-pack" then
-            pcall(function() section:set_filter(index, nil) end)
-        end
-    end
-
-    local player = event.player_index and game.get_player(event.player_index)
-    local outbound = require("__server-connector-mod__.control.outbound")
-    outbound.push("platform_launch_request", {
-        instance = instance(),
-        surface = silo.surface and silo.surface.name or nil,
-        player = player and player.name or nil,
-        tick = game.tick,
-    })
-    log(string.format("[%s] handed the starter-pack launch request to the manager", instance()))
-end
-
--- Put the starter-pack request on the production planet's own silo. The manager calls this
--- on nauvis after removing the player's request from whichever server they were on.
-local function queue_launch_request(entry)
-    local main = state.primary_surface()
-    if not main then
-        return {ok = false, error = "no main surface"}
-    end
-    local silo
-    for _, candidate in pairs(main.find_entities_filtered{name = "rocket-silo"} or {}) do
-        if candidate.valid then
-            silo = candidate
-            break
-        end
-    end
-    if not silo then
-        return {ok = false, error = "no rocket silo on " .. main.name}
-    end
-    local point = silo.get_logistic_point(defines.logistic_member_index.rocket_silo_rocket)
-    local section = point and point.sections and point.sections[1]
-    if not section then
-        return {ok = false, error = "no rocket silo logistic section"}
-    end
-    local added = pcall(function()
-        section:set_filter(#(section.filters or {}) + 1, {
-            name = "space-platform-starter-pack", count = 1, max_count = 1,
-        })
-    end)
-    if not added then
-        return {ok = false, error = "the silo refused the request"}
-    end
-    log(string.format("[%s] queued a starter-pack launch on %s", instance(), main.name))
-    return {ok = true, surface = main.name, silo = silo.unit_number}
-end
-
 -- A real platform, created where the platforms really live.
 --
 -- The planet mirror asks for this when a player launches a starter pack: the native
@@ -711,25 +663,6 @@ local function create_platform(entry)
     local hub = pcall(function() created.apply_starter_pack(true) end)
     log(string.format("[%s] created platform %s at %s", instance(), entry.name, planet))
     return {ok = true, name = entry.name, location = planet, hub = hub}
-end
-
--- Report one existing platform to the manager for adoption. The same outbound datagram the
--- rocket/creation handlers send, exposed for an operator test without /c UDP.
-local function report_platform(name)
-    for _, platform in pairs(main_force().platforms or {}) do
-        if platform.name == name then
-            local outbound = require("__server-connector-mod__.control.outbound")
-            local location = platform.space_location and platform.space_location.name or instance()
-            outbound.push("platform_create", {
-                instance = instance(),
-                name = name,
-                location = location,
-                tick = game.tick,
-            })
-            return {ok = true, name = name, location = location}
-        end
-    end
-    return {ok = false, error = "no such platform: " .. tostring(name)}
 end
 
 -- What this server's platforms are.
@@ -900,9 +833,8 @@ end
 return {
     mirror_platforms = mirror_platforms,
     create_platform = create_platform,
-    move_launch_request = move_launch_request,
-    queue_launch_request = queue_launch_request,
-    report_platform = report_platform,
+    remove_native_platform = remove_native_platform,
+    is_copy = is_copy,
     platforms = platforms,
     platform_api = platform_api,
     surface_api = surface_api,

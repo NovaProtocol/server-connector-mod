@@ -169,15 +169,11 @@ local calls = {
     -- (platforms.mirror_platforms).
     mirror_platforms = platforms.mirror_platforms,
 
-    -- Create a real platform on the space server, from a starter pack launched elsewhere
+    -- Create the real platform on the space server from a native one found on a planet
     -- (platforms.create_platform).
     platform_create = platforms.create_platform,
-    queue_launch_request = platforms.queue_launch_request,
     platform_check = platforms.platform_check,
     rebuild_platforms = platforms.rebuild_platforms,
-
-    -- Report an existing platform for adoption, the same datagram the rocket handler sends.
-    platform_report = platforms.report_platform,
 
     -- What this server's platforms are (platforms.platforms).
     platforms = platforms.platforms,

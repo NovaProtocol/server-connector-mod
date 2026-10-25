@@ -1,4 +1,13 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.49
+Date: 2026-10-25
+  Changed:
+    - A native space platform on a planet is removed and recreated on the space server under
+      the same name; the normal mirror then copies it back to every planet.
+  Removed:
+    - The launch-request redirect, home-world handling, ghost reporting and rocket backstop.
+---------------------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------------------
 Version: 0.36.48
 Date: 2026-10-25
   Added:

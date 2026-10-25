@@ -185,79 +185,48 @@ script.on_event(defines.events.on_space_platform_mined_entity, function(event)
     announce_platform_layout(event, "a platform mine")
 end)
 
--- A starter pack creates a platform immediately, and that platform must be the real
--- one on the space server. Handling creation directly avoids waiting for the planet
--- mirror to notice an unknown hub, which was the path that kept losing it.
-local function report_new_platform(platform)
-    if instance() == "space" then
-        return
-    end
-    if not platform or not platform.valid then
-        return
-    end
-    local location = platform.space_location and platform.space_location.name or instance()
-    outbound.push("platform_create", {
-        instance = instance(),
-        name = platform.name,
-        location = location,
-        tick = game.tick,
-    })
+-- A native platform surface on a planet is a duplicate. The space server owns the real
+-- platform, so delete this one and ask the manager to create it there under the same name.
+-- The normal platform mirror then puts a protected copy back on every planet.
+local function reject_native_platform(surface, what)
+    guard(what, function()
+        if instance() == "space" or not surface or not surface.valid then
+            return
+        end
+        local platform = surface.platform
+        if not platform or not platform.valid or platforms.is_copy(platform) then
+            return
+        end
+
+        local name = platform.name
+        local location = platform.space_location and platform.space_location.name or instance()
+        if not platforms.remove_native_platform(platform) then
+            log(string.format("[%s] could not remove native platform %s", instance(), name))
+            return
+        end
+
+        outbound.push("platform_create", {
+            instance = instance(),
+            name = name,
+            location = location,
+            tick = game.tick,
+        })
+        log(string.format("[%s] removed native platform %s; the space server will create it", instance(), name))
+    end)
+end
+
+if defines.events.on_surface_created then
+    script.on_event(defines.events.on_surface_created, function(event)
+        reject_native_platform(game.get_surface(event.surface_index), "a surface creation")
+    end)
 end
 
 if defines.events.on_space_platform_created then
     script.on_event(defines.events.on_space_platform_created, function(event)
-        guard("a platform creation", function()
-            report_new_platform(event.platform)
-        end)
+        local platform = event.platform
+        reject_native_platform(platform and platform.surface, "a platform creation")
     end)
 end
-
--- A starter pack placed as a ghost is not a LuaSpacePlatform yet, so
--- on_space_platform_created does not see it. The hub ghost is the first thing that exists;
--- report its platform so the manager can create the real one on the space server.
-local function report_platform_ghost(event, what)
-    guard(what, function()
-        local entity = event.entity
-        if not entity or not entity.valid or not entity.ghost then
-            return
-        end
-        if entity.name ~= "space-platform-hub" then
-            return
-        end
-        local platform = entity.surface and entity.surface.platform
-        if platform and platform.valid then
-            report_new_platform(platform)
-        end
-    end)
-end
-
-script.on_event(defines.events.on_built_entity, function(event)
-    report_platform_ghost(event, "a platform hub ghost")
-end)
-script.on_event(defines.events.on_robot_built_entity, function(event)
-    report_platform_ghost(event, "a robot platform hub ghost")
-end)
-
--- A backstop for a build that does not fire on_space_platform_created: a rocket launch
--- re-checks this world's platforms against the fleet list and reports anything new.
-script.on_event(defines.events.on_rocket_launched, function()
-    guard("a rocket launch", function()
-        if instance() == "space" then
-            return
-        end
-        local known = {}
-        for _, entry in pairs(storage.fleet_platforms or {}) do
-            if type(entry) == "table" and entry.name then
-                known[entry.name] = true
-            end
-        end
-        for _, platform in pairs(state.main_force().platforms or {}) do
-            if not known[platform.name] then
-                report_new_platform(platform)
-            end
-        end
-    end)
-end)
 
 -- A logistic request change on a platform hub. This is the event the polling was standing
 -- in for: the hub's request filters changed, so the copies need the new set and their
@@ -354,13 +323,6 @@ script.on_event(defines.events.on_player_left_game, function()
 end)
 
 -- The server map's buttons.
--- The new-space-platform button writes a starter-pack filter into a rocket silo. If that
--- silo is not on the server's main planet, move the request there.
-script.on_event(defines.events.on_entity_logistic_slot_changed, function(event)
-    guard("a rocket silo launch request", function()
-        platforms.move_launch_request(event)
-    end)
-end)
 
 script.on_event(defines.events.on_gui_click, function(event)
     guard("a map click", function()
