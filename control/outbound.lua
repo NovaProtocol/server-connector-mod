@@ -68,7 +68,7 @@ local function positions()
     return out
 end
 
--- Positions move continuously in transit, so they go every 6 ticks (10 Hz), from the
+-- Positions move continuously in transit, so they go every 30 ticks (2 Hz), from the
 -- space server only.
 local function streams_enabled()
     return storage.platform_streams ~= false
@@ -85,17 +85,66 @@ local function tick_positions()
     })
 end
 
--- The cheap platform metadata, from every server: copies included. 10 Hz is enough for a
--- list and a position, and it costs no inventory read.
+-- The cheap platform metadata, from every server: copies included. It is change-driven so
+-- a stable fleet does not serialize and send the same table ten times a second. A full
+-- heartbeat every five seconds gives the manager a complete list and lets it prune.
+local function meta_signature(entry)
+    return table.concat({
+        tostring(entry.index or 0),
+        tostring(entry.name or ""),
+        tostring(entry.state or ""),
+        tostring(entry.location or ""),
+        tostring(entry.connection or ""),
+        entry.paused and "1" or "0",
+        tostring(entry.hub or 0),
+    }, "|")
+end
+
 local function tick_meta()
     if not state.known() or not streams_enabled() then
         return
     end
-    push("platform_meta", {
-        instance = state.instance(),
-        tick = game.tick,
-        platforms = platform_api.meta(),
-    })
+
+    local entries = platform_api.meta()
+    local previous = storage.meta_seen or {}
+    local current = {}
+    local changed = {}
+    local missing = false
+
+    for _, entry in ipairs(entries) do
+        local key = tostring(entry.index or 0)
+        local signature = meta_signature(entry)
+        current[key] = signature
+        if previous[key] ~= signature then
+            changed[#changed + 1] = entry
+        end
+    end
+    for key in pairs(previous) do
+        if current[key] == nil then
+            missing = true
+            break
+        end
+    end
+
+    local heartbeat = not storage.meta_heartbeat or game.tick - storage.meta_heartbeat >= 300
+    storage.meta_seen = current
+
+    if heartbeat or missing then
+        storage.meta_heartbeat = game.tick
+        push("platform_meta", {
+            instance = state.instance(),
+            tick = game.tick,
+            platforms = entries,
+            partial = false,
+        })
+    elseif #changed > 0 then
+        push("platform_meta", {
+            instance = state.instance(),
+            tick = game.tick,
+            platforms = changed,
+            partial = true,
+        })
+    end
 end
 
 -- Logistic-only meta at 1 Hz: requests and their hash, no layout or bay walk. The full

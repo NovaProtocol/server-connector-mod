@@ -251,7 +251,6 @@ local function meta(full, logistic)
             state = tostring(platform.state),
             location = platform.space_location and platform.space_location.name or nil,
             connection = platform.space_connection and platform.space_connection.name or nil,
-            distance = platform.distance,
             paused = platform.paused,
             hub = platform.hub and platform.hub.unit_number or nil,
         }

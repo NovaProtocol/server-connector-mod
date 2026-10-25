@@ -16,6 +16,7 @@ local platform_api = require("__server-connector-mod__.control.platform_api")
 local pod = require("__server-connector-mod__.control.pod")
 local research = require("__server-connector-mod__.control.research")
 local map = require("__server-connector-mod__.control.map")
+local outbound = require("__server-connector-mod__.control.outbound")
 
 local MOD = state.MOD
 
@@ -244,6 +245,38 @@ commands.add_command(
             game.get_player(event.player_index).print(text)
         elseif rcon then
             rcon.print(text)
+        end
+    end
+)
+
+-- Measure the scheduled readers with the game's own profiler. This is a diagnostic
+-- command, not a control surface: it calls each reader once and prints its measured cost.
+commands.add_command(
+    MOD .. "-profile",
+    "Profile the platform metadata, position, logistic, hub and map readers once.",
+    function(event)
+        local function measure(label, fn)
+            local profiler = helpers.create_profiler()
+            fn()
+            profiler.stop()
+            local text = {"", label .. ": ", profiler}
+            if event.player_index and game.get_player(event.player_index) then
+                game.get_player(event.player_index).print(text)
+            elseif rcon then
+                rcon.print(text)
+            end
+        end
+
+        local ok, err = pcall(function()
+            measure("platform_meta full table", platform_api.meta)
+            measure("platform_meta change-driven", outbound.tick_meta)
+            measure("platform_positions", outbound.tick_positions)
+            measure("platform_logistic", outbound.tick_logistic)
+            measure("platform_hub", outbound.tick_hub)
+            measure("map_tick", map.tick)
+        end)
+        if not ok then
+            log(string.format("[%s] -profile failed: %s", MOD, tostring(err)))
         end
     end
 )

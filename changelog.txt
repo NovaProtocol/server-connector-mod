@@ -1,4 +1,18 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.51
+Date: 2026-10-25
+  Changed:
+    - platform_meta is change-driven with a five-second full heartbeat instead of sending the
+      whole table ten times a second. The manager merges partial updates and prunes only on a
+      full list.
+    - distance moved out of platform_meta; the 2 Hz platform_positions stream now updates it.
+    - platform positions remain at 2 Hz. Manager-side extrapolation was not enabled because the
+      runtime does not expose a per-platform speed value to interpolate from.
+  Added:
+    - /server-connector-mod-profile measures the meta, positions, logistic, hub and map readers
+      with helpers.create_profiler().
+---------------------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------------------
 Version: 0.36.50
 Date: 2026-10-25
   Fixed:
