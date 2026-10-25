@@ -33,16 +33,15 @@ end
 local function build(player, sig)
     destroy(player)
 
-    -- A captioned frame is a draggable window, the same shape RateCalculator uses. It is
-    -- not pinned over the map search: the player can move it anywhere, and its position is
-    -- kept because the frame is only rebuilt when the destination list changes.
+    -- Fixed near the top-left rather than draggable. The map's search box occupies the
+    -- first ~200 px, so the strip starts to its right instead of covering it.
     local frame = player.gui.screen.add{
         type = "frame",
         name = FRAME,
         direction = "vertical",
-        caption = "Servers",
     }
-    frame.auto_center = true
+    frame.location = {x = 220, y = 0}
+    frame.add{type = "label", caption = "Servers"}
 
     local flow = frame.add{type = "flow", direction = "horizontal"}
     local count = 0

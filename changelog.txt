@@ -1,4 +1,10 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.41
+Date: 2026-10-24
+  Changed:
+    - The server strip is fixed near the top-left but offset to the right of the map search
+      instead of covering it. It is not draggable.
+---------------------------------------------------------------------------------------------------
 Version: 0.36.40
 Date: 2026-10-24
   Changed:
