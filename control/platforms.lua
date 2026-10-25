@@ -594,6 +594,68 @@ local function mirror_platforms(entries)
     }
 end
 
+-- The new-space-platform button puts a starter-pack request in the rocket silo of the
+-- surface the player happened to be on. A planet server has one main planet; a request
+-- made from a copy/other surface is moved to a silo on that main planet so the player does
+-- not have to travel there.
+local function move_launch_request(silo)
+    if not silo or not silo.valid or silo.name ~= "rocket-silo" then
+        return
+    end
+    local main = state.primary_surface()
+    if not main or silo.surface == main then
+        return
+    end
+
+    local point = silo.get_logistic_point(defines.logistic_member_index.rocket_silo_rocket)
+    local section = point and point.sections and point.sections[1]
+    if not section then
+        return
+    end
+
+    local requested = false
+    for _, filter in pairs(section.filters or {}) do
+        if filter and filter.name == "space-platform-starter-pack" then
+            requested = true
+        end
+    end
+    if not requested then
+        return
+    end
+
+    local target
+    for _, candidate in pairs(main.find_entities_filtered{name = "rocket-silo"} or {}) do
+        if candidate.valid then
+            target = candidate
+            break
+        end
+    end
+    if not target then
+        log(string.format("[%s] no rocket silo on %s to move the launch request to",
+            instance(), main.name))
+        return
+    end
+
+    local target_point = target.get_logistic_point(defines.logistic_member_index.rocket_silo_rocket)
+    local target_section = target_point and target_point.sections and target_point.sections[1]
+    if not target_section then
+        return
+    end
+
+    for index, filter in pairs(section.filters or {}) do
+        if filter and filter.name == "space-platform-starter-pack" then
+            pcall(function() section.set_filter(index, nil) end)
+        end
+    end
+    pcall(function()
+        target_section.set_filter(#(target_section.filters or {}) + 1, {
+            name = "space-platform-starter-pack", count = 1, max_count = 1,
+        })
+    end)
+    log(string.format("[%s] moved the starter-pack launch request from %s to %s",
+        instance(), silo.surface.name, main.name))
+end
+
 -- A real platform, created where the platforms really live.
 --
 -- The planet mirror asks for this when a player launches a starter pack: the native
@@ -823,6 +885,7 @@ end
 return {
     mirror_platforms = mirror_platforms,
     create_platform = create_platform,
+    move_launch_request = move_launch_request,
     report_platform = report_platform,
     platforms = platforms,
     platform_api = platform_api,

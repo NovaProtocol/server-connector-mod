@@ -1,4 +1,10 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.45
+Date: 2026-10-24
+  Added:
+    - The new-space-platform starter-pack request is moved from a non-main surface's rocket
+      silo to a silo on the server's main planet.
+---------------------------------------------------------------------------------------------------
 Version: 0.36.44
 Date: 2026-10-24
   Fixed:

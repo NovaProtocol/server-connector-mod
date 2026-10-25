@@ -328,6 +328,14 @@ script.on_event(defines.events.on_player_left_game, function()
 end)
 
 -- The server map's buttons.
+-- The new-space-platform button writes a starter-pack filter into a rocket silo. If that
+-- silo is not on the server's main planet, move the request there.
+script.on_event(defines.events.on_entity_logistic_slot_changed, function(event)
+    guard("a rocket silo launch request", function()
+        platforms.move_launch_request(event.entity)
+    end)
+end)
+
 script.on_event(defines.events.on_gui_click, function(event)
     guard("a map click", function()
         map.click(event)
