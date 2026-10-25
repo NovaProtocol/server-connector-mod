@@ -68,6 +68,7 @@ map.refresh(player)
 
 assert(created == 1, "expected one GUI build, got " .. created)
 assert(screen["server-connector-map"], "the map frame was not built")
+assert(screen["server-connector-map"].visible, "the map frame was built but hidden")
 assert(storage.map_seen and storage.map_seen[player.name], "the build signature was not stored")
 
 -- A client joining again gets a fresh Lua state, but the saved storage and the GUI frame

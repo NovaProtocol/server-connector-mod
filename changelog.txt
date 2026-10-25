@@ -1,4 +1,11 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.39
+Date: 2026-10-24
+  Fixed:
+    - The in-game server strip is no longer gated on the server's reading of the client's
+      render_mode. It is visible while connected, so the map-view server buttons cannot be
+      hidden by a wrong chart/game reading.
+---------------------------------------------------------------------------------------------------
 Version: 0.36.38
 Date: 2026-10-24
   Fixed:

@@ -15,26 +15,6 @@ local FRAME = "server-connector-map"
 -- rebuild the GUI while the server, whose Lua state persists, would not. That is two extra
 -- builds on the client, and the custom-GUI element counters in the desync report.
 
--- The map is the chart view. There is no event for opening it (render_mode is read-only), so
--- this is asked when the list is refreshed, and the frame is shown or hidden.
-local function on_map(player)
-    -- A remote viewer is looking at the world through the map-like controller; the server
-    -- buttons are the way out of it, so they have to be visible there too.
-    if player.controller_type == defines.controllers.remote then
-        return true
-    end
-
-    local modes = defines.render_mode or {}
-    if modes.chart ~= nil then
-        return player.render_mode == modes.chart
-    end
-    if modes.game ~= nil then
-        return player.render_mode ~= modes.game
-    end
-    -- A build that does not name the modes: show it rather than never show it.
-    return true
-end
-
 local function signature()
     local parts = {}
     for _, destination in ipairs(state.destinations()) do
@@ -107,7 +87,9 @@ local function refresh(player)
     end
 
     if frame then
-        frame.visible = on_map(player)
+        -- Always visible. The server's view of the client's render_mode is not reliable
+        -- enough to gate the strip: a wrong reading hides the only way to change servers.
+        frame.visible = true
     end
 end
 
