@@ -267,6 +267,7 @@ local function ensure_bays(platform, count, layout)
         for index = #targets + 1, #bays do
             local bay = bays[index]
             if bay and bay.valid then
+                pcall(function() bay.destructible = true end)
                 pcall(function() bay.destroy() end)
             end
         end
@@ -288,6 +289,7 @@ local function ensure_bays(platform, count, layout)
     for index = count + 1, #bays do
         local bay = bays[index]
         if bay and bay.valid then
+            pcall(function() bay.destructible = true end)
             pcall(function() bay.destroy() end)
         end
     end
