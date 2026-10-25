@@ -358,7 +358,7 @@ end)
 -- silo is not on the server's main planet, move the request there.
 script.on_event(defines.events.on_entity_logistic_slot_changed, function(event)
     guard("a rocket silo launch request", function()
-        platforms.move_launch_request(event.entity)
+        platforms.move_launch_request(event)
     end)
 end)
 

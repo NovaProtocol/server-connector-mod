@@ -598,7 +598,8 @@ end
 -- surface the player happened to be on. That surface may be a copy, or a planet with no
 -- starter-hub production. Remove the local request and ask the manager to schedule it on
 -- the production planet (nauvis) instead; the space server then creates the real platform.
-local function move_launch_request(silo)
+local function move_launch_request(event)
+    local silo = event and event.entity
     if not silo or not silo.valid or silo.name ~= "rocket-silo" then
         return
     end
@@ -621,17 +622,53 @@ local function move_launch_request(silo)
 
     for index, filter in pairs(section.filters or {}) do
         if filter and filter.name == "space-platform-starter-pack" then
-            pcall(function() section.set_filter(index, nil) end)
+            pcall(function() section:set_filter(index, nil) end)
         end
     end
 
+    local player = event.player_index and game.get_player(event.player_index)
     local outbound = require("__server-connector-mod__.control.outbound")
     outbound.push("platform_launch_request", {
         instance = instance(),
         surface = silo.surface and silo.surface.name or nil,
+        player = player and player.name or nil,
         tick = game.tick,
     })
     log(string.format("[%s] handed the starter-pack launch request to the manager", instance()))
+end
+
+-- Put the starter-pack request on the production planet's own silo. The manager calls this
+-- on nauvis after removing the player's request from whichever server they were on.
+local function queue_launch_request(entry)
+    local main = state.primary_surface()
+    if not main then
+        return {ok = false, error = "no main surface"}
+    end
+    local silo
+    for _, candidate in pairs(main.find_entities_filtered{name = "rocket-silo"} or {}) do
+        if candidate.valid then
+            silo = candidate
+            break
+        end
+    end
+    if not silo then
+        return {ok = false, error = "no rocket silo on " .. main.name}
+    end
+    local point = silo.get_logistic_point(defines.logistic_member_index.rocket_silo_rocket)
+    local section = point and point.sections and point.sections[1]
+    if not section then
+        return {ok = false, error = "no rocket silo logistic section"}
+    end
+    local added = pcall(function()
+        section:set_filter(#(section.filters or {}) + 1, {
+            name = "space-platform-starter-pack", count = 1, max_count = 1,
+        })
+    end)
+    if not added then
+        return {ok = false, error = "the silo refused the request"}
+    end
+    log(string.format("[%s] queued a starter-pack launch on %s", instance(), main.name))
+    return {ok = true, surface = main.name, silo = silo.unit_number}
 end
 
 -- A real platform, created where the platforms really live.
@@ -864,6 +901,7 @@ return {
     mirror_platforms = mirror_platforms,
     create_platform = create_platform,
     move_launch_request = move_launch_request,
+    queue_launch_request = queue_launch_request,
     report_platform = report_platform,
     platforms = platforms,
     platform_api = platform_api,

@@ -1,4 +1,10 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.48
+Date: 2026-10-25
+  Added:
+    - Manager platform check and force-rebuild calls; queue_launch_request moves a player's
+      starter-pack request to the production planet's silo.
+---------------------------------------------------------------------------------------------------
 Version: 0.36.47
 Date: 2026-10-25
   Changed:
