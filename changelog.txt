@@ -1,4 +1,11 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.56
+Date: 2026-10-26
+  Fixed:
+    - The platform watch called a helper declared below it, so it read a nil global, and it was
+      scheduled at 60 ticks, so it ran every second. Both fixed: the helper is declared first
+      and the pass runs once a minute.
+---------------------------------------------------------------------------------------------------
 Version: 0.36.55
 Date: 2026-10-26
   Fixed:

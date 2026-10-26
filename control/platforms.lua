@@ -623,6 +623,35 @@ local function mirror_platforms(entries)
     }
 end
 
+-- How many starter-pack requests a rocket silo holds.
+--
+-- Nothing in this mod touches a silo's requests; this exists so a launch that goes nowhere
+-- leaves a trace. A count going 1 then 0 with no rocket launched is the report we need, and a
+-- count that is -1 means the silo's request point was not readable at all.
+local function starter_pack_requests(silo)
+    if not silo or not silo.valid or silo.name ~= "rocket-silo" then
+        return -1
+    end
+
+    local ok, point = pcall(function()
+        return silo.get_logistic_point(defines.logistic_member_index.rocket_silo_rocket)
+    end)
+    if not ok or not point then
+        return -1
+    end
+
+    local count = 0
+    for _, section in pairs(point.sections or {}) do
+        for _, filter in pairs(section.filters or {}) do
+            local value = filter and filter.value
+            if value and value.name == "space-platform-starter-pack" then
+                count = count + 1
+            end
+        end
+    end
+    return count
+end
+
 -- The starter-pack count on every silo of this planet, and the platform names this server can
 -- see. Logged only on a change, once a minute: the event that should report a silo edit does
 -- not always fire, and a launch that goes nowhere has to leave some trace.
@@ -687,35 +716,6 @@ end
 -- would need entries it has not sent yet. An empty mirror list is exactly "remove every copy".
 local function rebuild_platforms()
     return mirror_platforms({})
-end
-
--- How many starter-pack requests a rocket silo holds.
---
--- Nothing in this mod touches a silo's requests; this exists so a launch that goes nowhere
--- leaves a trace. A count going 1 then 0 with no rocket launched is the report we need, and a
--- count that is -1 means the silo's request point was not readable at all.
-local function starter_pack_requests(silo)
-    if not silo or not silo.valid or silo.name ~= "rocket-silo" then
-        return -1
-    end
-
-    local ok, point = pcall(function()
-        return silo.get_logistic_point(defines.logistic_member_index.rocket_silo_rocket)
-    end)
-    if not ok or not point then
-        return -1
-    end
-
-    local count = 0
-    for _, section in pairs(point.sections or {}) do
-        for _, filter in pairs(section.filters or {}) do
-            local value = filter and filter.value
-            if value and value.name == "space-platform-starter-pack" then
-                count = count + 1
-            end
-        end
-    end
-    return count
 end
 
 -- A real platform, created where the platforms really live.

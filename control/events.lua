@@ -93,7 +93,7 @@ every(3600, "the foreign chunks", when_known(chunks.sweep))
 -- Silo starter-pack counts and platform names, once a minute, logged only when they change.
 -- The logistic-slot event does not cover every edit the game makes, so this is the trace that
 -- cannot be missed.
-every(60, "the platform watch", when_known(platforms.watch))
+every(3600, "the platform watch", when_known(platforms.watch))
 
 -- The map is shown only while the map view is open, and there is no event for opening it,
 -- so the list is refreshed (and shown or hidden) on this pass.
