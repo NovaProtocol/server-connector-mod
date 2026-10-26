@@ -104,8 +104,13 @@ local function refresh(player)
     end
 
     if frame then
-        frame.visible = true
-        frame.location = on_map(player) and {x = 220, y = 0} or {x = 16, y = 0}
+        if not frame.visible then
+            frame.visible = true
+        end
+        local location = on_map(player) and {x = 220, y = 0} or {x = 16, y = 0}
+        if frame.location.x ~= location.x or frame.location.y ~= location.y then
+            frame.location = location
+        end
     end
 end
 

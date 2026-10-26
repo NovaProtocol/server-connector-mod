@@ -1,4 +1,18 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.52
+Date: 2026-10-25
+  Changed:
+    - map.refresh writes frame.visible and frame.location only when they actually change.
+    - platform_meta and platform_positions share position_of(), so their platform fields are
+      read once by the same helper.
+    - UDP send failures are logged at most once a minute from a local (non-storage) counter.
+  Measured:
+    - /server-connector-profile on the space server, 0.36.51: platform_meta full table
+      0.20-0.21 ms, change-driven 0.20-0.23 ms, positions 1.78-1.88 ms, logistic
+      8.6-11.1 ms, hub 70-748 ms, map 0.004 ms. The metadata saving is fewer datagrams when
+      nothing changes, not a faster table build.
+---------------------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------------------
 Version: 0.36.51
 Date: 2026-10-25
   Changed:

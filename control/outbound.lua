@@ -17,6 +17,10 @@ local main_force = state.main_force
 -- namespace.
 local UDP_PORT = 8999
 
+-- Local-only: a client without Lua UDP fails every push, and the failure is not part of
+-- the simulation. Log it at most once a minute rather than at the stream's rate.
+local last_udp_failure = -math.huge
+
 -- A server-side event pushed to the app. Never for a player: this is the game telling the
 -- app something happened, not a client action.
 -- A boot identity and a sequence number on every push.
@@ -44,7 +48,8 @@ local function push(kind, payload)
         return
     end
     local sent, err = pcall(function() helpers.send_udp(UDP_PORT, json) end)
-    if not sent then
+    if not sent and game.tick - last_udp_failure >= 3600 then
+        last_udp_failure = game.tick
         log(string.format("[%s] udp %s failed: %s", state.instance(), kind, tostring(err)))
     end
 end
@@ -54,16 +59,7 @@ end
 local function positions()
     local out = {}
     for _, platform in pairs(main_force().platforms or {}) do
-        out[#out + 1] = {
-            name = platform.name,
-            index = platform.index,
-            state = tostring(platform.state),
-            location = platform.space_location and platform.space_location.name or nil,
-            connection = platform.space_connection and platform.space_connection.name or nil,
-            distance = platform.distance,
-            paused = platform.paused,
-            docked = platform.state == defines.space_platform_state.waiting_for_departure,
-        }
+        out[#out + 1] = platform_api.position_of(platform, true)
     end
     return out
 end
@@ -85,9 +81,9 @@ local function tick_positions()
     })
 end
 
--- The cheap platform metadata, from every server: copies included. It is change-driven so
--- a stable fleet does not serialize and send the same table ten times a second. A full
--- heartbeat every five seconds gives the manager a complete list and lets it prune.
+-- The cheap platform metadata, from every server: copies included. It is checked at 10 Hz
+-- but sent only when a platform's identity/position changes. A full heartbeat every five
+-- seconds gives the manager a complete list and lets it prune.
 local function meta_signature(entry)
     return table.concat({
         tostring(entry.index or 0),

@@ -7,7 +7,7 @@
 --
 -- Two costs, separated on purpose:
 --
---   meta()   cheap: identity, position, state, bay count, request hash. Safe at 10 Hz.
+--   meta()   cheap: identity, state, bay count, request hash. Checked at 10 Hz, sent on change.
 --   dump()   heavy: hub cargo and requests, paged by cursor. Only on demand or on change.
 --
 -- Required as "__server-connector-mod__.control.platform_api".
@@ -238,6 +238,26 @@ end
 -- meta: the cheap call
 --------------------------------------------------------------------------------
 
+-- One platform's identity and position fields, shared by the meta and positions streams.
+-- Distance belongs only to positions; the meta no longer carries it.
+local function position_of(platform, with_distance)
+    local entry = {
+        index = platform.index,
+        name = platform.name,
+        state = tostring(platform.state),
+        location = platform.space_location and platform.space_location.name or nil,
+        connection = platform.space_connection and platform.space_connection.name or nil,
+        paused = platform.paused,
+        hub = platform.hub and platform.hub.unit_number or nil,
+    }
+    if with_distance then
+        entry.distance = platform.distance
+        entry.docked = platform.state == defines.space_platform_state.waiting_for_departure
+    end
+    return entry
+end
+
+-- `full` is the slow shape: bay count, layout, asteroid/other counts and the request hash
 -- `full` is the slow shape: bay count, layout, asteroid/other counts and the request hash
 -- all walk entities or logistics. At 10 Hz those walks were the mod's biggest cost on the
 -- space server. The cheap shape is identity, position and state only; the manager gets the
@@ -245,15 +265,7 @@ end
 local function meta(full, logistic)
     local out = {}
     for _, platform in pairs(main_force().platforms or {}) do
-        local entry = {
-            index = platform.index,
-            name = platform.name,
-            state = tostring(platform.state),
-            location = platform.space_location and platform.space_location.name or nil,
-            connection = platform.space_connection and platform.space_connection.name or nil,
-            paused = platform.paused,
-            hub = platform.hub and platform.hub.unit_number or nil,
-        }
+        local entry = position_of(platform, false)
         if full then
             entry.bays = platforms.bay_count(platform)
             entry.layout = platforms.layout_of(platform)
@@ -522,6 +534,7 @@ end
 
 return {
     meta = meta,
+    position_of = position_of,
     meta_full = meta_full,
     meta_logistic = meta_logistic,
     meta_page = meta_page,
