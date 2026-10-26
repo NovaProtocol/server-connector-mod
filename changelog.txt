@@ -1,4 +1,15 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.54
+Date: 2026-10-26
+  Fixed:
+    - platform_check and rebuild_platforms were named on the RCON surface but never implemented,
+      so the manager's platform check and force-rebuild answered "unknown call". platform_check
+      now reports each copy's bays, cargo and requests; rebuild_platforms drops the copies so
+      the next mirror push rebuilds them from the fleet's own data.
+  Added:
+    - A rocket silo's starter-pack request count is logged whenever a logistic slot changes, so
+      a launch request that disappears without a launch leaves a trace.
+---------------------------------------------------------------------------------------------------
 Version: 0.36.53
 Date: 2026-10-26
   Fixed:

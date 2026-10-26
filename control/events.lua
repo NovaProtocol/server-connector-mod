@@ -265,6 +265,16 @@ if defines.events.on_entity_logistic_slot_changed then
                 return
             end
             local surface = entity.surface
+
+            -- A rocket silo is the only place a new platform starts from. This mod no longer
+            -- touches its requests, so a request that disappears with no launch is either the
+            -- game or the client; this line is what tells the two apart.
+            if entity.name == "rocket-silo" then
+                log(string.format("[%s] silo %s on %s: starter-pack requests now %d",
+                    instance(), tostring(entity.unit_number),
+                    surface and surface.name or "?", platforms.starter_pack_requests(entity)))
+            end
+
             local platform = surface and surface.platform
             if not platform or not platform.valid then
                 return

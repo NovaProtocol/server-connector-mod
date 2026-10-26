@@ -220,6 +220,34 @@ local function requests_of(platform)
     return out
 end
 
+-- Every copy this server holds, with the cargo and requests the manager compares against the
+-- space server's own. The manager's check page diffs these; nothing here decides anything, so
+-- a copy that disagrees is reported rather than repaired.
+local function check()
+    if instance() == "space" then
+        return {}
+    end
+
+    local out = {}
+    for _, platform in pairs(main_force().platforms or {}) do
+        out[#out + 1] = {
+            name = platform.name,
+            index = platform.index,
+            bays = platforms.bay_count(platform),
+            cargo = cargo_of(platform),
+            requests = requests_of(platform),
+        }
+    end
+
+    table.sort(out, function(a, b)
+        if a.name ~= b.name then
+            return a.name < b.name
+        end
+        return a.index < b.index
+    end)
+    return out
+end
+
 -- A stable hash of a stack list. The manager uses it to know whether a dump is new; it is
 -- not a security hash and does not need to be.
 local function hash(list)
@@ -540,6 +568,7 @@ return {
     meta_page = meta_page,
     dump = dump,
     audit = audit,
+    check = check,
     cargo = cargo_of,
     requests = requests_of,
     hash = hash,
