@@ -57,6 +57,43 @@ end
 -- every planet exists everywhere
 --------------------------------------------------------------------------------
 
+-- Put the spawn point on the surface this instance owns.
+--
+-- A join creates the player's body at the force's spawn. If that still points at nauvis on a
+-- Vulcanus server, the join generates a nauvis chunk before the join rule moves the body --
+-- which is the chunk the foreign sweep then has to take back. Setting it at boot stops that
+-- happening at all.
+--
+-- Runs only with nobody connected (state.empty), which is what makes it safe from an RCON
+-- push or a restart.
+local function spawn_on_owned_surface(force)
+    if not empty() then
+        return false
+    end
+    if not known() then
+        return false
+    end
+    local home = primary_surface()
+    if not home then
+        return false
+    end
+
+    -- Our own record is the only read-back there is: the game answers a spawn-position query
+    -- for whichever surface it is asked about, and asking with no argument at all is a
+    -- non-recoverable error that quits the server (0.18.0). So the check is against the last
+    -- value we set, and the write is unconditional otherwise.
+    if not force and storage.spawn_surface == home.name then
+        return true
+    end
+
+    local spot = home.find_non_colliding_position("character", {x = 0, y = 0}, 64, 1) or {x = 0, y = 0}
+    main_force().set_spawn_position(spot, home)
+    storage.spawn_surface = home.name
+
+    log(string.format("[%s] the spawn point is on %s", instance(), home.name))
+    return true
+end
+
 -- Remove the surfaces this instance does not own.
 --
 -- The old layout copied every planet into every save so a player could look at one. Those
@@ -77,9 +114,12 @@ local function remove_foreign_surfaces()
 
     -- The space server owns its platforms, not a named planet. Everything that is not a
     -- platform is another server's world and does not belong in this save.
+    --
+    -- Nauvis is skipped on both branches: the game refuses to delete the primary surface, so
+    -- asking is an error in the log for no result. Its chunks are the foreign sweep's job.
     if instance() == "space" then
         for name, surface in pairs(game.surfaces) do
-            if not surface.platform and name ~= storage.spawn_surface then
+            if not surface.platform and name ~= "nauvis" and name ~= storage.spawn_surface then
                 local ok, characters = pcall(function()
                     return surface.find_entities_filtered{type = "character"}
                 end)
@@ -105,7 +145,8 @@ local function remove_foreign_surfaces()
     for name, surface in pairs(game.surfaces) do
         -- A platform belongs to the space server. Keeping it here was how a planet save
         -- still carried the fleet's platforms.
-        if not keep[name] and name ~= storage.spawn_surface and not surface.platform then
+        if not keep[name] and name ~= "nauvis" and name ~= storage.spawn_surface
+            and not surface.platform then
             local ok, characters = pcall(function()
                 return surface.find_entities_filtered{type = "character"}
             end)
@@ -166,6 +207,10 @@ local function ensure_surfaces()
             end
         end
     end
+
+    -- Before the foreign-surface pass: once the spawn point is on an owned surface, the old
+    -- one is no longer exempt from the cleanup below.
+    spawn_on_owned_surface()
 
     remove_foreign_surfaces()
 end
@@ -392,30 +437,6 @@ local function delete_surface(name)
     return {instance = instance(), deleted = name}
 end
 
-local function spawn_on_owned_surface()
-    if not empty() then
-        return
-    end
-    if not known() then
-        return
-    end
-    local home = primary_surface()
-    if not home then
-        return false
-    end
-
-    -- Set, not compared. The game answers a spawn-position query for whichever surface it
-    -- is asked about, so there is no "which surface does this force spawn on" to read back
-    -- -- and asking it with no argument at all is a non-recoverable error that quits the
-    -- server, which is how 0.18.0 came to not start. Setting it again is free.
-    local spot = home.find_non_colliding_position("character", {x = 0, y = 0}, 64, 1) or {x = 0, y = 0}
-    main_force().set_spawn_position(spot, home)
-    storage.spawn_surface = home.name
-
-    log(string.format("[%s] the spawn point is on %s", instance(), home.name))
-    return true
-end
-
 --------------------------------------------------------------------------------
 -- the boot-time order, run on request
 --------------------------------------------------------------------------------
@@ -430,7 +451,7 @@ local function settle_steps()
     local steps = {
         {"the crash site", disable_crash_site},
         {"the surfaces", ensure_surfaces},
-        {"the spawn point", spawn_on_owned_surface},
+        {"the spawn point", function() return spawn_on_owned_surface(true) end},
     }
 
     for _, step in ipairs(steps) do

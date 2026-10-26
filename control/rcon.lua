@@ -10,6 +10,7 @@
 
 local state = require("__server-connector-mod__.control.state")
 local convert = require("__server-connector-mod__.control.convert")
+local chunks = require("__server-connector-mod__.control.chunks")
 local server = require("__server-connector-mod__.control.server")
 local platforms = require("__server-connector-mod__.control.platforms")
 local platform_api = require("__server-connector-mod__.control.platform_api")
@@ -195,6 +196,13 @@ local calls = {
 
     -- Which surface calls this build actually has (platforms.surface_api).
     surface_api = platforms.surface_api,
+
+    -- One foreign-chunk sweep now, rather than waiting for the minute pass
+    -- (chunks.sweep). Returns how many chunks this pass removed.
+    sweep_foreign = function()
+        state.ensure_storage()
+        return {instance = state.instance(), removed = chunks.sweep()}
+    end,
 
     -- One poll's worth of state, for the manager's health board (state.report).
     report = state.report,

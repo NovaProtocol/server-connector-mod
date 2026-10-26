@@ -76,13 +76,26 @@ def check_lua():
     the save and says so in a log nobody is reading yet -- so it is caught here instead,
     whenever a parser is on PATH.
     """
-    parser = next((shutil.which(name) for name in ("luac5.4", "luac", "luajit") if shutil.which(name)), None)
+    parser = next(
+        (shutil.which(name) for name in ("luac5.4", "luac", "lua", "luajit") if shutil.which(name)),
+        None,
+    )
     if not parser:
         print("no Lua parser on PATH, syntax not checked")
         return
 
+    # `luac -p` parses without running; the `lua` interpreter has no such switch, so it
+    # compiles the file instead. Both matter here: the host may carry only one of them.
+    kind = os.path.basename(parser)
     for name in [path for path in shipped_files() if path.endswith(".lua")]:
-        result = subprocess.run([parser, "-p", str(ROOT / name)], capture_output=True, text=True)
+        source = str(ROOT / name)
+        if kind == "lua":
+            command = [parser, "-e", f"assert(loadfile('{source}'))"]
+        elif kind == "luajit":
+            command = [parser, "-b", source, os.devnull]
+        else:
+            command = [parser, "-p", source]
+        result = subprocess.run(command, capture_output=True, text=True)
         if result.returncode != 0:
             raise SystemExit(f"{name} does not parse: {result.stderr.strip()}")
 

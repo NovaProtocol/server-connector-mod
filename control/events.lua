@@ -18,6 +18,7 @@
 
 local state = require("__server-connector-mod__.control.state")
 local convert = require("__server-connector-mod__.control.convert")
+local chunks = require("__server-connector-mod__.control.chunks")
 local server = require("__server-connector-mod__.control.server")
 local map = require("__server-connector-mod__.control.map")
 local research = require("__server-connector-mod__.control.research")
@@ -73,6 +74,21 @@ end
 
 -- A planet server and asteroids, once a second.
 every(60, "the asteroid sweep", when_known(convert.sweep_asteroids))
+
+-- The surface check, once a second: a body standing where this instance does not own it is
+-- put back, a queued space body is removed when the server is empty, and the spawn point is
+-- re-asserted if it drifted. Every one of these is a no-op in the common case.
+every(60, "the surface check", when_known(function()
+    for _, player in pairs(game.connected_players) do
+        server.enforce_surface(player)
+    end
+    server.destroy_queued()
+    convert.spawn_on_owned_surface()
+end))
+
+-- Chunks on a surface this server does not own, once a minute. Per chunk, and a chunk with a
+-- body in it is kept: that is the joining player or a copy from another save.
+every(3600, "the foreign chunks", when_known(chunks.sweep))
 
 -- The map is shown only while the map view is open, and there is no event for opening it,
 -- so the list is refreshed (and shown or hidden) on this pass.
@@ -315,6 +331,11 @@ script.on_event(defines.events.on_player_left_game, function()
         if not state.empty() then
             return
         end
+
+        -- The last player leaving is also the window for the queued space bodies and the
+        -- foreign chunks: no client can be missing a change made here.
+        server.destroy_queued()
+        chunks.sweep()
 
         -- The last player leaving is the safe window for a deferred surface change.
         if not storage.pending_surfaces then

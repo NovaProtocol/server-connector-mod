@@ -26,6 +26,7 @@ local state = require("__server-connector-mod__.control.state")
 
 local instance = state.instance
 local known = state.known
+local empty = state.empty
 local owned_surfaces = state.owned_surfaces
 local primary_surface = state.primary_surface
 
@@ -133,34 +134,6 @@ end
 -- the join rule
 --------------------------------------------------------------------------------
 
--- The surface a player's body belongs on. A player the manager has never spoken for is
--- parked on nauvis: give them that body rather than leaving them with nowhere to stand.
-local function body_home(player)
-    if storage.body_known and storage.body_known[player.name] then
-        -- nil is a home on this very server; a known entry must not fall through to the
-        -- fleet default, or a body that lives on this server reads as living on nauvis.
-        return storage.body[player.name] or instance()
-    end
-    return "nauvis"
-end
-
--- Whether this player's body is on another server.
-local function body_is_elsewhere(player)
-    return body_home(player) ~= instance()
-end
-
--- Whether this surface is one this instance owns. A planet or custom instance owns the
--- surfaces the manager declared; the space server owns platforms, wherever they are.
-local function surface_is_home(surface)
-    if not surface then
-        return false
-    end
-    if instance() == "space" then
-        return surface.platform ~= nil
-    end
-    return owned_surfaces()[surface.name] == true
-end
-
 -- The waiting-to-respawn controller: observe, touch nothing. Not every build accepts it from
 -- set_controller, so a refusal falls back to the remote one, which is the closest thing that
 -- exists everywhere: no items, no movement, ghosts only.
@@ -201,16 +174,82 @@ local function put_remote(player)
     end
 end
 
+--------------------------------------------------------------------------------
+-- the space server's body
+--------------------------------------------------------------------------------
+
+-- The body a space join created, remembered by unit number.
+--
+-- Not a LuaEntity: storage survives a save, and a unit number is the cheap stable handle for
+-- looking it up again once the player has gone.
+local function queue_destroy(player)
+    local character = player.character
+    if not character or not character.valid then
+        return
+    end
+    storage.destroy_characters = storage.destroy_characters or {}
+    storage.destroy_characters[player.name] = character.unit_number
+end
+
+-- Remove the queued bodies. Only with nobody connected: that is the window where a world
+-- change is not something a client can be missing (see state.empty).
+local function destroy_queued()
+    if not empty() then
+        return 0
+    end
+    local pending = storage.destroy_characters
+    if not pending then
+        return 0
+    end
+
+    local removed = 0
+    for name, unit in pairs(pending) do
+        local body = game.get_entity_by_unit_number(unit)
+        if body and body.valid then
+            if attempt("removing " .. name .. "'s body", function()
+                body.destroy()
+            end) then
+                removed = removed + 1
+            end
+        end
+        pending[name] = nil
+    end
+    if removed > 0 then
+        log(string.format("[%s] removed %d body(ies) while the server was empty",
+            instance(), removed))
+    end
+    return removed
+end
+
+--------------------------------------------------------------------------------
+-- the join rule
+--------------------------------------------------------------------------------
+
 -- What a player gets when they arrive, and whenever the manager says where their body is.
 --
--- The only thing this mod does to a joining player is move their body onto the surface this
--- server exists to hold. It does not touch the controller, the character, the editor, the
--- remote or the inventory: the client already owns all of that, and every change to it here
--- was a world change the client did not make.
+-- A planet server moves the body onto the surface this server exists to hold. It does not
+-- touch the controller, the character, the editor, the remote or the inventory: the client
+-- already owns all of that, and every change to it here was a world change the client did not
+-- make.
+--
+-- The space server is the exception. It is a viewer and owns no body: the player gets the
+-- remote controller, and the body the game created is queued for removal once nobody is
+-- connected. Destroying it in this handler is the change the changelog records as desyncing
+-- the join (0.32.3), so it waits for that window.
 local function apply_join_rule(player)
     if not known() then
         return
     end
+    storage.viewing = storage.viewing or {}
+
+    if instance() == "space" then
+        storage.viewing[player.name] = true
+        queue_destroy(player)
+        put_remote(player)
+        return
+    end
+
+    storage.viewing[player.name] = nil
 
     local character = player.character
     if not character or not character.valid then
@@ -250,5 +289,6 @@ return {
     owned_surface = owned_surface,
     enforce_surface = enforce_surface,
     apply_join_rule = apply_join_rule,
+    destroy_queued = destroy_queued,
     set_body_location = set_body_location,
 }

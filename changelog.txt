@@ -1,4 +1,22 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.53
+Date: 2026-10-26
+  Fixed:
+    - A join no longer leaves chunks on a planet this server does not own. The spawn point is
+      set to the owned surface at boot, before the foreign-surface cleanup, so a joining body
+      is created there instead of on nauvis.
+    - Chunks on a foreign surface are swept once a minute, and a chunk holding a body is never
+      deleted. Nauvis cannot be deleted (the game refuses the primary surface), so its chunks
+      are the only thing that can be removed.
+    - The space server is a viewer again: a join gets the remote controller, and the body the
+      game created is removed on the next window with nobody connected. Destroying it in the
+      join handler is the change 0.32.3 recorded as desyncing the join.
+  Changed:
+    - The surface check runs every second: a connected player standing on a surface this
+      instance does not own is put back, and the spawn point is re-asserted when it drifted.
+  Added:
+    - sweep_foreign, one chunk sweep on demand; report carries foreign_last and foreign_swept.
+---------------------------------------------------------------------------------------------------
 Version: 0.36.52
 Date: 2026-10-25
   Changed:

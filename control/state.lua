@@ -385,6 +385,8 @@ local function report()
         unlocked = unlocked,
         spawn = storage.spawn_surface,
         foreign = storage.cleared or {},
+        foreign_last = storage.foreign_last or 0,
+        foreign_swept = storage.foreign_swept or 0,
         schema = storage.schema,
     }
 end

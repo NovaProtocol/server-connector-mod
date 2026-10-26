@@ -50,6 +50,7 @@ playing, which is why the node talks to this mod through its own command instead
 | `create_surfaces(entries?)` | Makes this instance's surfaces. With a list, it creates the custom surfaces the manager declared, including their seed, cliffs and water. `skipped` while anybody is connected. |
 | `research_all()` | Unlocks every technology on this force. For a custom instance in `all` mode. |
 | `delete_surface(name)` | Removes one custom surface. Refuses the primary and anybody connected. |
+| `sweep_foreign()` | One pass over the chunks on surfaces this instance does not own. Returns how many it removed. |
 | `surfaces()` | What surfaces this world has, and which of them are platforms. |
 | `settle()` | Brings the world into line: crash site, surfaces, spawn point. Nobody connected only. |
 | `mirror_platforms(entries)` | Makes, keeps or removes this server's copies of the fleet's platforms: hub, matching cargo bays, no asteroids. Called over RCON, nobody connected only. |
@@ -97,18 +98,38 @@ it gives up, with nothing logged anywhere. Game port, not RCON port.
 
 ## The join rule
 
-A body exists on exactly one server. On every other one the player is a remote
-viewer — the game's own remote controller, so no walking, no taking or changing
-items, and blueprints still place as ghosts.
+A planet server moves the joining body onto the surface it owns and leaves everything else
+alone: no controller, character, editor, remote or inventory change, because each of those is a
+world change the client did not make.
 
-The remote controller is an *overlay* on a physical one, so leaving it returns the
-player to that — and a bodyless player's physical controller is god mode. Leaving is
-therefore disabled, which is load-bearing rather than a nicety.
+The space server is a viewer. It owns no body, so a join gets the game's remote controller
+(no walking, no taking or changing items, blueprints still place as ghosts), and the body the
+game created is queued for removal on the next window with nobody connected. Destroying it in
+the join handler desynced joins (0.32.3), which is why it waits.
+
+The remote controller is an *overlay* on a physical one, so leaving it returns the player to
+that — and a bodyless player's physical controller is god mode. Leaving is therefore disabled,
+which is load-bearing rather than a nicety.
 
 A character in a save is only a body of that server when it stands on a surface the instance
 owns: its planet, the custom surfaces the manager declared, or a platform on the space server.
 The instance's topology entry names them, and `report().bodies` only names characters this
 server actually holds.
+
+## Chunks a join should not leave behind
+
+The game creates a joining body at the force's spawn before the join rule can move it. If that
+spawn is still on a planet this server does not own, the map generates a chunk there. Two
+things deal with it:
+
+- The spawn point is set to the owned surface at boot, before the foreign-surface cleanup, so
+  new joins do not create the chunk at all.
+- Once a minute, every chunk on a surface this instance does not own is deleted unless a body
+  is standing in it. Nauvis cannot be deleted (the game refuses the primary surface), so chunks
+  are the only tool there. `sweep_foreign()` runs a pass on demand.
+
+Every second, a connected player standing somewhere this instance does not own is put back on
+its surface, and the spawn point is re-asserted if it drifted.
 
 ## Faults
 
@@ -127,6 +148,7 @@ package under `control/`, one file per concern.
 |---|---|
 | `control/state.lua` | constants, `storage`, identity, topology, the event queue, `report` |
 | `control/convert.lua` | the crash site, owned surfaces, custom surfaces, the spawn point and the asteroid sweep |
+| `control/chunks.lua` | chunks on surfaces this server does not own |
 | `control/server.lua` | the join rule: which controller a player gets, and where their body is |
 | `control/map.lua` | the server map: one button per other instance, shown while the map is open |
 | `control/platforms.lua` | the fleet's platform copies, and the API probes |
