@@ -1,4 +1,14 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.57
+Date: 2026-10-26
+  Fixed:
+    - The silo reader asked for one fixed logistic member index, which this build does not
+      answer, so the watch always reported unreadable. It now probes the indices and caches the
+      one that answers, the way the platform hub reader already does.
+  Added:
+    - The watch logs one line on its first pass: how many silos it sees, the request count, and
+      which member index answered. That is the line to read when a launch leaves no trace.
+---------------------------------------------------------------------------------------------------
 Version: 0.36.56
 Date: 2026-10-26
   Fixed:

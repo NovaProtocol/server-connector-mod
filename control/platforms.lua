@@ -623,20 +623,45 @@ local function mirror_platforms(entries)
     }
 end
 
--- How many starter-pack requests a rocket silo holds.
+-- Reading a rocket silo's starter-pack requests.
 --
 -- Nothing in this mod touches a silo's requests; this exists so a launch that goes nowhere
 -- leaves a trace. A count going 1 then 0 with no rocket launched is the report we need, and a
--- count that is -1 means the silo's request point was not readable at all.
+-- count of -1 means the point could not be read.
+--
+-- The silo's logistic point is found by probing rather than by name: the member index that
+-- carries a silo's rocket requests is not the same key on every build, and asking for the
+-- wrong one returns nothing at all. The first value that answers is cached.
+local function silo_request_point(silo)
+    if storage.silo_member ~= nil then
+        local ok, point = pcall(function()
+            return silo.get_logistic_point(storage.silo_member)
+        end)
+        if ok and point then
+            return point
+        end
+        storage.silo_member = nil
+    end
+
+    for _, value in pairs(defines.logistic_member_index or {}) do
+        local ok, point = pcall(function()
+            return silo.get_logistic_point(value)
+        end)
+        if ok and point then
+            storage.silo_member = value
+            return point
+        end
+    end
+    return nil
+end
+
 local function starter_pack_requests(silo)
     if not silo or not silo.valid or silo.name ~= "rocket-silo" then
         return -1
     end
 
-    local ok, point = pcall(function()
-        return silo.get_logistic_point(defines.logistic_member_index.rocket_silo_rocket)
-    end)
-    if not ok or not point then
+    local point = silo_request_point(silo)
+    if not point then
         return -1
     end
 
@@ -683,6 +708,14 @@ local function watch()
         else
             total = total + count
         end
+    end
+
+    if not storage.watch_seeded then
+        storage.watch_seeded = true
+        log(string.format("[%s] platform watch: %d silo(s), requests=%s, member=%s",
+            instance(), #((ok and silos) or {}),
+            readable and tostring(total) or "unreadable",
+            tostring(storage.silo_member)))
     end
 
     if readable then
