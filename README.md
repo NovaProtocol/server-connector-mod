@@ -171,6 +171,36 @@ mod-portal credentials. Installing by hand works too — drop the zip in the ser
 `mods/` directory and list it in `mods/mod-list.json`, or its startup settings are
 ignored.
 
+## Releasing
+
+`info.json` carries the version, and the manager pins it in `manager/src/api/modset.go`. A
+release is **two channels at once**, because they serve different clients:
+
+| Channel | Who installs from it |
+|---|---|
+| GitHub release | the manager, onto every server |
+| mod portal | a player's client when it syncs with a server |
+
+```bash
+export GITHUB_TOKEN=... MOD_PORTAL_KEY=...   # see agent_stuff/tokens.md
+scripts/release.py --tag v0.36.53
+```
+
+The portal upload runs first: it is the half that fails on a stale key, and a GitHub-only
+release is the one nobody can join. The script refuses if either token is missing.
+
+A local fleet can still run without the GitHub release, because the manager prefers its own
+copy of the exact archive; every other fleet cannot, and the manager logs
+`drawing server-connector-mod answered 404` on each start until the release exists. That log
+line is the reminder that the release step was skipped.
+
+Verify both channels:
+
+```bash
+curl -sIL "https://github.com/NovaProtocol/server-connector-mod/releases/download/v0.36.53/server-connector-mod_0.36.53.zip" | head -1
+curl -s https://mods.factorio.com/api/mods/server-connector-mod/full | jq -r '.releases[].version' | grep -x 0.36.53
+```
+
 ## License
 
 MIT, see [LICENSE](LICENSE).
