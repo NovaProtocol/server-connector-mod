@@ -623,6 +623,65 @@ local function mirror_platforms(entries)
     }
 end
 
+-- The starter-pack count on every silo of this planet, and the platform names this server can
+-- see. Logged only on a change, once a minute: the event that should report a silo edit does
+-- not always fire, and a launch that goes nowhere has to leave some trace.
+local function watch()
+    if instance() == "space" then
+        return
+    end
+
+    local surface = game.surfaces[instance()]
+    if not surface then
+        return
+    end
+
+    storage.silo_requests = storage.silo_requests or {}
+
+    local total = 0
+    local readable = true
+    local ok, silos = pcall(function()
+        return surface.find_entities_filtered{name = "rocket-silo"}
+    end)
+    if not ok then
+        readable = false
+    end
+
+    for _, silo in ipairs((ok and silos) or {}) do
+        local count = starter_pack_requests(silo)
+        if count < 0 then
+            readable = false
+        else
+            total = total + count
+        end
+    end
+
+    if readable then
+        local previous = storage.silo_requests[surface.name]
+        if previous ~= total then
+            log(string.format("[%s] starter-pack requests on %s: %d (was %s)",
+                instance(), surface.name, total, tostring(previous)))
+            storage.silo_requests[surface.name] = total
+        end
+    end
+
+    local first = storage.platform_names == nil
+    local seen = {}
+    for _, platform in pairs(main_force().platforms or {}) do
+        seen[platform.name] = true
+        if not first and not storage.platform_names[platform.name] then
+            log(string.format("[%s] platform appeared: %s (copy=%s)",
+                instance(), platform.name, tostring(is_copy(platform))))
+        end
+    end
+    for name in pairs(storage.platform_names or {}) do
+        if not seen[name] then
+            log(string.format("[%s] platform disappeared: %s", instance(), name))
+        end
+    end
+    storage.platform_names = seen
+end
+
 -- Drop this server's copies so the next mirror push rebuilds them from the fleet's own data.
 -- The manager calls this and pushes the platform list a moment later, so doing both here
 -- would need entries it has not sent yet. An empty mirror list is exactly "remove every copy".
@@ -870,6 +929,7 @@ return {
     mirror_platforms = mirror_platforms,
     rebuild_platforms = rebuild_platforms,
     starter_pack_requests = starter_pack_requests,
+    watch = watch,
     create_platform = create_platform,
     remove_native_platform = remove_native_platform,
     is_copy = is_copy,

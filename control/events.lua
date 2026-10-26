@@ -90,6 +90,11 @@ end))
 -- body in it is kept: that is the joining player or a copy from another save.
 every(3600, "the foreign chunks", when_known(chunks.sweep))
 
+-- Silo starter-pack counts and platform names, once a minute, logged only when they change.
+-- The logistic-slot event does not cover every edit the game makes, so this is the trace that
+-- cannot be missed.
+every(60, "the platform watch", when_known(platforms.watch))
+
 -- The map is shown only while the map view is open, and there is no event for opening it,
 -- so the list is refreshed (and shown or hidden) on this pass.
 every(60, "the server map", when_known(map.tick))
@@ -279,6 +284,17 @@ if defines.events.on_entity_logistic_slot_changed then
             if not platform or not platform.valid then
                 return
             end
+
+            -- A copy is a view. Its requests come from the real platform through the mirror,
+            -- so an edit here is not news: forwarding it made the manager resync from a copy
+            -- and then write the real list back over it, which looked like the request being
+            -- removed a few seconds after it was made.
+            if platforms.is_copy(platform) then
+                log(string.format("[%s] ignoring a logistic change on the copy of %s",
+                    instance(), platform.name))
+                return
+            end
+
             outbound.push("platform_requests", {
                 instance = instance(),
                 name = platform.name,
