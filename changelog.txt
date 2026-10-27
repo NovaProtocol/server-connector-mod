@@ -1,4 +1,11 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.63
+Date: 2026-10-27
+  Fixed:
+    - The once-per-build silo dump was keyed to a hand-bumped number, so a save that had run
+      the previous build never dumped its silos again. It is keyed to the mod version now, so
+      every build seeds once, including this one.
+---------------------------------------------------------------------------------------------------
 Version: 0.36.62
 Date: 2026-10-27
   Fixed:

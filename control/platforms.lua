@@ -749,7 +749,9 @@ local function watch()
 
     -- Once per build, not once per save: the first pass is the line that says whether the
     -- reader can see a silo at all, and a stored flag from an older build hid it.
-    local WATCH_VERSION = 60
+    -- The build itself, not a number to remember to bump: the first pass of every version
+    -- prints the silo inventory, and a save carrying an older value always re-seeds.
+    local WATCH_VERSION = (script.active_mods and script.active_mods["server-connector-mod"]) or "unknown"
     if storage.watch_seeded ~= WATCH_VERSION then
         storage.watch_seeded = WATCH_VERSION
         log(string.format("[%s] platform watch: %d silo(s), requests=%s, member=%s",
