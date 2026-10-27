@@ -90,10 +90,10 @@ end))
 -- body in it is kept: that is the joining player or a copy from another save.
 every(3600, "the foreign chunks", when_known(chunks.sweep))
 
--- Silo starter-pack counts and platform names, once a minute, logged only when they change.
--- The logistic-slot event does not cover every edit the game makes, so this is the trace that
--- cannot be missed.
-every(3600, "the platform watch", when_known(platforms.watch))
+-- Silo starter-pack counts and platform names, every five seconds, logged only when they
+-- change. The logistic-slot event does not cover every edit the game makes, and a request can
+-- be set and removed inside a minute, which is what a one-minute sample missed.
+every(300, "the platform watch", when_known(platforms.watch))
 
 -- The map is shown only while the map view is open, and there is no event for opening it,
 -- so the list is refreshed (and shown or hidden) on this pass.
@@ -248,7 +248,23 @@ end
 
 if defines.events.on_surface_created then
     script.on_event(defines.events.on_surface_created, function(event)
-        reject_native_platform(game.get_surface(event.surface_index), "a surface creation")
+        guard("a surface creation", function()
+            local surface = game.get_surface(event.surface_index)
+            if not surface then
+                return
+            end
+
+            -- Every creation is logged, including the one that has no platform attached yet.
+            -- That was the silent case: a new platform surface can exist for a moment before
+            -- surface.platform answers, and returning quietly left a launch with no trace.
+            local platform = surface.platform
+            log(string.format("[%s] surface created: %s (platform=%s, copy=%s)",
+                state.instance(), surface.name,
+                tostring(platform ~= nil),
+                tostring(platform ~= nil and platforms.is_copy(platform))))
+
+            reject_native_platform(surface, "a surface creation")
+        end)
     end)
 end
 

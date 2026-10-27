@@ -633,6 +633,20 @@ end
 -- carries a silo's rocket requests is not the same key on every build, and asking for the
 -- wrong one returns nothing at all. The first value that answers is cached.
 local function silo_request_point(silo)
+    -- The requester point is the one that holds the starter-pack request. Ask for it by the
+    -- name the API documents before probing: the probe takes whatever answers first, and
+    -- logistic_container answers on a silo with no request on it at all.
+    local named = defines.logistic_member_index and defines.logistic_member_index.rocket_silo_requester
+    if named ~= nil then
+        local ok, point = pcall(function()
+            return silo.get_logistic_point(named)
+        end)
+        if ok and point then
+            storage.silo_member = named
+            return point
+        end
+    end
+
     if storage.silo_member ~= nil then
         local ok, point = pcall(function()
             return silo.get_logistic_point(storage.silo_member)
