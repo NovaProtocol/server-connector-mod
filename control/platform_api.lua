@@ -509,10 +509,10 @@ local function apply_requests(payload)
     if not platform then
         return {ok = false, error = "no such platform"}
     end
-    if not copy_is_whole(platform, payload) then
-        return {ok = false, skipped = "copy does not have the ship's bays"}
-    end
 
+    -- A logistic filter list does not depend on cargo capacity. The bay check used to
+    -- refuse the write whenever the copy's count differed from the real one, which left
+    -- every station request on the space hub and no planet copy able to launch for it.
     local point = request_point(platform.hub)
     if not point then
         return {ok = false, error = "no request point found"}

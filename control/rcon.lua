@@ -192,6 +192,9 @@ local calls = {
     request_purge_mode = requests.set_mode,
     request_probe = requests.probe,
 
+    -- Per-surface entity/ghost/deconstruction counts, for a read-only diagnosis.
+    surface_report = surface_report,
+
     -- The platform helper surface (platform_api). The node and the manager call these
     -- directly for a manual read, a full dump or a computed difference.
     platform_meta = platform_api.meta,
@@ -370,6 +373,29 @@ commands.add_command(
         end
     end
 )
+
+-- What each surface actually contains: entities, ghosts and deconstruction orders. Read-only.
+-- A planet can look "ghosted" while the count says whether they are unbuilt ghosts or orders.
+local function surface_report()
+    local out = {}
+    for _, surface in pairs(game.surfaces) do
+        local function count(filters)
+            local ok, value = pcall(function()
+                return surface.count_entities_filtered(filters)
+            end)
+            return ok and value or -1
+        end
+        out[#out + 1] = {
+            name = surface.name,
+            platform = surface.platform ~= nil,
+            entities = count({}),
+            ghosts = count({type = "entity-ghost"}),
+            marked = count({to_be_deconstructed = true}),
+        }
+    end
+    table.sort(out, function(a, b) return a.name < b.name end)
+    return {ok = true, instance = state.instance(), surfaces = out}
+end
 
 -- One entry point for everything above: the node sends {"fn": "...", "args": [...]}
 -- and gets the result back as JSON. A single command rather than one per call, so
