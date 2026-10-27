@@ -31,6 +31,7 @@
 --   control/platforms.lua  the fleet's platform copies, and the API probes
 --   control/research.lua   the shared tech tree: report and apply
 --   control/requests.lua   pending platform requests named on the wrong planet server
+--   control/debug.lua      the one DEBUG switch, and the detail dumps it gates
 --   control/events.lua     every event handler
 --   control/rcon.lua       the calls the node drives, and the two commands
 --
@@ -43,6 +44,7 @@
 -- which is why every require is here and none is below.
 
 require("__server-connector-mod__.control.state")
+require("__server-connector-mod__.control.debug")
 require("__server-connector-mod__.control.convert")
 require("__server-connector-mod__.control.chunks")
 require("__server-connector-mod__.control.server")

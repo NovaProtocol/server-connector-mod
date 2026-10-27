@@ -12,6 +12,7 @@
 -- Required as "__server-connector-mod__.control.platforms".
 
 local state = require("__server-connector-mod__.control.state")
+local debug = require("__server-connector-mod__.control.debug")
 
 local MOD = state.MOD
 local known = state.known
@@ -371,6 +372,13 @@ local function mirror_platforms(entries)
     entries = entries or {}
     storage.fleet_platforms = entries
 
+    local wantedCount = 0
+    for _ in pairs(entries) do
+        wantedCount = wantedCount + 1
+    end
+    debug.emit("mirror: instance=%s entries=%d", instance(), wantedCount)
+    debug.dump("mirror entries", entries)
+
     -- Either an array or a table keyed by something else: the JSON is decoded by the
     -- game's own helper, and which shape comes back is the helper's business, not
     -- something to be assumed. The count is reported for the same reason.
@@ -428,6 +436,19 @@ local function mirror_platforms(entries)
         table.sort(group, function(a, b) return a.index < b.index end)
     end
 
+    -- What the mirror thinks this world holds, before it decides anything.
+    local existingDump = {}
+    for name, group in pairs(existing) do
+        local rows = {}
+        for _, platform in ipairs(group) do
+            local row = debug.platform_table(platform) or {}
+            row.copy = is_copy(platform)
+            rows[#rows + 1] = row
+        end
+        existingDump[name] = rows
+    end
+    debug.dump("mirror existing", existingDump)
+
     -- Gone from the list means gone here: the real platform was deleted or destroyed,
     -- and a copy of something that no longer exists is a lie players can stand on. A
     -- duplicate name keeps only as many copies as the fleet has of that name.
@@ -440,6 +461,7 @@ local function mirror_platforms(entries)
             -- platform is removed too, and the space server is asked to create the real one
             -- under the same name. The next mirror returns a protected copy.
             for _, platform in ipairs(group) do
+                debug.dump("mirror unlisted " .. tostring(name), debug.platform_table(platform))
                 -- A copy the mod made and the fleet no longer lists is stale: remove it.
                 -- Anything else is a native platform; remove it and create the real one on
                 -- the space server.
@@ -467,6 +489,7 @@ local function mirror_platforms(entries)
         else
             for index = keep + 1, #group do
                 local platform = group[index]
+                debug.dump("mirror extra " .. tostring(name), debug.platform_table(platform))
                 if storage.copies and storage.copies[name] then
                     if destroy_copy(platform) then
                         removed[#removed + 1] = name
@@ -726,13 +749,19 @@ local function watch()
 
     -- Once per build, not once per save: the first pass is the line that says whether the
     -- reader can see a silo at all, and a stored flag from an older build hid it.
-    local WATCH_VERSION = 59
+    local WATCH_VERSION = 60
     if storage.watch_seeded ~= WATCH_VERSION then
         storage.watch_seeded = WATCH_VERSION
         log(string.format("[%s] platform watch: %d silo(s), requests=%s, member=%s",
             instance(), #((ok and silos) or {}),
             readable and tostring(total) or "unreadable",
             tostring(storage.silo_member)))
+
+        -- Once per build: every silo, in full. This is the line set that says whether the
+        -- reader can see a request at all, and which silo holds it.
+        for _, silo in ipairs((ok and silos) or {}) do
+            debug.dump("silo " .. tostring(silo.unit_number), debug.silo_table(silo))
+        end
     end
 
     if readable then
@@ -740,9 +769,28 @@ local function watch()
         if previous ~= total then
             log(string.format("[%s] starter-pack requests on %s: %d (was %s)",
                 instance(), surface.name, total, tostring(previous)))
+            for _, silo in ipairs((ok and silos) or {}) do
+                local count = starter_pack_requests(silo)
+                if count > 0 then
+                    debug.dump("silo with " .. count .. " request(s) " .. tostring(silo.unit_number),
+                        debug.silo_table(silo))
+                end
+            end
             storage.silo_requests[surface.name] = total
         end
     end
+
+    -- Every pass, the whole platform list in compact form: this is what the fleet believes it
+    -- holds here, and a pending request shows up in it as a platform with no hub and no
+    -- surface.
+    local snapshot = {}
+    for _, platform in pairs(main_force().platforms or {}) do
+        local entry = debug.platform_table(platform)
+        entry.copy = is_copy(platform)
+        snapshot[#snapshot + 1] = entry
+    end
+    table.sort(snapshot, function(a, b) return (a.index or 0) < (b.index or 0) end)
+    debug.dump("watch platforms", snapshot)
 
     local first = storage.platform_names == nil
     local seen = {}
@@ -751,11 +799,14 @@ local function watch()
         if not first and not storage.platform_names[platform.name] then
             log(string.format("[%s] platform appeared: %s (copy=%s)",
                 instance(), platform.name, tostring(is_copy(platform))))
+            debug.dump("platform appeared", debug.platform_table(platform))
         end
     end
     for name in pairs(storage.platform_names or {}) do
         if not seen[name] then
             log(string.format("[%s] platform disappeared: %s", instance(), name))
+            debug.emit("platform disappeared: %s left force.platforms (no hub, surface or deletion detail is readable after the fact)",
+                tostring(name))
         end
     end
     storage.platform_names = seen
@@ -806,6 +857,14 @@ local function create_platform(entry)
         quality = nil
     end
 
+    debug.dump("create_platform entry", {
+        raw = entry,
+        name = entry.name,
+        location = planet,
+        pack = pack,
+        quality = quality,
+    })
+
     local ok, created = pcall(function()
         return force.create_space_platform{
             planet = planet,
@@ -814,8 +873,10 @@ local function create_platform(entry)
         }
     end)
     if not ok or not created then
+        debug.emit("create_platform: create_space_platform failed for %s: %s", entry.name, tostring(created))
         return {ok = false, error = tostring(created)}
     end
+    debug.dump("create_platform created", debug.platform_table(created))
 
     -- apply_starter_pack returns the hub, not a boolean. A silent failure used to leave the
     -- platform in the list with no hub, which is exactly a pending request: remove it.
@@ -823,10 +884,14 @@ local function create_platform(entry)
         return created.apply_starter_pack(true)
     end)
     if not applied or not hub then
+        debug.emit("create_platform: starter pack failed for %s (%s); destroying it",
+            entry.name, tostring(hub))
         pcall(function() created.destroy(1) end)
         return {ok = false, error = "the starter pack could not be applied: " .. tostring(hub)}
     end
 
+    debug.emit("create_platform: created %s at %s pack=%s quality=%s hub=%s",
+        entry.name, planet, pack, tostring(quality), tostring(hub.name))
     log(string.format("[%s] created platform %s at %s", instance(), entry.name, planet))
     return {ok = true, name = entry.name, location = planet, starter_pack = pack, quality = quality}
 end

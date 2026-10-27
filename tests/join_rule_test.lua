@@ -15,6 +15,22 @@ package.preload["__server-connector-mod__.control.state"] = function()
     }
 end
 
+package.preload["__server-connector-mod__.control.debug"] = function()
+    return {
+        enabled = function() return false end,
+        emit = function() end,
+        dump = function() end,
+        json = function() return "" end,
+        platform_table = function() return {} end,
+        silo_table = function() return {} end,
+        surface_table = function() return {} end,
+        event = function() end,
+        call = function() end,
+        push = function() end,
+        boot = function() end,
+    }
+end
+
 INSTANCE = "space"
 EMPTY = false
 

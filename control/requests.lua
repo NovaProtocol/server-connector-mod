@@ -19,6 +19,7 @@
 local state = require("__server-connector-mod__.control.state")
 local platforms = require("__server-connector-mod__.control.platforms")
 local outbound = require("__server-connector-mod__.control.outbound")
+local debug = require("__server-connector-mod__.control.debug")
 
 local instance = state.instance
 local main_force = state.main_force
@@ -138,12 +139,15 @@ end
 local function purge()
     ensure()
     if not state.known() then
+        debug.emit("purge: skipped (topology unknown)")
         return 0
     end
     local here = own_planet()
     if not here then
+        debug.emit("purge: skipped (instance %s owns no planet)", instance())
         return 0
     end
+    debug.emit("purge: instance=%s own=%s live=%s", instance(), here, tostring(live()))
 
     if storage.request_probe_version ~= PROBE_VERSION then
         storage.request_probe_version = PROBE_VERSION
@@ -153,26 +157,49 @@ local function purge()
         end
     end
 
+    local all = sorted_platforms()
+    debug.emit("purge: %d platform(s) visible", #all)
+
     local moved = 0
-    for _, p in ipairs(sorted_platforms()) do
+    for _, p in ipairs(all) do
         if moved >= MAX_PER_PASS then
             break
         end
 
         if is_pending(p) then
+            local name = p.name
             local planet = request_planet(p)
+            debug.dump("purge pending " .. tostring(name), {
+                platform = debug.platform_table(p),
+                planet = planet or "",
+                own = here,
+                copy = platforms.is_copy(p),
+                arrived = storage.request_in[name] ~= nil,
+                moved = storage.request_moves[name] ~= nil,
+                pack = {pack_of(p)},
+            })
+            if planet == nil then
+                debug.emit("purge: pending %s has no readable planet; kept", tostring(name))
+            elseif planet == here then
+                debug.emit("purge: pending %s belongs here; kept", tostring(name))
+            end
             if planet ~= nil and planet ~= here then
-                local name = p.name
                 local pack, quality = pack_of(p)
 
                 if storage.request_moves[name] or storage.request_in[name] then
                     log(string.format("[%s] request %s came from or went to another server; keeping it",
                         instance(), tostring(name)))
+                    debug.emit("purge: anti-bounce for %s (arrived=%s moved=%s)", tostring(name),
+                        tostring(storage.request_in[name] ~= nil),
+                        tostring(storage.request_moves[name] ~= nil))
                 elseif not live() then
                     if not storage.request_seen[name] then
                         storage.request_seen[name] = game.tick
                         log(string.format("[%s] [dry-run] would move %s (%s) from %s",
                             instance(), tostring(name), tostring(planet), here))
+                    else
+                        debug.emit("purge: %s already reported by the dry-run; still kept",
+                            tostring(name))
                     end
                 else
                     local id = instance() .. ":" .. tostring(name) .. ":" .. game.tick
@@ -185,11 +212,20 @@ local function purge()
                         acked = false,
                     }
 
+                    debug.dump("purge move", {
+                        id = id,
+                        name = name,
+                        planet = planet,
+                        pack = pack,
+                        quality = quality,
+                        at = game.tick,
+                    })
                     local destroyed = pcall(function() p.destroy() end)
                     if not destroyed then
                         storage.request_moves[name] = nil
                         log(string.format("[%s] could not destroy the request %s; keeping it",
                             instance(), tostring(name)))
+                        debug.emit("purge: p.destroy() failed for %s", tostring(name))
                     else
                         outbound.push("platform_request_moved", {
                             instance = instance(),
@@ -222,10 +258,20 @@ local function resend()
     end
     table.sort(names)
 
+    debug.emit("resend: %d move record(s)", #names)
+
     local sent = 0
     for _, name in ipairs(names) do
         local record = storage.request_moves[name]
         local age = game.tick - (record.at or 0)
+        debug.dump("resend record " .. tostring(name), {
+            id = record.id,
+            planet = record.planet,
+            pack = record.pack,
+            quality = record.quality,
+            age = age,
+            acked = record.acked,
+        })
         if age > TTL then
             if not record.acked then
                 log(string.format("[%s] request %s moved but was never acknowledged", instance(), name))
@@ -249,6 +295,7 @@ end
 
 -- The receiver. One table argument; every failure says which check failed.
 local function create(args)
+    debug.dump("request_platform args", args)
     if type(args) ~= "table" then
         return {ok = false, error = "args must be a table"}
     end
@@ -273,8 +320,10 @@ local function create(args)
         if p and p.valid and p.name == name then
             ensure()
             if storage.request_in[name] then
+                debug.emit("request_platform: %s already here (existed)", name)
                 return {ok = true, existed = true, name = name, index = p.index}
             end
+            debug.emit("request_platform: %s is taken on %s", name, here)
             return {ok = false, error = "name_taken"}
         end
     end
@@ -299,16 +348,26 @@ local function create(args)
         }
     end)
     if not ok or not made then
+        debug.emit("request_platform: create_space_platform failed for %s: %s", name, tostring(made))
         return {ok = false, error = tostring(made)}
     end
 
     ensure()
     storage.request_in[name] = game.tick
+    debug.dump("request_platform created", {
+        name = name,
+        index = made.index,
+        planet = here,
+        pack = pack,
+        quality = quality,
+        platform = debug.platform_table(made),
+    })
     log(string.format("[%s] recreated platform request %s for %s", instance(), name, here))
     return {ok = true, name = name, index = made.index}
 end
 
 local function ack(args)
+    debug.dump("request_moved_ack args", args)
     if type(args) ~= "table" or type(args.id) ~= "string" then
         return {ok = false, error = "an id is required"}
     end
@@ -316,17 +375,21 @@ local function ack(args)
     for name, record in pairs(storage.request_moves) do
         if record.id == args.id then
             record.acked = true
+            debug.emit("request_moved_ack: %s acknowledged", name)
             return {ok = true, name = name}
         end
     end
+    debug.emit("request_moved_ack: no move with id %s", tostring(args.id))
     return {ok = false, error = "no move with that id"}
 end
 
 local function set_mode(args)
+    debug.dump("request_purge_mode args", args)
     if type(args) ~= "table" then
         return {ok = false, error = "args must be a table"}
     end
     storage.request_purge_live = args.live == true
+    debug.emit("request_purge_mode: live=%s", tostring(storage.request_purge_live))
     return {ok = true, live = storage.request_purge_live}
 end
 

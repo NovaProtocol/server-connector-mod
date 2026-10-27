@@ -175,6 +175,24 @@ mod-portal credentials. Installing by hand works too — drop the zip in the ser
 `mods/` directory and list it in `mods/mod-list.json`, or its startup settings are
 ignored.
 
+## Debugging
+
+`control/debug.lua` holds one switch:
+
+```lua
+local DEBUG = true
+```
+
+While it is on, the mod narrates itself: the events and member indexes this build actually
+has, the whole platform list every five seconds, every silo (once per build and whenever the
+starter-pack request count changes), each platform that appears or disappears with all its
+fields, every purge and resend decision, every mirror input and removal, every
+`create_platform` entry and result, every join-rule decision, every event the mod handles,
+every RCON call and every UDP push. Values are capped at 12 KB with a truncation marker.
+
+Logging is local and changes no game state, so it is safe with players connected. Set
+`DEBUG = false` for v1; nothing else in the mod reads a flag.
+
 ## Releasing
 
 `info.json` carries the version, and the manager pins it in `manager/src/api/modset.go`. A

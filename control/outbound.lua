@@ -8,6 +8,7 @@
 -- --enable-lua-udp on the game, which the node passes per instance.
 
 local state = require("__server-connector-mod__.control.state")
+local debug = require("__server-connector-mod__.control.debug")
 local platforms = require("__server-connector-mod__.control.platforms")
 local platform_api = require("__server-connector-mod__.control.platform_api")
 
@@ -42,6 +43,8 @@ local function push(kind, payload)
     payload.origin_epoch = epoch()
     storage.out_seq = (storage.out_seq or 0) + 1
     payload.seq = storage.out_seq
+
+    debug.push(kind, payload)
 
     local ok, json = pcall(helpers.table_to_json, payload)
     if not ok then

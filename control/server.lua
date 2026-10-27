@@ -23,6 +23,7 @@
 -- Required as "__server-connector-mod__.control.server".
 
 local state = require("__server-connector-mod__.control.state")
+local debug = require("__server-connector-mod__.control.debug")
 
 local instance = state.instance
 local known = state.known
@@ -237,12 +238,23 @@ end
 -- connected. Destroying it in this handler is the change the changelog records as desyncing
 -- the join (0.32.3), so it waits for that window.
 local function apply_join_rule(player)
+    debug.dump("join rule player", {
+        name = player.name,
+        instance = instance(),
+        known = known(),
+        controller = tostring(player.controller),
+        character = tostring(player.character ~= nil),
+        physical_surface = tostring(player.physical_surface and player.physical_surface.name),
+        physical_position = player.physical_position,
+        surface = tostring(player.surface and player.surface.name),
+    })
     if not known() then
         return
     end
     storage.viewing = storage.viewing or {}
 
     if instance() == "space" then
+        debug.emit("join rule: %s gets a remote viewer on the space server", player.name)
         storage.viewing[player.name] = true
         queue_destroy(player)
         put_remote(player)
@@ -262,9 +274,13 @@ local function apply_join_rule(player)
     end
 
     if character.surface ~= surface then
+        debug.emit("join rule: teleporting %s from %s to %s at %s", player.name,
+            character.surface.name, surface.name, tostring(player.physical_position))
         attempt("moving " .. player.name .. " to " .. surface.name, function()
             character.teleport(player.physical_position, surface)
         end)
+    else
+        debug.emit("join rule: %s is already on %s", player.name, surface.name)
     end
 end
 

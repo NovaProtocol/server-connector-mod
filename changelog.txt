@@ -1,4 +1,21 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.61
+Date: 2026-10-27
+  Added:
+    - A DEBUG switch in control/debug.lua, on while the fleet is being finalised. It logs what
+      the build and save actually offer (optional events, the space-platform states, the
+      logistic member indexes, the silo statuses, the controllers, mod versions), the whole
+      platform list every five seconds, every silo once per build and whenever the starter-pack
+      request count changes, each platform that appears or disappears with all its fields, every
+      purge and resend decision, every mirror input and every removal, every create_platform
+      entry and result, every join-rule decision, every event the mod handles, every RCON call
+      with its arguments and result, and every UDP push.
+    - Twelve kilobytes per dump, with a truncation marker, so one value cannot swallow the log.
+  Notes:
+    - Set DEBUG = false in control/debug.lua when the fleet is finalised for v1. Nothing else
+      in the mod reads a flag.
+    - Logging is local and changes no game state, so it is safe with players connected.
+---------------------------------------------------------------------------------------------------
 Version: 0.36.60
 Date: 2026-10-27
   Added:

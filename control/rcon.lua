@@ -19,6 +19,7 @@ local research = require("__server-connector-mod__.control.research")
 local map = require("__server-connector-mod__.control.map")
 local outbound = require("__server-connector-mod__.control.outbound")
 local requests = require("__server-connector-mod__.control.requests")
+local debug = require("__server-connector-mod__.control.debug")
 
 local MOD = state.MOD
 
@@ -53,6 +54,7 @@ local calls = {
         end
         state.set_instance(id)
         convert.ensure_surfaces()
+        debug.boot()
         return {instance = state.instance()}
     end,
 
@@ -79,6 +81,7 @@ local calls = {
             -- them. Only surface creation is a world change; that waits for an empty server,
             -- which the leave event picks up.
             state.set_topology(topology)
+            debug.dump("topology deferred while connected", topology)
             storage.pending_surfaces = true
             for _, player in pairs(game.connected_players) do
                 map.refresh(player)
@@ -90,6 +93,7 @@ local calls = {
             }
         end
         state.set_topology(topology)
+        debug.dump("topology applied", topology)
         convert.ensure_surfaces()
 
         -- The topology carries the surfaces this instance owns, with the form each was
@@ -400,6 +404,14 @@ commands.add_command(
             else
                 out = {ok = false, error = "unknown call"}
             end
+
+            local calledName = "?"
+            local calledArgs = nil
+            if decodedOk and type(payload) == "table" then
+                calledName = payload.fn or "?"
+                calledArgs = payload.args
+            end
+            debug.call(calledName, calledArgs, out)
 
             -- rcon.print reaches the RCON client and nobody else, which is the point.
             if rcon then

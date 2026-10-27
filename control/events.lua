@@ -24,6 +24,7 @@ local map = require("__server-connector-mod__.control.map")
 local research = require("__server-connector-mod__.control.research")
 local platforms = require("__server-connector-mod__.control.platforms")
 local requests = require("__server-connector-mod__.control.requests")
+local debug = require("__server-connector-mod__.control.debug")
 local pod = require("__server-connector-mod__.control.pod")
 local outbound = require("__server-connector-mod__.control.outbound")
 
@@ -157,6 +158,7 @@ script.on_init(function()
     guard("on_init", function()
         state.ensure_storage()
         log("[" .. MOD .. "] instance=" .. state.instance())
+        debug.boot()
         convert.disable_crash_site()
         convert.ensure_surfaces()
         restore_speed()
@@ -167,6 +169,7 @@ script.on_configuration_changed(function()
     guard("on_configuration_changed", function()
         state.ensure_storage()
         storage.schema = SCHEMA
+        debug.boot()
         convert.disable_crash_site()
         convert.ensure_surfaces()
         restore_speed()
@@ -228,12 +231,18 @@ end)
 local function reject_native_platform(surface, what)
     guard(what, function()
         if instance() == "space" or not surface or not surface.valid then
+            debug.emit("reject_native: skipped (instance=%s surface=%s valid=%s)", instance(),
+                tostring(surface and surface.name), tostring(surface and surface.valid))
             return
         end
         local platform = surface.platform
         if not platform or not platform.valid or platforms.is_copy(platform) then
+            debug.emit("reject_native: skipped (platform=%s valid=%s copy=%s)",
+                tostring(platform and platform.name), tostring(platform and platform.valid),
+                tostring(platform ~= nil and platforms.is_copy(platform)))
             return
         end
+        debug.dump("reject_native platform", debug.platform_table(platform))
 
         local name = platform.name
         local location = platform.space_location and platform.space_location.name or instance()
@@ -261,10 +270,12 @@ end
 if defines.events.on_surface_created then
     script.on_event(defines.events.on_surface_created, function(event)
         guard("a surface creation", function()
+            debug.event("on_surface_created", event)
             local surface = game.get_surface(event.surface_index)
             if not surface then
                 return
             end
+            debug.dump("surface created", debug.surface_table(surface))
 
             -- Every creation is logged, including the one that has no platform attached yet.
             -- That was the silent case: a new platform surface can exist for a moment before
@@ -283,6 +294,7 @@ end
 if defines.events.on_space_platform_created then
     script.on_event(defines.events.on_space_platform_created, function(event)
         guard("a platform creation", function()
+            debug.event("on_space_platform_created", event)
             local platform = event.platform
             if platform and platform.valid and requests.is_pending(platform) then
                 requests.purge()
@@ -299,6 +311,7 @@ end
 if defines.events.on_entity_logistic_slot_changed then
     script.on_event(defines.events.on_entity_logistic_slot_changed, function(event)
         guard("a logistic slot change", function()
+            debug.event("on_entity_logistic_slot_changed", event)
             local entity = event.entity
             if not entity or not entity.valid then
                 return
@@ -341,10 +354,12 @@ end
 
 script.on_event(defines.events.on_space_platform_changed_state, function(event)
     guard("a platform state change", function()
+        debug.event("on_space_platform_changed_state", event)
         local platform = event.platform
         if not platform or not platform.valid then
             return
         end
+        debug.dump("platform state change", debug.platform_table(platform))
 
         outbound.push("platform", {
             instance = state.instance(),
@@ -362,19 +377,29 @@ end)
 -- arriving at a copy hub is added. The real space hubs are native platform logistics and are
 -- ignored. The queue is re-sent for a minute; the manager de-duplicates.
 script.on_event(defines.events.on_cargo_pod_started_ascending, function(event)
-    guard("a cargo pod start", function() pod.started(event) end)
+    guard("a cargo pod start", function()
+        debug.event("on_cargo_pod_started_ascending", event)
+        pod.started(event)
+    end)
 end)
 
 script.on_event(defines.events.on_cargo_pod_finished_ascending, function(event)
-    guard("a cargo pod ascent", function() pod.started(event) end)
+    guard("a cargo pod ascent", function()
+        debug.event("on_cargo_pod_finished_ascending", event)
+        pod.started(event)
+    end)
 end)
 
 script.on_event(defines.events.on_cargo_pod_delivered_cargo, function(event)
-    guard("a cargo pod delivery", function() pod.delivered(event) end)
+    guard("a cargo pod delivery", function()
+        debug.event("on_cargo_pod_delivered_cargo", event)
+        pod.delivered(event)
+    end)
 end)
 
 script.on_event(defines.events.on_player_joined_game, function(event)
     guard("a join", function()
+        debug.event("on_player_joined_game", event)
         local player = game.get_player(event.player_index)
         if player then
             state.note("joined", player)
@@ -386,8 +411,9 @@ end)
 
 -- A topology that arrived while somebody was connected applied its destinations but left
 -- its surface changes for later. The last player leaving is that later.
-script.on_event(defines.events.on_player_left_game, function()
+script.on_event(defines.events.on_player_left_game, function(event)
     guard("a leave", function()
+        debug.event("on_player_left_game", event)
         if not state.empty() then
             return
         end
