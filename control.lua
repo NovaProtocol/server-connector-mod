@@ -30,6 +30,7 @@
 --   control/map.lua        the server map: one button per other instance
 --   control/platforms.lua  the fleet's platform copies, and the API probes
 --   control/research.lua   the shared tech tree: report and apply
+--   control/requests.lua   pending platform requests named on the wrong planet server
 --   control/events.lua     every event handler
 --   control/rcon.lua       the calls the node drives, and the two commands
 --
@@ -50,5 +51,6 @@ require("__server-connector-mod__.control.platforms")
 require("__server-connector-mod__.control.platform_api")
 require("__server-connector-mod__.control.research")
 require("__server-connector-mod__.control.outbound")
+require("__server-connector-mod__.control.requests")
 require("__server-connector-mod__.control.events")
 require("__server-connector-mod__.control.rcon")

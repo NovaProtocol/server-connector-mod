@@ -51,6 +51,10 @@ playing, which is why the node talks to this mod through its own command instead
 | `research_all()` | Unlocks every technology on this force. For a custom instance in `all` mode. |
 | `delete_surface(name)` | Removes one custom surface. Refuses the primary and anybody connected. |
 | `sweep_foreign()` | One pass over the chunks on surfaces this instance does not own. Returns how many it removed. |
+| `request_platform({planet, name, starter_pack, quality})` | Recreate a pending platform request on the planet's own server. Idempotent by name. |
+| `request_moved_ack({id})` | Mark a moved request acknowledged, so the origin stops re-sending it. |
+| `request_purge_mode({live})` | Arm or disarm the wrong-planet request purge. Dry-run unless armed. |
+| `request_probe()` | Every platform with its pending verdict, planet and starter pack. |
 | `surfaces()` | What surfaces this world has, and which of them are platforms. |
 | `settle()` | Brings the world into line: crash site, surfaces, spawn point. Nobody connected only. |
 | `mirror_platforms(entries)` | Makes, keeps or removes this server's copies of the fleet's platforms: hub, matching cargo bays, no asteroids. Called over RCON, nobody connected only. |

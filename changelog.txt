@@ -1,4 +1,27 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.60
+Date: 2026-10-27
+  Added:
+    - A pending platform request named on the wrong planet's server is moved to the server that
+      owns that planet, with the same name and the same starter pack (item and quality). The
+      request is destroyed on the origin, announced over UDP as platform_request_moved, recreated
+      by the target through request_platform, and acknowledged through request_moved_ack. Until it
+      is acknowledged it is re-sent every ten seconds, and an unacknowledged move is logged.
+    - New calls: request_platform, request_moved_ack, request_purge_mode, request_probe. New
+      command: server-connector-requests, which prints the probe as JSON.
+  Changed:
+    - The purge is dry-run by default, on new and existing saves, and only logs what it would
+      move. Arm it per server with request_purge_mode {live=true}.
+    - A platform creation that fails to apply its starter pack is now destroyed instead of being
+      left behind as a hubless pending platform.
+  Notes:
+    - Anything else the delivered rocket pod carried is lost when the native platform is deleted
+      and recreated on the space server.
+    - This build of the game has no on_space_platform_created event, so the 60-tick purge pass is
+      what catches a request; the handler is kept for builds that have it.
+    - request_planet reads the platform's space_location. A pending platform that reports nil
+      there is kept, never moved; the probe shows it.
+---------------------------------------------------------------------------------------------------
 Version: 0.36.59
 Date: 2026-10-27
   Fixed:

@@ -18,6 +18,7 @@ local pod = require("__server-connector-mod__.control.pod")
 local research = require("__server-connector-mod__.control.research")
 local map = require("__server-connector-mod__.control.map")
 local outbound = require("__server-connector-mod__.control.outbound")
+local requests = require("__server-connector-mod__.control.requests")
 
 local MOD = state.MOD
 
@@ -180,6 +181,12 @@ local calls = {
     -- What this server's platforms are (platforms.platforms).
     platforms = platforms.platforms,
 
+    -- Pending platform requests named on the wrong planet server (requests).
+    request_platform = requests.create,
+    request_moved_ack = requests.ack,
+    request_purge_mode = requests.set_mode,
+    request_probe = requests.probe,
+
     -- The platform helper surface (platform_api). The node and the manager call these
     -- directly for a manual read, a full dump or a computed difference.
     platform_meta = platform_api.meta,
@@ -334,6 +341,27 @@ commands.add_command(
         end)
         if not ok then
             log(string.format("[%s] -platforms failed: %s", MOD, tostring(err)))
+        end
+    end
+)
+
+-- The request probe: every platform with the two verdicts the purge uses (is_pending and the
+-- planet it is for), plus the pack. This is what says whether a pending request is visible at
+-- all on a server, which is the first question when a launch goes nowhere.
+commands.add_command(
+    MOD .. "-requests",
+    "Report every platform with its pending-request verdict, planet and starter pack as JSON.",
+    function(event)
+        local ok, err = pcall(function()
+            local text = helpers.table_to_json(requests.probe())
+            if event.player_index and game.get_player(event.player_index) then
+                game.get_player(event.player_index).print(text)
+            elseif rcon then
+                rcon.print(text)
+            end
+        end)
+        if not ok then
+            log(string.format("[%s] -requests failed: %s", MOD, tostring(err)))
         end
     end
 )

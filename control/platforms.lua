@@ -794,20 +794,41 @@ local function create_platform(entry)
         planet = "nauvis"
     end
 
+    -- The pack travels with the platform: a request moved between servers must come back as
+    -- the same pack, and a quality pack has to survive the round trip too.
+    local pack = entry.starter_pack
+    if type(pack) ~= "string" or not prototypes.item[pack] then
+        pack = "space-platform-starter-pack"
+    end
+    local quality = entry.quality
+    if quality ~= nil and (type(quality) ~= "string"
+        or not (prototypes.quality and prototypes.quality[quality])) then
+        quality = nil
+    end
+
     local ok, created = pcall(function()
         return force.create_space_platform{
             planet = planet,
             name = entry.name,
-            starter_pack = "space-platform-starter-pack",
+            starter_pack = quality and {name = pack, quality = quality} or pack,
         }
     end)
     if not ok or not created then
         return {ok = false, error = tostring(created)}
     end
 
-    local hub = pcall(function() created.apply_starter_pack(true) end)
+    -- apply_starter_pack returns the hub, not a boolean. A silent failure used to leave the
+    -- platform in the list with no hub, which is exactly a pending request: remove it.
+    local applied, hub = pcall(function()
+        return created.apply_starter_pack(true)
+    end)
+    if not applied or not hub then
+        pcall(function() created.destroy(1) end)
+        return {ok = false, error = "the starter pack could not be applied: " .. tostring(hub)}
+    end
+
     log(string.format("[%s] created platform %s at %s", instance(), entry.name, planet))
-    return {ok = true, name = entry.name, location = planet, hub = hub}
+    return {ok = true, name = entry.name, location = planet, starter_pack = pack, quality = quality}
 end
 
 -- What this server's platforms are.

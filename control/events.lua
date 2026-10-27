@@ -23,6 +23,7 @@ local server = require("__server-connector-mod__.control.server")
 local map = require("__server-connector-mod__.control.map")
 local research = require("__server-connector-mod__.control.research")
 local platforms = require("__server-connector-mod__.control.platforms")
+local requests = require("__server-connector-mod__.control.requests")
 local pod = require("__server-connector-mod__.control.pod")
 local outbound = require("__server-connector-mod__.control.outbound")
 
@@ -94,6 +95,11 @@ every(3600, "the foreign chunks", when_known(chunks.sweep))
 -- change. The logistic-slot event does not cover every edit the game makes, and a request can
 -- be set and removed inside a minute, which is what a one-minute sample missed.
 every(300, "the platform watch", when_known(platforms.watch))
+
+-- Pending requests that were named on another planet's server. Dry-run unless armed with
+-- request_purge_mode; the resend keeps an unacked move alive until the manager answers.
+every(60, "the request purge", when_known(requests.purge))
+every(600, "the request resend", when_known(requests.resend))
 
 -- The map is shown only while the map view is open, and there is no event for opening it,
 -- so the list is refreshed (and shown or hidden) on this pass.
@@ -231,6 +237,10 @@ local function reject_native_platform(surface, what)
 
         local name = platform.name
         local location = platform.space_location and platform.space_location.name or instance()
+
+        -- The pack is part of the platform: read it before the native one is removed.
+        local pack, quality = requests.pack_of(platform)
+
         if not platforms.remove_native_platform(platform) then
             log(string.format("[%s] could not remove native platform %s", instance(), name))
             return
@@ -240,6 +250,8 @@ local function reject_native_platform(surface, what)
             instance = instance(),
             name = name,
             location = location,
+            starter_pack = pack,
+            quality = quality,
             tick = game.tick,
         })
         log(string.format("[%s] removed native platform %s; the space server will create it", instance(), name))
@@ -270,8 +282,14 @@ end
 
 if defines.events.on_space_platform_created then
     script.on_event(defines.events.on_space_platform_created, function(event)
-        local platform = event.platform
-        reject_native_platform(platform and platform.surface, "a platform creation")
+        guard("a platform creation", function()
+            local platform = event.platform
+            if platform and platform.valid and requests.is_pending(platform) then
+                requests.purge()
+                return
+            end
+            reject_native_platform(platform and platform.surface, "a platform creation")
+        end)
     end)
 end
 
