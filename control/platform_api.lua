@@ -438,12 +438,17 @@ end
 -- A copy whose bays no longer match the ship must not receive cargo: its capacity is
 -- smaller than the real hub's, and an insert would silently stop at the cap. The mirror
 -- repairs the copy at the next empty window; until then the manager skips it.
+-- Can this copy hold what the real one holds? A copy built from an older layout can have
+-- MORE bays than the real platform has now (the mirror trims it on the next push, but the
+-- manager's count can lag). Requiring equality refused every write in that window, which is
+-- why a station's requests and cargo never reached the copies.
 local function copy_is_whole(platform, payload)
     local expected = tonumber(payload and payload.bays)
     if expected == nil then
         return true
     end
-    return platforms.bay_count(platform) == expected
+    local actual = platforms.bay_count(platform)
+    return actual ~= nil and actual >= expected
 end
 
 -- Apply the manager's cargo difference to this server's copy.
