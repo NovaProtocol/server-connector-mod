@@ -1,4 +1,12 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.65
+Date: 2026-10-27
+  Changed:
+    - A real hub's logistic edit now carries its full request list and bay count in the
+      platform_requests event, so the manager can apply it to every copy directly. The manager
+      used to answer that event with a full fleet resync, which took minutes and was throttled;
+      a station's requests could sit on the space hub while every planet copy stayed empty.
+---------------------------------------------------------------------------------------------------
 Version: 0.36.64
 Date: 2026-10-27
   Fixed:

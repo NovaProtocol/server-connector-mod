@@ -23,6 +23,7 @@ local server = require("__server-connector-mod__.control.server")
 local map = require("__server-connector-mod__.control.map")
 local research = require("__server-connector-mod__.control.research")
 local platforms = require("__server-connector-mod__.control.platforms")
+local platform_api = require("__server-connector-mod__.control.platform_api")
 local requests = require("__server-connector-mod__.control.requests")
 local debug = require("__server-connector-mod__.control.debug")
 local pod = require("__server-connector-mod__.control.pod")
@@ -346,10 +347,15 @@ if defines.events.on_entity_logistic_slot_changed then
                 return
             end
 
+            -- The list travels with the event: the manager can apply it to every copy
+            -- directly instead of reading the hub back and running a full fleet resync,
+            -- which took minutes and left the copies without the new filters.
             outbound.push("platform_requests", {
                 instance = instance(),
                 name = platform.name,
                 index = platform.index,
+                requests = platform_api.requests_of(platform),
+                bays = platforms.bay_count(platform),
                 tick = game.tick,
             })
         end)
