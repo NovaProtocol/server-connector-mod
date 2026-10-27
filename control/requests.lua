@@ -18,7 +18,7 @@
 
 local state = require("__server-connector-mod__.control.state")
 local platforms = require("__server-connector-mod__.control.platforms")
-local outbound = require("__server-connector-mod__.control.outbound")
+local bus = require("__server-connector-mod__.control.bus")
 local debug = require("__server-connector-mod__.control.debug")
 
 local instance = state.instance
@@ -83,16 +83,22 @@ local function own_planet()
     return instance()
 end
 
+-- A prototype field as a plain string. starter_pack.quality is a LuaQualityPrototype, not a
+-- string, and a name can be a prototype too; both have .name.
+local function plain(value)
+    if type(value) == "table" or type(value) == "userdata" then
+        return value.name
+    end
+    return value
+end
+
 -- The starter pack the player chose, as plain strings.
 local function pack_of(p)
     local ok, sp = pcall(function() return p.starter_pack end)
     if not ok or not sp then
         return DEFAULT_PACK, nil
     end
-    local name, quality = sp.name, sp.quality
-    if type(name) == "table" then name = name.name end
-    if type(quality) == "table" then quality = quality.name end
-    return name or DEFAULT_PACK, quality
+    return plain(sp.name) or DEFAULT_PACK, plain(sp.quality)
 end
 
 local function sorted_platforms()
@@ -227,7 +233,7 @@ local function purge()
                             instance(), tostring(name)))
                         debug.emit("purge: p.destroy() failed for %s", tostring(name))
                     else
-                        outbound.push("platform_request_moved", {
+                        bus.push("platform_request_moved", {
                             instance = instance(),
                             id = id,
                             name = name,
@@ -248,7 +254,7 @@ local function purge()
     return moved
 end
 
--- Re-send unacked moves. Sorted by name: outbound.push advances storage.out_seq, and that
+-- Re-send unacked moves. Sorted by name: bus.push advances storage.out_seq, and that
 -- sequence has to be identical on every peer.
 local function resend()
     ensure()
@@ -278,7 +284,7 @@ local function resend()
             end
             storage.request_moves[name] = nil
         elseif not record.acked then
-            outbound.push("platform_request_moved", {
+            bus.push("platform_request_moved", {
                 instance = instance(),
                 id = record.id,
                 name = name,

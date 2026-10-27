@@ -27,6 +27,17 @@ package.preload["__server-connector-mod__.control.debug"] = function()
     }
 end
 
+PUSHED = {}
+
+package.preload["__server-connector-mod__.control.bus"] = function()
+    return {
+        push = function(kind, payload)
+            PUSHED[#PUSHED + 1] = {kind = kind, payload = payload}
+        end,
+        epoch = function() return "test" end,
+    }
+end
+
 package.preload["__server-connector-mod__.control.platforms"] = function()
     return {
         is_copy = function(p) return p.copy == true end,
@@ -90,6 +101,7 @@ FORCE = {
 }
 
 local requests = dofile("control/requests.lua")
+assert(PUSHED ~= nil, "the bus stub should be in use")
 
 -- 1. pending only when hub, surface and deletion all say so
 local pending = platform({name = "req", location = "vulcanus"})
@@ -122,6 +134,13 @@ assert(record and record.planet == "vulcanus", "the move should be recorded with
 assert(#PUSHED == 1 and PUSHED[1].kind == "platform_request_moved", "the move should be pushed")
 assert(PUSHED[1].payload.starter_pack == "space-platform-starter-pack",
     "the pack should travel with the move")
+
+-- 4b. resend re-pushes an unacked move, and an ack stops it
+assert(requests.resend() == 1, "an unacked move should be re-sent")
+assert(#PUSHED == 2 and PUSHED[2].kind == "platform_request_moved",
+    "the resend must push through the bus")
+assert(requests.ack({id = record.id}).ok == true, "the ack should be accepted")
+assert(requests.resend() == 0, "an acked move must not be re-sent")
 
 -- 5. anti-bounce: a request that arrived here is never moved out
 local arrived = platform({name = "arrived", location = "vulcanus"})

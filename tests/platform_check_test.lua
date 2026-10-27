@@ -27,6 +27,13 @@ package.preload["__server-connector-mod__.control.debug"] = function()
     }
 end
 
+package.preload["__server-connector-mod__.control.bus"] = function()
+    return {
+        push = function() end,
+        epoch = function() return "test" end,
+    }
+end
+
 package.preload["__server-connector-mod__.control.platforms"] = function()
     return {
         bay_count = function() return 2 end,

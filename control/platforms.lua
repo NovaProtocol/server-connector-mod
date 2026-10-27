@@ -13,22 +13,38 @@
 
 local state = require("__server-connector-mod__.control.state")
 local debug = require("__server-connector-mod__.control.debug")
+local bus = require("__server-connector-mod__.control.bus")
 
 local MOD = state.MOD
 local known = state.known
 local instance = state.instance
 local main_force = state.main_force
 
--- Required lazily: outbound.lua requires platforms.lua, so a top-level require here is a
--- cycle and Factorio refuses to load the mod. By the time a mirror runs, outbound is loaded.
+-- The transport is bus.lua, which this module can require at load: bus does not require
+-- platforms. A require here used to be lazy (inside this function) to dodge the cycle, and
+-- Factorio refuses that at runtime, so every adoption destroyed the platform and then threw
+-- before the create was sent.
 local function report_platform_create(name, location)
-    local outbound = require("__server-connector-mod__.control.outbound")
-    outbound.push("platform_create", {
+    bus.push("platform_create", {
         instance = instance(),
         name = name,
         location = location,
         tick = game.tick,
     })
+end
+
+-- Adoption is destroy-then-ask, and the ask is a best-effort datagram. A record per name is
+-- kept until a copy of it exists here (the create landed) or the native one is still alive,
+-- and re-sent on the minute timer. Without this a single dropped packet loses the platform.
+local NATIVE_CREATE_TTL = 18000
+
+local function remember_native_create(name, location)
+    storage.native_creates = storage.native_creates or {}
+    storage.native_creates[name] = {
+        location = location or instance(),
+        at = game.tick,
+        tries = 1,
+    }
 end
 
 -- A write to a copy's position, said out loud when the game refuses it.
@@ -352,6 +368,77 @@ end
 --
 -- Only a planet gets copies: the space server is where the real platforms live, and a
 -- custom world has no business holding one. Called over RCON, so only the server runs it.
+-- Destroy a native platform and ask the space server for the real one. Used for an unlisted
+-- platform and for an extra one with a duplicate name; the two branches had the same body.
+-- Defined here because it calls destroy_copy, which is below the transport helpers.
+local function adopt_native_platform(platform, name)
+    local location = platform.space_location and platform.space_location.name or instance()
+    if not destroy_copy(platform) then
+        log(string.format("[%s] could not remove native %s", instance(), tostring(name)))
+        return false
+    end
+    remember_native_create(name, location)
+    report_platform_create(name, location)
+    log(string.format("[%s] removed native %s and asked the space server to create it",
+        instance(), tostring(name)))
+    return true
+end
+
+-- Re-send every adoption that has not yet produced a copy here. Defined after is_copy, so
+-- the name means the local function and not a nil global.
+local function retry_native_creates()
+    if instance() == "space" then
+        return 0
+    end
+    local records = storage.native_creates
+    if not records then
+        return 0
+    end
+
+    local names = {}
+    for name in pairs(records) do
+        names[#names + 1] = name
+    end
+    table.sort(names)
+
+    local copies, natives = {}, {}
+    for _, platform in pairs(main_force().platforms or {}) do
+        if platform and platform.valid then
+            if is_copy(platform) then
+                copies[platform.name] = true
+            elseif platform.scheduled_for_deletion == 0 then
+                natives[platform.name] = true
+            end
+        end
+    end
+
+    local sent = 0
+    for _, name in ipairs(names) do
+        local record = records[name]
+        local age = game.tick - (record.at or 0)
+        if copies[name] then
+            records[name] = nil
+            log(string.format("[%s] native %s is a copy here now; the create landed",
+                instance(), tostring(name)))
+        elseif natives[name] then
+            records[name] = nil
+            log(string.format("[%s] native %s is still here; dropping its create record",
+                instance(), tostring(name)))
+        elseif age > NATIVE_CREATE_TTL then
+            records[name] = nil
+            log(string.format("[%s] native %s was never recreated after %d ticks; giving up",
+                instance(), tostring(name), age))
+        else
+            record.tries = (record.tries or 1) + 1
+            report_platform_create(name, record.location or instance())
+            sent = sent + 1
+            log(string.format("[%s] re-sent the create of native %s (try %d, age %d)",
+                instance(), tostring(name), record.tries, age))
+        end
+    end
+    return sent
+end
+
 local function mirror_platforms(entries)
     if not known() then
         return {instance = instance(), skipped = "no identity"}
@@ -474,13 +561,7 @@ local function mirror_platforms(entries)
                         log(string.format("[%s] could not remove the copy of %s", instance(), name))
                     end
                 else
-                    local location = platform.space_location and platform.space_location.name or instance()
-                    if destroy_copy(platform) then
-                        report_platform_create(name, location)
-                        log(string.format("[%s] removed native %s and asked the space server to create it", instance(), name))
-                    else
-                        log(string.format("[%s] could not remove native %s", instance(), name))
-                    end
+                    adopt_native_platform(platform, name)
                 end
             end
             if keep == 0 then
@@ -498,13 +579,7 @@ local function mirror_platforms(entries)
                         log(string.format("[%s] could not remove the extra copy of %s", instance(), name))
                     end
                 else
-                    local location = platform.space_location and platform.space_location.name or instance()
-                    if destroy_copy(platform) then
-                        report_platform_create(name, location)
-                        log(string.format("[%s] removed extra native %s and asked the space server to create it", instance(), name))
-                    else
-                        log(string.format("[%s] could not remove extra native %s", instance(), name))
-                    end
+                    adopt_native_platform(platform, name)
                 end
             end
         end
@@ -828,6 +903,16 @@ end
 -- create the real one. Idempotent by name. It runs while players are connected: the join
 -- desync was the GUI rebuild, and waiting for an empty space server meant a starter pack
 -- launched while somebody watched the platform screen was never adopted.
+-- A prototype field as a plain string: quality is a LuaQualityPrototype, and a name can be
+-- a prototype too. The manager sends strings, but a moved platform carries what the game
+-- handed us.
+local function plain(value)
+    if type(value) == "table" or type(value) == "userdata" then
+        return value.name
+    end
+    return value
+end
+
 local function create_platform(entry)
     if instance() ~= "space" then
         return {ok = false, error = "only the space server creates real platforms"}
@@ -849,11 +934,11 @@ local function create_platform(entry)
 
     -- The pack travels with the platform: a request moved between servers must come back as
     -- the same pack, and a quality pack has to survive the round trip too.
-    local pack = entry.starter_pack
+    local pack = plain(entry.starter_pack)
     if type(pack) ~= "string" or not prototypes.item[pack] then
         pack = "space-platform-starter-pack"
     end
-    local quality = entry.quality
+    local quality = plain(entry.quality)
     if quality ~= nil and (type(quality) ~= "string"
         or not (prototypes.quality and prototypes.quality[quality])) then
         quality = nil
@@ -1066,6 +1151,8 @@ end
 return {
     mirror_platforms = mirror_platforms,
     rebuild_platforms = rebuild_platforms,
+    adopt_native_platform = adopt_native_platform,
+    retry_native_creates = retry_native_creates,
     starter_pack_requests = starter_pack_requests,
     watch = watch,
     create_platform = create_platform,

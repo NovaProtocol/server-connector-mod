@@ -102,6 +102,10 @@ every(300, "the platform watch", when_known(platforms.watch))
 every(60, "the request purge", when_known(requests.purge))
 every(600, "the request resend", when_known(requests.resend))
 
+-- A native platform destroyed for adoption is re-sent until its copy appears: UDP is
+-- best-effort, and one dropped create would otherwise lose the platform for good.
+every(600, "the native platform creates", when_known(platforms.retry_native_creates))
+
 -- The map is shown only while the map view is open, and there is no event for opening it,
 -- so the list is refreshed (and shown or hidden) on this pass.
 every(60, "the server map", when_known(map.tick))

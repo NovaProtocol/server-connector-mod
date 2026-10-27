@@ -8,54 +8,17 @@
 -- --enable-lua-udp on the game, which the node passes per instance.
 
 local state = require("__server-connector-mod__.control.state")
-local debug = require("__server-connector-mod__.control.debug")
+local bus = require("__server-connector-mod__.control.bus")
 local platforms = require("__server-connector-mod__.control.platforms")
 local platform_api = require("__server-connector-mod__.control.platform_api")
 
 local main_force = state.main_force
 
--- The one-container app listens here on its loopback; the game is in the same network
--- namespace.
-local UDP_PORT = 8999
-
--- Local-only: a client without Lua UDP fails every push, and the failure is not part of
--- the simulation. Log it at most once a minute rather than at the stream's rate.
-local last_udp_failure = -math.huge
-
--- A server-side event pushed to the app. Never for a player: this is the game telling the
--- app something happened, not a client action.
--- A boot identity and a sequence number on every push.
---
--- UDP can duplicate and reorder, so the manager keys its stores by where a message came
--- from and what it is. An epoch change means the save restarted: the manager full-resyncs
--- instead of comparing against a sequence from another run.
-local function epoch()
-    if not storage.origin_epoch then
-        storage.origin_epoch = string.format("%s-%d", tostring(state.instance()), game.tick)
-    end
-    return storage.origin_epoch
-end
-
-local function push(kind, payload)
-    payload = payload or {}
-    payload.kind = kind
-    payload.origin = payload.origin or payload.instance or state.instance()
-    payload.origin_epoch = epoch()
-    storage.out_seq = (storage.out_seq or 0) + 1
-    payload.seq = storage.out_seq
-
-    debug.push(kind, payload)
-
-    local ok, json = pcall(helpers.table_to_json, payload)
-    if not ok then
-        return
-    end
-    local sent, err = pcall(function() helpers.send_udp(UDP_PORT, json) end)
-    if not sent and game.tick - last_udp_failure >= 3600 then
-        last_udp_failure = game.tick
-        log(string.format("[%s] udp %s failed: %s", state.instance(), kind, tostring(err)))
-    end
-end
+-- The transport lives in bus.lua so that platforms.lua can push without requiring this
+-- module, which requires it. The names stay exported here: every caller outside this file
+-- keeps using outbound.push, and the cycle has no way back.
+local push = bus.push
+local epoch = bus.epoch
 
 -- Every platform's serialized position. `distance` is the fractional position along the
 -- connection; `docked` is waiting at a planet rather than in transit.

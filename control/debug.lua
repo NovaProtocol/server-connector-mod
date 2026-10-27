@@ -114,7 +114,12 @@ local function platform_table(p)
         paused = (read(function() return p.paused end)),
         hidden = (read(function() return p.hidden end)),
         scheduled_for_deletion = (read(function() return p.scheduled_for_deletion end)),
-        starter_pack = pack and {name = pack.name, quality = tostring(pack.quality)} or nil,
+        -- Quality is a LuaQualityPrototype; its .name is the plain id used everywhere else.
+        starter_pack = pack and {
+            name = type(pack.name) == "table" and pack.name.name or pack.name,
+            quality = type(pack.quality) == "table" or type(pack.quality) == "userdata"
+                and pack.quality.name or pack.quality,
+        } or nil,
     }
 end
 

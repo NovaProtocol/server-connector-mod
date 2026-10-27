@@ -1,4 +1,23 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.64
+Date: 2026-10-27
+  Fixed:
+    - The platform mirror destroyed a player's new platform and then threw on a require inside
+      report_platform_create ("Require can't be used outside of control.lua parsing"), so the
+      create was never sent and the platform vanished. The transport now lives in control/bus.lua:
+      platforms and outbound both require it, and the cycle that forced the lazy require is gone.
+    - Adoption is one function (adopt_native_platform), and every adopted platform is recorded
+      and its create re-sent every ten seconds until a copy of the name exists here, a native
+      with that name is still standing, or five minutes pass. A dropped datagram no longer loses
+      a platform.
+    - starter_pack.quality is a LuaQualityPrototype; it is normalised through .name in the
+      request move, the debug dump and create_platform, so a moved platform keeps its quality.
+  Notes:
+    - The mirror still adopts a pending request as soon as it appears, so the space server
+      applies the starter pack itself and the silo request is removed rather than fulfilled by a
+      rocket. If the rocket should build it, the mirror has to skip pending requests; separate
+      decision.
+---------------------------------------------------------------------------------------------------
 Version: 0.36.63
 Date: 2026-10-27
   Fixed:
