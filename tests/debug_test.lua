@@ -25,9 +25,14 @@ helpers = {
     end,
 }
 
+-- script.active_mods, not game.active_mods: the game table has no active_mods in 2.1, and
+-- the first version of this test used the wrong table, so it never exercised the real line.
+script = {
+    active_mods = {["server-connector-mod"] = "0.36.62", base = "2.1.23"},
+}
+
 game = {
     tick = 1234,
-    active_mods = {["server-connector-mod"] = "0.36.61", base = "2.1.23"},
     planets = {nauvis = {}},
 }
 
@@ -125,7 +130,10 @@ debug.boot()
 
 assert(#LOG > 5, "the dumps should reach the log")
 local joined = table.concat(LOG, "\n")
-assert(joined:find("%[debug%]%[nauvis%] boot:"), "boot should be logged with the debug prefix")
+assert(joined:find("%[debug%]%[nauvis%] boot: instance="), "boot should report the instance")
+assert(joined:find("boot: events="), "boot should report which optional events exist")
+assert(joined:find("boot: mods="), "boot should report the mod versions")
+assert(joined:find("boot: failed") == nil, "boot must not fail in the test")
 assert(joined:find("truncated"), "a huge JSON value should be truncated, not swallowed")
 assert(joined:find("event a test"), "events should be dumped")
 assert(joined:find("call probe args"), "calls should be dumped")

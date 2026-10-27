@@ -264,15 +264,10 @@ end
 -- What this build and this save actually offer. Logged at boot, again whenever the identity
 -- is pushed, because an absent event or a renamed member index is the first explanation for
 -- anything that "does nothing".
-local function boot()
-    if not DEBUG then
-        return
-    end
-    ensure_maps()
-
+local function boot_body()
     local force = state.main_force()
     local mods = {}
-    for name, version in pairs(game.active_mods or {}) do
+    for name, version in pairs(script.active_mods or {}) do
         mods[#mods + 1] = tostring(name) .. "=" .. tostring(version)
     end
     table.sort(mods)
@@ -307,14 +302,27 @@ local function boot()
         tostring(prototypes.item and prototypes.item["space-platform-starter-pack"] ~= nil),
         tostring(prototypes.quality ~= nil))
     emit("boot: mods=%s", table.concat(mods, ","))
-    emit("boot: platforms=%s", json((function()
-        local out = {}
-        for _, p in pairs((force and force.platforms) or {}) do
-            out[#out + 1] = platform_table(p)
-        end
-        table.sort(out, function(a, b) return (a.index or 0) < (b.index or 0) end)
-        return out
-    end)()))
+
+    local platforms = {}
+    for _, p in pairs((force and force.platforms) or {}) do
+        platforms[#platforms + 1] = platform_table(p)
+    end
+    table.sort(platforms, function(a, b) return (a.index or 0) < (b.index or 0) end)
+    emit("boot: platforms=%s", json(platforms))
+end
+
+local function boot()
+    if not DEBUG then
+        return
+    end
+    ensure_maps()
+
+    -- A debug dump must never be able to stop the caller: boot runs inside on_init and
+    -- on_configuration_changed, and an error there would skip the steps after it.
+    local ok, err = pcall(boot_body)
+    if not ok then
+        emit("boot: failed: %s", tostring(err))
+    end
 end
 
 return {

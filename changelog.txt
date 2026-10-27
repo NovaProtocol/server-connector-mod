@@ -1,4 +1,13 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.62
+Date: 2026-10-27
+  Fixed:
+    - The debug boot read game.active_mods, which does not exist on the script side, so boot
+      threw and skipped the rest of on_configuration_changed on every server. It now reads
+      script.active_mods.
+    - A debug dump can no longer stop its caller: boot is wrapped, and it now runs after the
+      crash-site, surface and speed steps rather than before them.
+---------------------------------------------------------------------------------------------------
 Version: 0.36.61
 Date: 2026-10-27
   Added:

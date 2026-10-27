@@ -47,6 +47,7 @@ local calls = {
             if state.empty() then
                 convert.ensure_surfaces()
             end
+            debug.boot()
             return {instance = id, unchanged = true}
         end
         if not state.empty() then
