@@ -64,6 +64,12 @@ local hub = {
 PLATFORMS = {{name = "Test", index = 3, hub = hub}}
 
 local platform_api = dofile("control/platform_api.lua")
+
+-- The module exports this as `requests`; events.lua once called `requests_of`, which is the
+-- internal name and not exported, so every hub edit threw before its push.
+assert(type(platform_api.requests) == "function", "platform_api.requests must be exported")
+assert(platform_api.requests_of == nil, "requests_of must not be a second export")
+
 local result = platform_api.check()
 
 assert(#result == 1, "expected one copy, got " .. #result)

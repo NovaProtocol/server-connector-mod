@@ -354,7 +354,7 @@ if defines.events.on_entity_logistic_slot_changed then
                 instance = instance(),
                 name = platform.name,
                 index = platform.index,
-                requests = platform_api.requests_of(platform),
+                requests = platform_api.requests(platform),
                 bays = platforms.bay_count(platform),
                 tick = game.tick,
             })

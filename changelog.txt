@@ -1,4 +1,13 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.68
+Date: 2026-10-27
+  Fixed:
+    - The hub edit handler called platform_api.requests_of, but the module exports that
+      function as `requests`. Every real-hub logistic edit threw ("attempt to call field
+      'requests_of' (a nil value)") before it pushed anything, so no platform_requests event
+      was ever sent and a station's requests were never copied to the planets.
+---------------------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------------------
 Version: 0.36.67
 Date: 2026-10-27
   Added:

@@ -192,9 +192,6 @@ local calls = {
     request_purge_mode = requests.set_mode,
     request_probe = requests.probe,
 
-    -- Per-surface entity/ghost/deconstruction counts, for a read-only diagnosis.
-    surface_report = surface_report,
-
     -- The platform helper surface (platform_api). The node and the manager call these
     -- directly for a manual read, a full dump or a computed difference.
     platform_meta = platform_api.meta,
@@ -396,6 +393,9 @@ local function surface_report()
     table.sort(out, function(a, b) return a.name < b.name end)
     return {ok = true, instance = state.instance(), surfaces = out}
 end
+
+-- Added after the definition: the calls table is built above this function.
+calls.surface_report = surface_report
 
 -- One entry point for everything above: the node sends {"fn": "...", "args": [...]}
 -- and gets the result back as JSON. A single command rather than one per call, so
