@@ -364,6 +364,10 @@ local function enforce_pad(pad, incoming, planet)
         return false
     end
 
+    -- A pad set to trash unrequested items pushes its whole inventory into the platform as
+    -- soon as a request is added. The pad is a request point, not a disposal point.
+    pcall(function() point.trash_not_requested = false end)
+
     begin_write()
     -- Only the Incoming group. Removing from the highest index down keeps the indices
     -- stable while the list shrinks.
@@ -592,6 +596,9 @@ enforce_platform = function(platform, incoming, outgoing, planet)
     if not point then
         return false
     end
+    -- Keep what nobody asked for. A hub left on the default trash setting ejects the
+    -- starter-pack foundation over time, and the loss looks like a cargo sync bug.
+    pcall(function() point.trash_not_requested = false end)
     begin_write()
     local in_name, out_name = group_names(planet)
     local wrote_in = write_section(point, in_name, build_filters(incoming, "platforms", planet))

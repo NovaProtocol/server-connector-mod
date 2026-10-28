@@ -1,4 +1,11 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.74
+Date: 2026-10-28
+  Fixed:
+    - The connector hub and the landing pad had trash-unrequested on. The hub ejected its
+      starter-pack foundation over time, and the pad pushed its whole inventory into the
+      platform as soon as a request was added. Both points now keep unrequested items.
+---------------------------------------------------------------------------------------------------
 Version: 0.36.73
 Date: 2026-10-28
   Added:
