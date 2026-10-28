@@ -1,4 +1,12 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.71
+Date: 2026-10-28
+  Added:
+    - The periodic platform meta now carries each hub's inventory weight. The space server is the
+      source of truth; every copy reports the same scalar every few seconds, so the manager can
+      see a discrepancy without reading a full hub.
+---------------------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------------------
 Version: 0.36.70
 Date: 2026-10-28
   Added:

@@ -304,6 +304,12 @@ local function meta(full, logistic)
                 entry.other = platforms.other_entities(platform)
             end
         end
+        -- Every periodic report carries the hub's weight: the scalar both sides can compare
+        -- without a full dump. The space server's value is the source of truth.
+        local inventory = hub_inventory(platform.hub)
+        if inventory then
+            entry.weight = inventory.weight
+        end
         if full or logistic then
             local requests = requests_of(platform)
             -- An empty table would serialize as a JSON object, not the array the manager
