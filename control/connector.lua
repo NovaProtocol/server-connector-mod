@@ -1076,6 +1076,19 @@ end
 local function tick()
     storage_ready()
 
+    -- Asteroids accumulate on a real connector platform and damage its tiles; the game
+    -- repairs them from the hub's foundation, which is what drained the starter-pack cargo.
+    -- There is no spawn event to hook, so a one-second sweep is the cheapest correct answer,
+    -- the same cadence the fleet's planet asteroid sweep already uses.
+    if game.tick - (storage.connector_asteroids_at or 0) >= 60 then
+        storage.connector_asteroids_at = game.tick
+        for _, platform in pairs(force().platforms or {}) do
+            if platform.valid and is_connector(platform) then
+                pcall(function() platform.destroy_asteroid_chunks{} end)
+            end
+        end
+    end
+
     -- A platform that was scheduled for deletion when ensure() ran is retried here, once
     -- per pending planet. The queue is empty in the common case.
     if storage.connector_retry and next(storage.connector_retry) ~= nil then

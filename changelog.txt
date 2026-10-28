@@ -1,4 +1,11 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.76
+Date: 2026-10-28
+  Fixed:
+    - A real connector platform was collecting asteroids; the game repaired the damaged tiles
+      from the hub's foundation, draining the starter-pack cargo. The connector now sweeps its
+      asteroid chunks once a second, the same cadence as the fleet's planet sweep.
+---------------------------------------------------------------------------------------------------
 Version: 0.36.75
 Date: 2026-10-28
   Fixed:
