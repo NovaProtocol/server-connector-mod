@@ -397,6 +397,28 @@ end
 -- Added after the definition: the calls table is built above this function.
 calls.surface_report = surface_report
 
+-- Save this server's world under a name the manager chooses, so an archive can say which
+-- file is which without inferring it from the current save's name.
+local function save(args)
+    args = args or {}
+    local name = args.name
+    if type(name) ~= "string" or name == "" then
+        return {ok = false, error = "a save name is required"}
+    end
+    if #name > 200 or name:find("[/\\]") then
+        return {ok = false, error = "bad save name"}
+    end
+    local ok, err = pcall(function()
+        game.server_save(name)
+    end)
+    if not ok then
+        return {ok = false, error = tostring(err)}
+    end
+    return {ok = true, name = name, instance = state.instance(), tick = game.tick}
+end
+
+calls.save = save
+
 -- One entry point for everything above: the node sends {"fn": "...", "args": [...]}
 -- and gets the result back as JSON. A single command rather than one per call, so
 -- the surface the node depends on is one name that does not move.

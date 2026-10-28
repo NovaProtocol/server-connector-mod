@@ -1,4 +1,12 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.72
+Date: 2026-10-28
+  Added:
+    - The save call: game.server_save(name) with a name the manager chooses. The fleet save uses
+      it for every server and records the file and tick in fleet.json's worlds, so an archive
+      says which file is which world instead of taking the current save's name.
+---------------------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------------------
 Version: 0.36.71
 Date: 2026-10-28
   Added:
