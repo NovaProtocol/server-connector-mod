@@ -660,6 +660,10 @@ local function read_state(platform, with_cargo)
         -- the read and the apply. has_cargo separates "not sent" from "sent and empty".
         cargo = with_cargo and cargo_of(platform) or nil,
         has_cargo = with_cargo or false,
+        -- An empty request list is a real state, not "nothing to say". Without this the
+        -- manager's empty apply is skipped and a request cleared on one side stays on the
+        -- other for ever.
+        has_requests = true,
         bays = platforms.bay_count(platform),
         layout = platforms.layout_of(platform),
         incoming = incoming,
@@ -774,10 +778,10 @@ local function apply(payload)
         storage.connector_clock = incoming_clock
     end
 
-    if payload.incoming or payload.outgoing then
+    if payload.has_requests or payload.incoming or payload.outgoing then
         enforce_platform(platform, payload.incoming or {}, payload.outgoing or {}, planet)
     end
-    if role() == "planet" and (payload.pad or payload.incoming) then
+    if role() == "planet" and (payload.has_requests or payload.pad or payload.incoming) then
         -- An empty pad from the space side means "space has no pad", not "clear the pad".
         -- Only a planet-originated payload owns the pad list; a space edit reaches the pad
         -- through the incoming list it edited.

@@ -1,4 +1,11 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.75
+Date: 2026-10-28
+  Fixed:
+    - An empty request list from the manager was skipped as "no change", so a request cleared
+      on one connector side stayed on the other. The state now says whether the lists are
+      carried, and empty lists are written.
+---------------------------------------------------------------------------------------------------
 Version: 0.36.74
 Date: 2026-10-28
   Fixed:
