@@ -1,4 +1,15 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.70
+Date: 2026-10-28
+  Added:
+    - platform_hub_dump reports the hub inventory's weight. The space server and every copy
+      report it, so the manager can compare the scalar the fleet already uses internally
+      (tick_hub) instead of only diffing item lists.
+  Notes:
+    - The dump's `limit` is capped at 100 stacks per page; a reader must follow `next` until
+      `done`. Comparing a single page reported differences that were only unread pages.
+---------------------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------------------
 Version: 0.36.69
 Date: 2026-10-27
   Fixed:

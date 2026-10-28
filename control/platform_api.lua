@@ -392,6 +392,11 @@ local function dump(payload)
         requests = requests_of(platform)
     end
 
+    -- The hub's inventory weight is the scalar the space server and every copy can report
+    -- cheaply. It is the manager's fastest way to see that two hubs hold the same thing.
+    local inventory = hub_inventory(platform.hub)
+    local weight = inventory and inventory.weight or nil
+
     local next_cursor = cursor + #page
     return {
         ok = true,
@@ -402,6 +407,7 @@ local function dump(payload)
         total = total,
         done = next_cursor >= total,
         hash = hash(cargo),
+        weight = weight,
         cargo = page,
         requests = requests,
         request_hash = requests and hash(requests) or nil,
