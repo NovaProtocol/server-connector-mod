@@ -23,6 +23,15 @@ local function enabled()
 end
 
 local function json(value)
+    -- Calls with no arguments pass nil, and table_to_json rejects it. Logging that as an
+    -- "unserialisable" failure put fifteen thousand fake errors in every server log and hid
+    -- the real ones.
+    if value == nil then
+        return "nil"
+    end
+    if type(value) ~= "table" then
+        return tostring(value)
+    end
     local ok, text = pcall(helpers.table_to_json, value)
     if not ok then
         return "<unserialisable: " .. tostring(text) .. ">"

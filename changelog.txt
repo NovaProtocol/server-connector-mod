@@ -1,4 +1,16 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.69
+Date: 2026-10-27
+  Fixed:
+    - debug.json logged every argument-less call as "<unserialisable: bad argument ...>". Calls
+      with no args pass nil, which table_to_json rejects; it is now logged as nil. That noise was
+      roughly fifteen thousand lines per server and hid real failures.
+  Notes:
+    - The manager no longer calls apply_requests or apply_cargo_delta on a custom instance: a
+      custom world has no platform with the fleet's name, and every edit logged "no such
+      platform" against blueprint-world.
+---------------------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------------------
 Version: 0.36.68
 Date: 2026-10-27
   Fixed:
