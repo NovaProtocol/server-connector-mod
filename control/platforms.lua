@@ -440,6 +440,13 @@ local function retry_native_creates()
 end
 
 local function mirror_platforms(entries)
+    -- Retired as a write path. The connector model owns the platforms now: one per planet,
+    -- mirrored per event. A whole-list mirror prunes anything it does not know about, which
+    -- is what destroyed a platform created between the read and the apply.
+    do
+        return {instance = instance(), skipped = "the connector model owns the platforms"}
+    end
+
     if not known() then
         return {instance = instance(), skipped = "no identity"}
     end
@@ -1164,6 +1171,9 @@ return {
     layout_of = layout_of,
     layout_hash = layout_hash,
     bay_count = bay_count,
+    bay_list = bay_list,
+    ensure_bays = ensure_bays,
+    destroy_copy = destroy_copy,
     asteroid_count = asteroid_count,
     other_entities = other_entities,
     cancel_copy_deconstruction = cancel_copy_deconstruction,

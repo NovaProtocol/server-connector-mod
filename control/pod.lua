@@ -26,6 +26,7 @@
 local state = require("__server-connector-mod__.control.state")
 local outbound = require("__server-connector-mod__.control.outbound")
 local platform_api = require("__server-connector-mod__.control.platform_api")
+local connector = require("__server-connector-mod__.control.connector")
 
 local known = state.known
 local instance = state.instance
@@ -47,33 +48,25 @@ local function platform_of(entity)
     return surface and surface.platform or nil
 end
 
--- Which of several same-named platforms this is, in index order. The manager pairs the real
--- and copy platforms the same way.
+-- Which connector a pod belongs to. A connector is the one platform per planet, on either
+-- side of the split, so the planet and the side identify it uniquely. There is deliberately
+-- no ordinal: the old name+index pairing is what put cargo on the wrong duplicate.
 local function descriptor(platform)
     if not platform or not platform.valid then
         return nil
     end
-    local group = {}
-    for _, candidate in pairs(main_force().platforms or {}) do
-        if candidate.name == platform.name then
-            group[#group + 1] = candidate
-        end
-    end
-    table.sort(group, function(a, b) return a.index < b.index end)
-    for index, candidate in ipairs(group) do
-        if candidate.index == platform.index then
-            return {name = platform.name, ordinal = index}
-        end
-    end
-    return nil
+    return {
+        planet = connector.planet_of(platform),
+        role = connector.role(),
+        name = platform.name,
+    }
 end
 
-local function is_copy_hub(entity)
+local function is_connector_hub(entity)
     return entity ~= nil
         and entity.valid
-        and instance() ~= "space"
         and entity.name == "space-platform-hub"
-        and platform_of(entity) ~= nil
+        and connector.is_connector(platform_of(entity))
 end
 
 local function is_station(entity)
@@ -129,8 +122,22 @@ local function pod_cargo(pod)
     return cargo
 end
 
-local function event_id(unit, direction)
-    return string.format("%s:%s:%s", instance(), tostring(unit), direction)
+local function event_id(unit, direction, planet)
+    return string.format("%s:%s:%s:%s", tostring(planet or "?"), tostring(unit), direction, instance())
+end
+
+local function hub_of(desc)
+    for _, platform in pairs(main_force().platforms or {}) do
+        if platform.valid and platform.name == desc.name then
+            return platform
+        end
+    end
+    return nil
+end
+
+local function weight_of(platform)
+    local inventory = platform and platform_api.hub_inventory(platform.hub)
+    return inventory and inventory.weight or nil
 end
 
 local function enqueue(direction, desc, cargo, unit)
@@ -138,17 +145,22 @@ local function enqueue(direction, desc, cargo, unit)
         return
     end
     ensure()
-    local id = event_id(unit, direction)
+    local id = event_id(unit, direction, desc.planet)
     local entry = {
         id = id,
         direction = direction,
-        platform = desc,
+        planet = desc.planet,
+        role = desc.role,
+        name = desc.name,
         cargo = cargo,
+        -- The hub's weight after the game made the change. The manager applies the same
+        -- delta on the other side and compares this number with the reply.
+        weight = weight_of(hub_of(desc)),
         tick = game.tick,
         at = game.tick,
     }
     storage.pod_queue[id] = entry
-    outbound.push("platform_pod", entry)
+    outbound.push("connector_pod", entry)
 end
 
 -- A pod has left a platform hub or a surface. If the source is a copy hub, the cargo has left
@@ -163,7 +175,7 @@ local function started(event)
     end
 
     local origin = pod.cargo_pod_origin
-    if is_copy_hub(origin) then
+    if is_connector_hub(origin) then
         local platform = platform_of(origin)
         local cargo = pod_cargo(pod)
         if platform and #cargo > 0 then
@@ -172,11 +184,11 @@ local function started(event)
         return
     end
 
-    -- A planet landing pad or rocket silo: the pod is on its way to a copy hub.
+    -- A planet landing pad or rocket silo: the pod is on its way to a connector hub.
     local destination = pod.cargo_pod_destination
     local station = destination and destination.type == defines.cargo_destination.station
         and destination.station or nil
-    if is_copy_hub(station) then
+    if is_connector_hub(station) then
         local platform = platform_of(station)
         local cargo = pod_cargo(pod)
         if platform and #cargo > 0 then
@@ -218,7 +230,7 @@ local function tick()
         if now - (entry.at or now) > QUEUE_TTL then
             storage.pod_queue[id] = nil
         else
-            outbound.push("platform_pod", entry)
+            outbound.push("connector_pod", entry)
         end
     end
     for unit, record in pairs(storage.pod_cargo) do
@@ -515,11 +527,13 @@ local function test(kind, platform_name, item, count)
         local id = string.format("%s:test:%d:%s", instance(), game.tick, direction)
         ensure()
         local entry = {
-            id = id, direction = direction, platform = desc, cargo = cargo,
+            id = id, direction = direction,
+            planet = desc.planet, role = desc.role, name = desc.name,
+            cargo = cargo, weight = weight_of(platform),
             tick = game.tick, at = game.tick,
         }
         storage.pod_queue[id] = entry
-        outbound.push("platform_pod", entry)
+        outbound.push("connector_pod", entry)
         log(string.format("[%s] podtest %s %s x%d on %s", instance(), direction, item, count, platform_name))
         return {ok = true, id = id}
     end

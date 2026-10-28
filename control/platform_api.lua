@@ -160,6 +160,22 @@ local function quality_name(value)
     return "normal"
 end
 
+-- A space location or a request source, asked the same way. Both are strings in 2.1, but a
+-- build that hands back a prototype is read by .name rather than concatenated.
+local function source_name(value)
+    if value == nil then
+        return nil
+    end
+    if type(value) == "string" then
+        return value
+    end
+    local ok, name = pcall(function() return value.name end)
+    if ok and type(name) == "string" and name ~= "" then
+        return name
+    end
+    return nil
+end
+
 -- The hub's cargo, item by item, as the manager needs it. Read-only.
 local function cargo_of(platform)
     local out = {}
@@ -207,6 +223,12 @@ local function requests_of(platform)
                         quality = quality_name(value.quality),
                         count = count,
                         max_count = filter.max or count,
+                        -- The source is part of the filter in 2.1. The manager needs it to
+                        -- know whether a request pulls from a planet, a platform or both,
+                        -- and the connector mirror forces it per group.
+                        request_from = source_name(filter.request_from),
+                        import_from = source_name(filter.import_from),
+                        minimum_delivery_count = filter.minimum_delivery_count,
                     }
                 end
             end
@@ -539,7 +561,12 @@ local function apply_requests(payload)
                 quality = request.quality or "normal",
             },
             min = request.count,
-            max = request.max_count or request.count,
+            -- nil is "infinite". A finite maximum is what makes a hub offload the excess
+            -- to the planet below, which is where a copy's cargo used to end up.
+            max = nil,
+            request_from = request.request_from,
+            import_from = request.import_from,
+            minimum_delivery_count = request.minimum_delivery_count,
         }
     end
 

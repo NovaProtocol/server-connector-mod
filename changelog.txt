@@ -1,4 +1,20 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.73
+Date: 2026-10-28
+  Added:
+    - One connector platform per planet, mirrored between the planet save ("Space Platforms") and
+      the space save ("[planet=<id>] <Planet> Hub"). Both sides are writable; the manager applies
+      each edit to the counterpart and compares the hub weight.
+    - Incoming (Space to Planet) and Outgoing (Planet to Space) request groups, with the source
+      forced: platforms for incoming, planet plus the planet's location for outgoing. "all" is
+      rewritten and a finite maximum is removed.
+    - The landing pad keeps only the Incoming group; anything else is removed.
+    - Only the hub and cargo bays may exist on a connector; other builds are mined and refunded.
+    - Deleting a connector deletes the counterpart and rebuilds both hub-only.
+  Notes:
+    - The whole-list mirror, the cargo sweep and the platform timers are retired. The manager
+      reconciles once at fleet start under a tick pause.
+---------------------------------------------------------------------------------------------------
 Version: 0.36.72
 Date: 2026-10-28
   Added:

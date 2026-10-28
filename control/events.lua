@@ -24,6 +24,7 @@ local map = require("__server-connector-mod__.control.map")
 local research = require("__server-connector-mod__.control.research")
 local platforms = require("__server-connector-mod__.control.platforms")
 local platform_api = require("__server-connector-mod__.control.platform_api")
+local connector = require("__server-connector-mod__.control.connector")
 local requests = require("__server-connector-mod__.control.requests")
 local debug = require("__server-connector-mod__.control.debug")
 local pod = require("__server-connector-mod__.control.pod")
@@ -93,19 +94,10 @@ end))
 -- body in it is kept: that is the joining player or a copy from another save.
 every(3600, "the foreign chunks", when_known(chunks.sweep))
 
--- Silo starter-pack counts and platform names, every five seconds, logged only when they
--- change. The logistic-slot event does not cover every edit the game makes, and a request can
--- be set and removed inside a minute, which is what a one-minute sample missed.
-every(300, "the platform watch", when_known(platforms.watch))
-
--- Pending requests that were named on another planet's server. Dry-run unless armed with
--- request_purge_mode; the resend keeps an unacked move alive until the manager answers.
-every(60, "the request purge", when_known(requests.purge))
-every(600, "the request resend", when_known(requests.resend))
-
--- A native platform destroyed for adoption is re-sent until its copy appears: UDP is
--- best-effort, and one dropped create would otherwise lose the platform for good.
-every(600, "the native platform creates", when_known(platforms.retry_native_creates))
+-- The connector queue: one pass per tick, and it does nothing unless an edit, a build or
+-- a refund is waiting. The queue is empty in the common case, so this is a dispatch, not a
+-- poll of the game.
+every(1, "the connector queue", when_known(connector.tick))
 
 -- The map is shown only while the map view is open, and there is no event for opening it,
 -- so the list is refreshed (and shown or hidden) on this pass.
@@ -113,33 +105,6 @@ every(60, "the server map", when_known(map.tick))
 
 -- Research progress is pushed over UDP only when it moved, once a second.
 every(60, "outbound research", when_known(outbound.tick_research))
-
--- There is deliberately no periodic layout/bay push here. A build or mine on the real
--- platform carries the new layout at once, and a server boot gets the full snapshot.
--- Re-sending every platform's shape on a timer was periodic building traffic.
-
--- Platform positions move continuously in transit; 2 Hz is enough for the board. Ten hertz
--- was seven datagrams a second across the fleet for a UI that redraws far slower.
--- Cheap metadata from every server, copies included: identity, position and state only.
--- It reads no inventory, so it can run at 10 Hz. Positions are a separate, heavier stream
--- and stay at 2 Hz.
-every(6, "outbound platform meta", outbound.tick_meta)
-
-every(30, "outbound platform positions", outbound.tick_positions)
-
--- Requests are the expensive part of the full meta, so they get their own 1 Hz stream.
-every(60, "outbound platform logistic", outbound.tick_logistic)
-
--- The heavy hub cargo, only when it changed, and the aggregate audit. Both are reads plus
--- one localhost datagram; neither changes the world. The dump is every 30 s, the audit
--- every five minutes.
--- Cargo changes do not need a 10 s stream; 30 s keeps the manager current without reading
--- every hub five times more often than the audit.
-every(1800, "outbound platform hubs", outbound.tick_hub)
-
--- The aggregate audit is a safety net, not a live feed. Five minutes leaves the per-pod
--- path and the resync in charge of ordinary cargo.
-every(18000, "outbound platform audit", outbound.tick_audit)
 
 -- Re-send cargo-pod events for a minute. The queue write is on every peer (the tick is
 -- deterministic); the manager de-duplicates by event id.
@@ -165,6 +130,7 @@ script.on_init(function()
         log("[" .. MOD .. "] instance=" .. state.instance())
         convert.disable_crash_site()
         convert.ensure_surfaces()
+        connector.ensure_all()
         restore_speed()
         debug.boot()
     end)
@@ -176,6 +142,7 @@ script.on_configuration_changed(function()
         storage.schema = SCHEMA
         convert.disable_crash_site()
         convert.ensure_surfaces()
+        connector.ensure_all()
         restore_speed()
         debug.boot()
     end)
@@ -186,89 +153,41 @@ end)
 -- is a world change the client does not see, and it desyncs.
 -- A platform changing state is the server-side event the manager needs: docking, leaving,
 -- arriving. It is pushed immediately over localhost UDP, not left for a poll.
--- A copy is a view. If a player marks one of its entities for deconstruction, cancel it;
--- the entity is also minable=false and operable=false, so the order should not have got
--- far, but an order can be placed before a mirror push re-applies the flags.
-script.on_event(defines.events.on_marked_for_deconstruction, function(event)
-    guard("a deconstruction order", function()
-        platforms.cancel_copy_deconstruction(event.entity)
-    end)
-end)
+-- A deconstruction order on the connector is allowed: the hub and the bays are the only
+-- things that may exist, and mining a bay is how a player removes one. Nothing cancels it.
 
--- A building placed or removed on the real space platform changes the bay layout. Tell
--- the manager at once rather than waiting for the next poll; the manager pushes the new
--- list, and each planet applies it at its next empty window.
-local function announce_platform_layout(event, what)
-    guard(what, function()
-        if state.instance() ~= "space" then
-            return
-        end
-        local platform = event.platform
-        if not platform and event.entity and event.entity.valid then
-            platform = event.entity.surface and event.entity.surface.platform
-        end
-        if not platform or not platform.valid then
-            return
-        end
-        outbound.push("platform_layout", {
-            instance = state.instance(),
-            tick = game.tick,
-            name = platform.name,
-            index = platform.index,
-            bays = platforms.bay_count(platform),
-            layout = platforms.layout_of(platform),
-            layout_hash = platforms.layout_hash(platform),
-        })
-    end)
-end
-
+-- A building placed or removed on a connector changes its bay layout. Anything that is not
+-- the hub or a cargo bay is refunded to the hub and removed, so the item is not lost.
 script.on_event(defines.events.on_space_platform_built_entity, function(event)
-    announce_platform_layout(event, "a platform build")
+    guard("a platform build", function()
+        connector.guard_build(event)
+    end)
 end)
 
 script.on_event(defines.events.on_space_platform_mined_entity, function(event)
-    announce_platform_layout(event, "a platform mine")
+    guard("a platform mine", function()
+        connector.guard_mine(event)
+    end)
 end)
 
--- A native platform surface on a planet is a duplicate. The space server owns the real
--- platform, so delete this one and ask the manager to create it there under the same name.
--- The normal platform mirror then puts a protected copy back on every planet.
+-- A native platform surface on a planet is a duplicate. The connector already exists (or
+-- is made here); the native one goes, and the connector is ensured on both sides by the
+-- manager. There is no separate adoption message any more.
 local function reject_native_platform(surface, what)
     guard(what, function()
-        if instance() == "space" or not surface or not surface.valid then
-            debug.emit("reject_native: skipped (instance=%s surface=%s valid=%s)", instance(),
-                tostring(surface and surface.name), tostring(surface and surface.valid))
+        -- A platform this mod is creating raises the same events. Let create_platform
+        -- finish; its own checks and the next ensure handle the result.
+        if storage.connector_creating then
             return
         end
-        local platform = surface.platform
-        if not platform or not platform.valid or platforms.is_copy(platform) then
-            debug.emit("reject_native: skipped (platform=%s valid=%s copy=%s)",
-                tostring(platform and platform.name), tostring(platform and platform.valid),
-                tostring(platform ~= nil and platforms.is_copy(platform)))
+        local platform = surface and surface.platform
+        if platform and platform.valid and connector.is_connector(platform) then
             return
         end
-        debug.dump("reject_native platform", debug.platform_table(platform))
-
-        local name = platform.name
-        local location = platform.space_location and platform.space_location.name or instance()
-
-        -- The pack is part of the platform: read it before the native one is removed.
-        local pack, quality = requests.pack_of(platform)
-
-        if not platforms.remove_native_platform(platform) then
-            log(string.format("[%s] could not remove native platform %s", instance(), name))
-            return
+        if platform and platform.valid then
+            debug.dump("reject_native platform", debug.platform_table(platform))
         end
-
-        outbound.push("platform_create", {
-            instance = instance(),
-            name = name,
-            location = location,
-            starter_pack = pack,
-            quality = quality,
-            tick = game.tick,
-        })
-        log(string.format("[%s] removed native platform %s; the space server will create it", instance(), name))
+        connector.ensure_all()
     end)
 end
 
@@ -301,8 +220,7 @@ if defines.events.on_space_platform_created then
         guard("a platform creation", function()
             debug.event("on_space_platform_created", event)
             local platform = event.platform
-            if platform and platform.valid and requests.is_pending(platform) then
-                requests.purge()
+            if platform and platform.valid and connector.is_connector(platform) then
                 return
             end
             reject_native_platform(platform and platform.surface, "a platform creation")
@@ -310,54 +228,54 @@ if defines.events.on_space_platform_created then
     end)
 end
 
--- A logistic request change on a platform hub. This is the event the polling was standing
--- in for: the hub's request filters changed, so the copies need the new set and their
--- logistics can queue the rockets.
+-- A logistic request change on a connector hub or the landing pad. This is the event the
+-- old polling was standing in for. The whole connector state travels with it: the manager
+-- applies it to the counterpart and compares the hub weight.
 if defines.events.on_entity_logistic_slot_changed then
     script.on_event(defines.events.on_entity_logistic_slot_changed, function(event)
         guard("a logistic slot change", function()
             debug.event("on_entity_logistic_slot_changed", event)
+            -- The mod's own writes set this. A script change fires the same event with a
+            -- nil player_index, so without the guard every enforce would re-enter itself
+            -- and bump the clock for ever.
+            if (storage.connector_writing or 0) > 0 then
+                return
+            end
             local entity = event.entity
             if not entity or not entity.valid then
                 return
             end
-            local surface = entity.surface
 
-            -- A rocket silo is the only place a new platform starts from. This mod no longer
-            -- touches its requests, so a request that disappears with no launch is either the
-            -- game or the client; this line is what tells the two apart.
+            -- A rocket silo is the only place a new platform starts from. This mod no
+            -- longer touches its requests, so a request that disappears with no launch is
+            -- either the game or the client; this line tells the two apart.
             if entity.name == "rocket-silo" then
                 log(string.format("[%s] silo %s on %s: starter-pack requests now %d",
                     instance(), tostring(entity.unit_number),
-                    surface and surface.name or "?", platforms.starter_pack_requests(entity)))
+                    entity.surface and entity.surface.name or "?",
+                    platforms.starter_pack_requests(entity)))
+                return
             end
 
-            local platform = surface and surface.platform
+            if entity.name == "cargo-landing-pad" then
+                -- The space server owns no planet. A pad on a stale surface there is not a
+                -- connector's pad and must not be pushed as one.
+                if instance() ~= "space" then
+                    connector.edit(instance(), "pad edit")
+                end
+                return
+            end
+
+            local platform = entity.surface and entity.surface.platform
             if not platform or not platform.valid then
                 return
             end
-
-            -- A copy is a view. Its requests come from the real platform through the mirror,
-            -- so an edit here is not news: forwarding it made the manager resync from a copy
-            -- and then write the real list back over it, which looked like the request being
-            -- removed a few seconds after it was made.
-            if platforms.is_copy(platform) then
-                log(string.format("[%s] ignoring a logistic change on the copy of %s",
+            if not connector.is_connector(platform) then
+                log(string.format("[%s] ignoring a logistic change on %s: not a connector",
                     instance(), platform.name))
                 return
             end
-
-            -- The list travels with the event: the manager can apply it to every copy
-            -- directly instead of reading the hub back and running a full fleet resync,
-            -- which took minutes and left the copies without the new filters.
-            outbound.push("platform_requests", {
-                instance = instance(),
-                name = platform.name,
-                index = platform.index,
-                requests = platform_api.requests(platform),
-                bays = platforms.bay_count(platform),
-                tick = game.tick,
-            })
+            connector.edit(connector.planet_of(platform), "request edit")
         end)
     end)
 end
@@ -365,21 +283,21 @@ end
 script.on_event(defines.events.on_space_platform_changed_state, function(event)
     guard("a platform state change", function()
         debug.event("on_space_platform_changed_state", event)
-        local platform = event.platform
-        if not platform or not platform.valid then
-            return
-        end
-        debug.dump("platform state change", debug.platform_table(platform))
+        connector.state_changed(event)
+    end)
+end)
 
-        outbound.push("platform", {
-            instance = state.instance(),
-            name = platform.name,
-            index = platform.index,
-            state = tostring(platform.state),
-            location = platform.space_location and platform.space_location.name or nil,
-            connection = platform.space_connection and platform.space_connection.name or nil,
-            distance = platform.distance,
-        })
+-- A hub that is mined or dies is the platform going away. Both are bound because which one
+-- fires depends on how the player deleted it; connector dedupes the report.
+script.on_event(defines.events.on_pre_player_mined_item, function(event)
+    guard("a pre-mine", function()
+        connector.guard_death(event)
+    end)
+end)
+
+script.on_event(defines.events.on_entity_died, function(event)
+    guard("a death", function()
+        connector.guard_death(event)
     end)
 end)
 

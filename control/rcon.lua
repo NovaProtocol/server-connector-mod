@@ -14,6 +14,7 @@ local chunks = require("__server-connector-mod__.control.chunks")
 local server = require("__server-connector-mod__.control.server")
 local platforms = require("__server-connector-mod__.control.platforms")
 local platform_api = require("__server-connector-mod__.control.platform_api")
+local connector = require("__server-connector-mod__.control.connector")
 local pod = require("__server-connector-mod__.control.pod")
 local research = require("__server-connector-mod__.control.research")
 local map = require("__server-connector-mod__.control.map")
@@ -46,6 +47,9 @@ local calls = {
         if storage.instance == id then
             if state.empty() then
                 convert.ensure_surfaces()
+                -- A restart keeps the identity in the save, so this is the branch that runs
+                -- on every fleet start. The connector still has to be ensured here.
+                connector.ensure_all()
             end
             debug.boot()
             return {instance = id, unchanged = true}
@@ -55,6 +59,7 @@ local calls = {
         end
         state.set_instance(id)
         convert.ensure_surfaces()
+        connector.ensure_all()
         debug.boot()
         return {instance = state.instance()}
     end,
@@ -96,6 +101,7 @@ local calls = {
         state.set_topology(topology)
         debug.dump("topology applied", topology)
         convert.ensure_surfaces()
+        connector.ensure_all()
 
         -- The topology carries the surfaces this instance owns, with the form each was
         -- declared with. This is where a custom instance's declared surfaces come into
@@ -185,6 +191,16 @@ local calls = {
 
     -- What this server's platforms are (platforms.platforms).
     platforms = platforms.platforms,
+
+    -- The connector platform: one per planet, mirrored both ways. The manager reads
+    -- connector_state on both sides, applies the canonical one, and compares weights.
+    connector_ensure = connector.ensure_all,
+    connector_state = connector.state,
+    connector_apply = connector.apply,
+    connector_delete = connector.delete,
+    connector_probe = connector.probe,
+    connector_edit = connector.edit,
+    connector_pad = connector.pad_requests,
 
     -- Pending platform requests named on the wrong planet server (requests).
     request_platform = requests.create,
@@ -346,6 +362,27 @@ commands.add_command(
         end)
         if not ok then
             log(string.format("[%s] -platforms failed: %s", MOD, tostring(err)))
+        end
+    end
+)
+
+-- The connector probe: the platform state, the two groups, the pad and the last events.
+-- This is the one-shot check the owner runs after an edit, and the record of which events
+-- actually fired for a section add/delete/rename.
+commands.add_command(
+    MOD .. "-connector",
+    "Report the connector platform, its groups, the landing pad and the last events as JSON.",
+    function(event)
+        local ok, err = pcall(function()
+            local text = helpers.table_to_json(connector.probe())
+            if event.player_index and game.get_player(event.player_index) then
+                game.get_player(event.player_index).print(text)
+            elseif rcon then
+                rcon.print(text)
+            end
+        end)
+        if not ok then
+            log(string.format("[%s] -connector failed: %s", MOD, tostring(err)))
         end
     end
 )
