@@ -1,4 +1,15 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.84
+Date: 2026-10-29
+  Added:
+    - Every server sends connector_ready over UDP once after a save load, so the manager can
+      wait for all instances before the startup pre-sync.
+    - The startup pre-sync pauses the fleet, dumps every connector, and applies the planet hub's
+      state to the space counterpart.
+  Fixed:
+    - A connector platform that lost its hub is rebuilt instead of being left as a floating cargo
+      bay. connector_state reports hub=false for that platform instead of failing the read.
+---------------------------------------------------------------------------------------------------
 Version: 0.36.83
 Date: 2026-10-29
   Fixed:

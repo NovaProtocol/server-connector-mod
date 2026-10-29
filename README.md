@@ -105,6 +105,17 @@ answer with fresh `set_server_status` calls.
 a prompt that reads perfectly correctly and a client that sits at "connecting" until
 it gives up, with nothing logged anywhere. Game port, not RCON port.
 
+## Startup pre-sync
+
+Each server sends `connector_ready` once after a save loads, from its first tick. The manager
+waits for every hosted instance, then pauses the fleet, dumps every connector with
+`connector_state`, and applies the **planet hub's** state to the space counterpart: the hub,
+the bay layout, the two request groups, the landing-pad list and the cargo. A connector
+platform whose hub is gone is rebuilt first -- `connector_state` reports `hub=false` and the
+manager treats it as a repair, not as the source. The live event-driven mirror resumes when
+the sweep ends. The space server remains the source for the real fleet platforms; the
+connector's source is the planet hub.
+
 ## The join rule
 
 A planet server moves the joining body onto the surface it owns and leaves everything else

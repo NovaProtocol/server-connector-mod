@@ -127,6 +127,9 @@ end
 script.on_init(function()
     guard("on_init", function()
         state.ensure_storage()
+        if rcon then
+            storage.connector_ready_pending = true
+        end
         log("[" .. MOD .. "] instance=" .. state.instance())
         convert.disable_crash_site()
         convert.ensure_surfaces()
@@ -140,6 +143,9 @@ script.on_configuration_changed(function()
     guard("on_configuration_changed", function()
         state.ensure_storage()
         storage.schema = SCHEMA
+        if rcon then
+            storage.connector_ready_pending = true
+        end
         convert.disable_crash_site()
         convert.ensure_surfaces()
         connector.ensure_all()
@@ -148,6 +154,17 @@ script.on_configuration_changed(function()
         -- per-server frame is removed if this save still has one.
         map.refresh_all()
         debug.boot()
+    end)
+end)
+
+-- on_load runs on every save load, unlike on_init, which only runs for a new save. It must
+-- not touch game, so it only marks the boot; the first connector tick sends connector_ready
+-- from the server once the identity has arrived.
+script.on_load(function()
+    guard("on_load", function()
+        if rcon then
+            storage.connector_ready_pending = true
+        end
     end)
 end)
 

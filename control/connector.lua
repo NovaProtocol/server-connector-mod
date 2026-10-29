@@ -37,6 +37,8 @@ local inventory_insert
 local inventory_remove
 -- Assigned after push_state; ensure_all runs at runtime, so this forward is live by then.
 local push_full
+-- Assigned after create_platform; create_platform uses it to repair a hubless connector.
+local remove
 
 local function role()
     return INSTANCE() == "space" and "space" or "planet"
@@ -56,6 +58,7 @@ local function storage_ready()
     storage.connector_events = storage.connector_events or {}
     storage.connector_deleted = storage.connector_deleted or {}
     storage.connector_bay_seq = storage.connector_bay_seq or 0
+    storage.connector_repairing = storage.connector_repairing or {}
 end
 
 local function record(kind, detail)
@@ -362,6 +365,9 @@ local function pad_point(pad)
 end
 
 local function quiet_trash(entity)
+    if not entity or not entity.valid then
+        return
+    end
     -- A hub or pad can expose several logistic points; the one the requests are read from
     -- is not always the one carrying trash_unrequested. Clearing all of them is what stops
     -- the pad pushing its inventory into the platform and the hub ejecting its cargo.
@@ -443,6 +449,22 @@ local function create_platform(planet)
     end
     local existing = find_connector(planet)
     if existing then
+        -- A connector with no hub is a platform shell -- exactly the floating cargo bay
+        -- the owner saw. It cannot hold cargo or requests, so it is not the connector:
+        -- remove it and let the retry make a fresh hub-only platform. The repair stays
+        -- guarded until the replacement exists, because destroy(2) raises its events on
+        -- a later tick.
+        if not existing.hub or not existing.hub.valid then
+            log(string.format("[%s] connector %s has no hub; rebuilding it", INSTANCE(), name))
+            record("repair", {planet = planet, name = name})
+            storage.connector_repairing[planet] = true
+            begin_write()
+            remove(existing, "no hub")
+            end_write()
+            storage.connector_retry = storage.connector_retry or {}
+            storage.connector_retry[planet] = game.tick + 10
+            return nil
+        end
         -- A platform already scheduled for deletion is on its way out. Creating one under
         -- the same name now is refused until it is gone, so the retry queue is the safe
         -- path: try again a few ticks later instead of failing silently.
@@ -482,12 +504,13 @@ local function create_platform(planet)
 
     pcall(function() created.destroy_asteroid_chunks{} end)
     protect(created)
+    storage.connector_repairing[planet] = nil
     record("created", {planet = planet, name = name})
     log(string.format("[%s] created connector %s at %s", INSTANCE(), name, planet))
     return created
 end
 
-local function remove(platform, why)
+remove = function(platform, why)
     if not platform or not platform.valid then
         return true
     end
@@ -617,6 +640,10 @@ enforce_platform = function(platform, incoming, outgoing, planet)
     if not point then
         return false
     end
+    -- A platform shell with no hub is being repaired; there is nothing to enforce yet.
+    if not platform.hub or not platform.hub.valid then
+        return false
+    end
     -- Keep what nobody asked for. A hub left on the default trash setting ejects the
     -- starter-pack foundation over time, and the loss looks like a cargo sync bug.
     quiet_trash(platform.hub)
@@ -664,6 +691,30 @@ end
 
 local function read_state(platform, with_cargo, with_shape)
     local planet = planet_of(platform)
+    -- A platform shell with no hub has no logistic point, no inventory and no requests.
+    -- Reading it must still return a state (exists=true, hub=false), not raise: the manager
+    -- uses that answer to see the repair case instead of losing the whole read.
+    if not platform.hub or not platform.hub.valid then
+        return {
+            planet = planet,
+            role = role(),
+            name = platform.name,
+            exists = true,
+            hub = false,
+            clock = storage.connector_clock or 0,
+            weight = nil,
+            cargo = with_cargo and {} or nil,
+            has_cargo = with_cargo or false,
+            has_requests = true,
+            bays = with_shape and platforms.bay_count(platform) or nil,
+            layout = with_shape and platforms.layout_of(platform) or nil,
+            incoming = {},
+            outgoing = {},
+            pad = role() == "planet" and pad_requests() or {},
+            groups_ok = false,
+            bay_seq = storage.connector_bay_seq or 0,
+        }
+    end
     local point = platform_api.request_point(platform.hub)
     local in_name, out_name = group_names(planet)
     local incoming = read_section(point, in_name)
@@ -674,6 +725,7 @@ local function read_state(platform, with_cargo, with_shape)
         role = role(),
         name = platform.name,
         exists = true,
+        hub = true,
         clock = storage.connector_clock or 0,
         weight = inventory and inventory.weight or nil,
         -- A request or bay edit deliberately carries no cargo. Sending a stale full list
@@ -1302,6 +1354,10 @@ local function state_changed(event)
         return
     end
     local planet = planet_of(platform)
+    if (storage.connector_writing or 0) > 0 or storage.connector_creating
+        or (storage.connector_repairing or {})[planet] then
+        return
+    end
     if (platform.scheduled_for_deletion or 0) ~= 0 then
         announce_deleted(planet, "scheduled")
         return
@@ -1319,7 +1375,14 @@ local function guard_death(event)
     local entity = event.entity
     local platform = event.platform or platform_of_entity(entity)
     if is_hub(entity) and is_connector(platform) then
-        announce_deleted(planet_of(platform), "died")
+        local planet = planet_of(platform)
+        -- The repair destroys the old platform itself; its death must not announce a
+        -- deletion to the manager, or the counterpart would be deleted as well.
+        if (storage.connector_writing or 0) > 0 or storage.connector_creating
+            or (storage.connector_repairing or {})[planet] then
+            return
+        end
+        announce_deleted(planet, "died")
     end
 end
 
@@ -1347,6 +1410,21 @@ end
 
 local function tick()
     storage_ready()
+
+    -- Tell the manager this instance is loaded. One datagram per boot, sent from the
+    -- server only (the RCON global exists there), after the identity has arrived. The
+    -- manager waits for every instance before it runs the startup pre-sync.
+    if storage.connector_ready_pending and rcon then
+        storage.connector_ready_pending = nil
+        local version = (script.active_mods and script.active_mods["server-connector-mod"]) or "unknown"
+        bus.push("connector_ready", {
+            instance = INSTANCE(),
+            role = role(),
+            version = version,
+            tick = game.tick,
+        })
+        record("ready", {role = role(), version = version})
+    end
 
     -- Asteroids accumulate on a real connector platform and damage its tiles; the game
     -- repairs them from the hub's foundation, which is what drained the starter-pack cargo.
