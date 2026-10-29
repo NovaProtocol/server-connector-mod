@@ -52,6 +52,32 @@ local function merge_options(entry, source)
     return changed
 end
 
+-- set_server_status is a full replacement of the live fields: a field missing from the
+-- table is cleared, so a server that stops reporting goes back to "—" rather than keeping a
+-- stale number. A field of the wrong type is ignored on its own.
+local function replace_options(entry, source)
+    if type(entry) ~= "table" then
+        return false
+    end
+    source = type(source) == "table" and source or {}
+    local changed = false
+    for key, want in pairs(optional_types) do
+        local value = source[key]
+        if value == nil then
+            if entry[key] ~= nil then
+                entry[key] = nil
+                changed = true
+            end
+        elseif type(value) == want then
+            if entry[key] ~= value then
+                entry[key] = value
+                changed = true
+            end
+        end
+    end
+    return changed
+end
+
 local function merge_topology(topology)
     if type(topology) ~= "table" then
         return false
@@ -163,9 +189,9 @@ local calls = {
         return {instance = state.instance(), destinations = #state.destinations()}
     end,
 
-    -- Update the live fields of one existing entry. The current form is
-    -- set_server_status(id, fields); the earlier (id, online, players) form is still
-    -- accepted so an older manager keeps working. Unknown ids are ignored.
+    -- Full replacement of the live fields for one existing entry. The earlier
+    -- (id, online, players) form is still accepted so an older manager keeps working.
+    -- Unknown ids are ignored.
     set_server_status = function(id, fields, players)
         state.ensure_storage()
         local entry = (storage.topology or {})[id]
@@ -173,7 +199,7 @@ local calls = {
             return false
         end
         if type(fields) == "table" then
-            merge_options(entry, fields)
+            replace_options(entry, fields)
         else
             -- Legacy signature: (id, online, players).
             if type(fields) == "boolean" then

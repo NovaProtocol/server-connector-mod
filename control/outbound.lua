@@ -259,6 +259,29 @@ local function tick_research()
     })
 end
 
+-- One heartbeat a second, for the server window's live rows.
+local function tick_heartbeat()
+    local ok, err = pcall(function()
+        local names = {}
+        for _, player in pairs(game.connected_players) do
+            names[#names + 1] = player.name
+        end
+        table.sort(names)
+        push("server_heartbeat", {
+            instance = state.instance(),
+            tick = game.tick,
+            speed = game.speed,
+            players = #names,
+            player_names = names,
+            version = (script.active_mods or {})["base"],
+            mod_version = (script.active_mods or {})["server-connector-mod"],
+        })
+    end)
+    if not ok then
+        log(string.format("[%s] heartbeat failed: %s", state.instance(), tostring(err)))
+    end
+end
+
 return {
     push = push,
     streams_enabled = streams_enabled,
@@ -268,6 +291,7 @@ return {
     tick_hub = tick_hub,
     tick_audit = tick_audit,
     tick_research = tick_research,
+    tick_heartbeat = tick_heartbeat,
     positions = positions,
     epoch = epoch,
 }

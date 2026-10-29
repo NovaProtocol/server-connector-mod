@@ -106,6 +106,9 @@ every(60, "the server map", when_known(map.tick))
 -- Research progress is pushed over UDP only when it moved, once a second.
 every(60, "outbound research", when_known(outbound.tick_research))
 
+-- The server window's live rows: players, speed and version, once a second.
+every(60, "the heartbeat", when_known(outbound.tick_heartbeat))
+
 -- Re-send cargo-pod events for a minute. The queue write is on every peer (the tick is
 -- deterministic); the manager de-duplicates by event id.
 every(600, "the pod queue", pod.tick)
