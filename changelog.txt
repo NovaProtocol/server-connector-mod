@@ -1,4 +1,12 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.79
+Date: 2026-10-29
+  Fixed:
+    - The space server no longer prunes the real platforms. The connector is added alongside
+      them; only a planet keeps just the connector. The converter keeps every platform surface
+      in the base and space saves and does not add a planet connector to the base.
+    - A cargo bay a player places is protected immediately, not on the next mirror apply.
+---------------------------------------------------------------------------------------------------
 Version: 0.36.78
 Date: 2026-10-28
   Added:

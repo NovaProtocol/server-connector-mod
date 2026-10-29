@@ -578,15 +578,8 @@ local function ensure_all()
                 made[#made + 1] = connector.name
             end
         end
-        local wanted = {}
-        for _, planet in ipairs(wantedPlanets) do
-            wanted[connector_name(planet)] = true
-        end
-        for _, platform in pairs(force().platforms or {}) do
-            if platform.valid and not wanted[platform.name] then
-                remove(platform, "not a connector")
-            end
-        end
+        -- The real platforms are the fleet's, not copies. Only the connector is created here;
+        -- nothing else is pruned on the space server.
         for _, platform in pairs(force().platforms or {}) do
             if is_connector(platform) then
                 protect(platform)
@@ -1043,6 +1036,13 @@ local function guard_build(event)
         return
     end
     if entity and entity.valid and entity.name == "cargo-bay" then
+        -- A bay a player just placed is protected at once, not only after the next mirror
+        -- apply; otherwise an asteroid in that window can destroy it.
+        pcall(function()
+            entity.destructible = false
+            entity.minable_flag = true
+            entity.operable = true
+        end)
         mark_dirty(planet)
         return
     end
