@@ -144,6 +144,9 @@ script.on_configuration_changed(function()
         convert.ensure_surfaces()
         connector.ensure_all()
         restore_speed()
+        -- Every player in the save gets the new one-button server menu, and the old
+        -- per-server frame is removed if this save still has one.
+        map.refresh_all()
         debug.boot()
     end)
 end)
@@ -325,6 +328,12 @@ script.on_event(defines.events.on_cargo_pod_delivered_cargo, function(event)
     end)
 end)
 
+script.on_event(defines.events.on_player_created, function(event)
+    guard("a player creation", function()
+        map.refresh(game.get_player(event.player_index))
+    end)
+end)
+
 script.on_event(defines.events.on_player_joined_game, function(event)
     guard("a join", function()
         debug.event("on_player_joined_game", event)
@@ -372,6 +381,13 @@ end)
 script.on_event(defines.events.on_gui_click, function(event)
     guard("a map click", function()
         map.click(event)
+    end)
+end)
+
+-- Escape closes the server window because the window is player.opened while it is shown.
+script.on_event(defines.events.on_gui_closed, function(event)
+    guard("a menu close", function()
+        map.closed(event)
     end)
 end)
 

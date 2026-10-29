@@ -1,4 +1,21 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.83
+Date: 2026-10-29
+  Fixed:
+    - Dead mirror code removed from the platform module. Cargo-bay build and remove events now carry
+      a sequence number, and the connector state reports it, so the manager can detect a lost packet
+      and reconcile the pair.
+  Changed:
+    - A hub build now pushes the connector's full shape, cargo and requests, instead of only marking
+      the platform dirty. Bay offsets are relative to the hub, so the counterpart is re-anchored at
+      once rather than at the next restart.
+---------------------------------------------------------------------------------------------------
+Version: 0.36.82
+Date: 2026-10-29
+  Changed:
+    - The server map is one Servers button that opens a list of planets, space and custom servers. It
+      no longer polls or moves, so it shows instantly in map view.
+---------------------------------------------------------------------------------------------------
 Version: 0.36.81
 Date: 2026-10-29
   Changed:

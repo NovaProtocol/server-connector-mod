@@ -27,7 +27,7 @@
 --   control/convert.lua    surfaces: crash site, create, clear, spawn, settle, asteroid sweep, join fallback
 --   control/chunks.lua     chunks on surfaces this server does not own
 --   control/server.lua     the join rule: which controller a player gets, and their body
---   control/map.lua        the server map: one button per other instance
+--   control/map.lua        the server map: one button, one window
 --   control/platforms.lua  the fleet's platform copies, and the API probes
 --   control/connector.lua  the one connector platform per planet, mirrored both ways
 --   control/research.lua   the shared tech tree: report and apply

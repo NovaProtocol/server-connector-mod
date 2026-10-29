@@ -192,7 +192,7 @@ end
 local function normalize_topology(topology)
     local out = {}
     for id, entry in pairs(topology or {}) do
-        if type(entry) == "table" and entry.address then
+        if type(entry) == "table" then
             local surfaces = {}
             local forms = {}
             if type(entry.surfaces) == "table" then
@@ -215,6 +215,11 @@ local function normalize_topology(topology)
                 primary = entry.primary,
                 surfaces = surfaces,
                 forms = forms,
+                -- Optional live fields. Stored as sent: the server list shows them, and the
+                -- manager can update only these with set_server_status.
+                online = entry.online,
+                players = entry.players,
+                note = entry.note,
             }
         end
     end
@@ -250,6 +255,9 @@ local function same_topology(a, b)
         if not y or x.name ~= y.name or x.address ~= y.address or x.kind ~= y.kind
             or (x.editor == true) ~= (y.editor == true)
             or x.primary ~= y.primary
+            or x.online ~= y.online
+            or x.players ~= y.players
+            or x.note ~= y.note
             or not same_list(x.surfaces, y.surfaces)
             or not same_forms(x.forms, y.forms) then
             return false

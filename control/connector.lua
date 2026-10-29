@@ -55,6 +55,7 @@ local function storage_ready()
     storage.connector_dirty = storage.connector_dirty or {}
     storage.connector_events = storage.connector_events or {}
     storage.connector_deleted = storage.connector_deleted or {}
+    storage.connector_bay_seq = storage.connector_bay_seq or 0
 end
 
 local function record(kind, detail)
@@ -692,6 +693,7 @@ local function read_state(platform, with_cargo, with_shape)
         outgoing = outgoing,
         pad = role() == "planet" and pad_requests() or {},
         groups_ok = find_section(point, in_name) ~= nil and find_section(point, out_name) ~= nil,
+        bay_seq = storage.connector_bay_seq or 0,
     }
     return st
 end
@@ -709,6 +711,7 @@ local function state_of(planet, with_cargo, with_shape)
             incoming = {},
             outgoing = {},
             pad = role() == "planet" and pad_requests() or {},
+            bay_seq = storage.connector_bay_seq or 0,
         }
     end
     local st = read_state(platform, with_cargo, with_shape)
@@ -937,7 +940,7 @@ end
 -- A bay's identity in the mirror: its offset from the hub, rounded the same way the layout
 -- string is. The counterpart creates at the same offset, so the two hubs keep the same ship.
 local function parse_offset(offset)
-    local x, y = string.match(tostring(offset or ""), "^(-?[%d%.]+),(-?%d?[%d%.]*)$")
+    local x, y = string.match(tostring(offset or ""), "^(-?[%d%.]+),(-?[%d%.]+)$")
     if not x or not y then
         return nil
     end
@@ -1182,7 +1185,9 @@ local function guard_build(event)
     local planet = planet_of(platform)
     if is_hub(entity) then
         debit_clock()
-        mark_dirty(planet)
+        -- A rebuilt hub is a new anchor for every bay offset. A state push carries no shape,
+        -- so the pair could stay different until a restart; push the whole shape instead.
+        push_full(planet)
         return
     end
     if entity and entity.valid and entity.name == "cargo-bay" then
@@ -1194,6 +1199,7 @@ local function guard_build(event)
             entity.operable = true
         end)
         debit_clock()
+        storage.connector_bay_seq = storage.connector_bay_seq + 1
         local offset = bay_offset(platform, entity)
         if offset then
             bus.push("connector_bay", {
@@ -1203,6 +1209,7 @@ local function guard_build(event)
                 action = "build",
                 offset = offset,
                 clock = storage.connector_clock,
+                seq = storage.connector_bay_seq,
                 tick = game.tick,
             })
             record("bay", {action = "build", planet = planet, offset = offset})
@@ -1258,6 +1265,7 @@ local function guard_mine(event)
     if entity and entity.valid and entity.name == "cargo-bay" then
         local offset = bay_offset(platform, entity)
         debit_clock()
+        storage.connector_bay_seq = storage.connector_bay_seq + 1
         if offset then
             bus.push("connector_bay", {
                 instance = INSTANCE(),
@@ -1266,6 +1274,7 @@ local function guard_mine(event)
                 action = "remove",
                 offset = offset,
                 clock = storage.connector_clock,
+                seq = storage.connector_bay_seq,
                 tick = game.tick,
             })
             record("bay", {action = "remove", planet = planet, offset = offset})

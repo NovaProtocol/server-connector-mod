@@ -115,6 +115,21 @@ local calls = {
         return {instance = state.instance(), destinations = #state.destinations()}
     end,
 
+    -- Update only the live status fields of one existing entry. The manager pushes this over
+    -- RCON when a server's online state or player count changes, without resending the whole
+    -- topology. Unknown ids are ignored.
+    set_server_status = function(id, online, players)
+        state.ensure_storage()
+        local entry = (storage.topology or {})[id]
+        if type(id) ~= "string" or not entry then
+            return false
+        end
+        entry.online = online
+        entry.players = players
+        map.refresh_open()
+        return {ok = true, id = id, online = entry.online, players = entry.players}
+    end,
+
     -- Where a player's body is, and what that makes them on this server
     -- (server.set_body_location). The manager calls it by this name.
     set_body_location = server.set_body_location,
