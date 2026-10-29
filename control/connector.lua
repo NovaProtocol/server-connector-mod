@@ -35,6 +35,8 @@ local INSTANCE = state.instance
 local enforce_platform
 local inventory_insert
 local inventory_remove
+-- Assigned after push_state; ensure_all runs at runtime, so this forward is live by then.
+local push_full
 
 local function role()
     return INSTANCE() == "space" and "space" or "planet"
@@ -596,6 +598,16 @@ local function ensure_all()
         end
     end
 
+    if push_full then
+        if role() == "planet" then
+            push_full(INSTANCE())
+        else
+            for _, planet in ipairs(planets()) do
+                push_full(planet)
+            end
+        end
+    end
+
     return {ok = true, role = role(), made = table.concat(made, ",")}
 end
 
@@ -649,7 +661,7 @@ local function cargo_of(platform)
     return platform_api.cargo(platform)
 end
 
-local function read_state(platform, with_cargo)
+local function read_state(platform, with_cargo, with_shape)
     local planet = planet_of(platform)
     local point = platform_api.request_point(platform.hub)
     local in_name, out_name = group_names(planet)
@@ -672,8 +684,10 @@ local function read_state(platform, with_cargo)
         -- manager's empty apply is skipped and a request cleared on one side stays on the
         -- other for ever.
         has_requests = true,
-        bays = platforms.bay_count(platform),
-        layout = platforms.layout_of(platform),
+        -- The bay shape travels only on the boot/reconcile read. A bay edit travels as a
+        -- single build/remove event; a full layout on every edit is what made it laggy.
+        bays = with_shape and platforms.bay_count(platform) or nil,
+        layout = with_shape and platforms.layout_of(platform) or nil,
         incoming = incoming,
         outgoing = outgoing,
         pad = role() == "planet" and pad_requests() or {},
@@ -682,7 +696,7 @@ local function read_state(platform, with_cargo)
     return st
 end
 
-local function state_of(planet, with_cargo)
+local function state_of(planet, with_cargo, with_shape)
     storage_ready()
     local platform = find_connector(planet)
     if not platform then
@@ -697,14 +711,14 @@ local function state_of(planet, with_cargo)
             pad = role() == "planet" and pad_requests() or {},
         }
     end
-    local st = read_state(platform, with_cargo)
+    local st = read_state(platform, with_cargo, with_shape)
     st.ok = true
     return st
 end
 
--- The manager's read: always the whole picture, cargo included.
+-- The manager's read: always the whole picture, shape included.
 local function state(planet)
-    return state_of(planet, true)
+    return state_of(planet, true, true)
 end
 
 local function sync_cargo(platform, target)
@@ -920,6 +934,117 @@ inventory_remove = function(platform, item)
     return inventory.remove(item)
 end
 
+-- A bay's identity in the mirror: its offset from the hub, rounded the same way the layout
+-- string is. The counterpart creates at the same offset, so the two hubs keep the same ship.
+local function parse_offset(offset)
+    local x, y = string.match(tostring(offset or ""), "^(-?[%d%.]+),(-?%d?[%d%.]*)$")
+    if not x or not y then
+        return nil
+    end
+    return tonumber(x), tonumber(y)
+end
+
+local function bay_offset(platform, entity)
+    if not platform or not platform.hub or not platform.hub.valid then
+        return nil
+    end
+    if not entity or not entity.valid then
+        return nil
+    end
+    local ok, position = pcall(function() return entity.position end)
+    if not ok or not position then
+        return nil
+    end
+    local okh, hub_position = pcall(function() return platform.hub.position end)
+    if not okh or not hub_position then
+        return nil
+    end
+    return string.format("%.1f,%.1f", position.x - hub_position.x, position.y - hub_position.y)
+end
+
+-- The counterpart half of a bay build/remove. It is the manager's write, so the write flag is
+-- held while the entity is created or destroyed and the build/mine events do not echo back.
+local function build_bay(payload)
+    storage_ready()
+    payload = payload or {}
+    local planet = role() == "planet" and INSTANCE() or payload.planet
+    if not planet then
+        return {ok = false, error = "a planet is required"}
+    end
+    local platform = find_connector(planet)
+    if not platform or not platform.surface or not platform.hub then
+        return {ok = false, error = "no connector"}
+    end
+    local x, y = parse_offset(payload.offset)
+    if not x or not y then
+        return {ok = false, error = "bad offset"}
+    end
+
+    local hub = platform.hub.position
+    local position = {x = hub.x + x, y = hub.y + y}
+    local existing = platform.surface.find_entities_filtered{
+        name = "cargo-bay", position = position, radius = 0.5,
+    }
+    if existing and existing[1] then
+        return {ok = true, existed = true, offset = payload.offset}
+    end
+
+    begin_write()
+    local ok, bay = pcall(function()
+        return platform.surface.create_entity{
+            name = "cargo-bay",
+            position = position,
+            force = force().name,
+        }
+    end)
+    end_write()
+    if not ok or not bay then
+        debug.emit("connector bay build failed %s at %s: %s", planet, tostring(payload.offset), tostring(bay))
+        record("bay_failed", {action = "build", planet = planet, offset = payload.offset, error = tostring(bay)})
+        return {ok = false, error = tostring(bay)}
+    end
+    protect(platform)
+    debug.emit("connector bay built %s at %s", planet, tostring(payload.offset))
+    return {ok = true, created = true, offset = payload.offset}
+end
+
+local function remove_bay(payload)
+    storage_ready()
+    payload = payload or {}
+    local planet = role() == "planet" and INSTANCE() or payload.planet
+    if not planet then
+        return {ok = false, error = "a planet is required"}
+    end
+    local platform = find_connector(planet)
+    if not platform or not platform.surface or not platform.hub then
+        return {ok = false, error = "no connector"}
+    end
+    local x, y = parse_offset(payload.offset)
+    if not x or not y then
+        return {ok = false, error = "bad offset"}
+    end
+
+    local hub = platform.hub.position
+    local position = {x = hub.x + x, y = hub.y + y}
+    local existing = platform.surface.find_entities_filtered{
+        name = "cargo-bay", position = position, radius = 0.5,
+    }
+    if not existing or not existing[1] then
+        return {ok = true, existed = false, offset = payload.offset}
+    end
+
+    begin_write()
+    for _, bay in ipairs(existing) do
+        pcall(function()
+            bay.destructible = true
+            bay.destroy()
+        end)
+    end
+    end_write()
+    debug.emit("connector bay removed %s at %s", planet, tostring(payload.offset))
+    return {ok = true, removed = #existing, offset = payload.offset}
+end
+
 local function delete(planet)
     storage_ready()
     if role() == "planet" then
@@ -949,11 +1074,22 @@ end
 
 local function push_state(planet, why, with_cargo)
     storage_ready()
-    local st = state_of(planet, with_cargo)
+    -- Event states carry no bay shape: the bay build/mine event handles that entity, and a
+    -- full layout comparison on every request or bay edit is the lag this replaced.
+    local st = state_of(planet, with_cargo, false)
     st.reason = why
     bus.push("connector_state", st)
     storage.connector_dirty[planet] = nil
     record("push", {planet = planet, reason = why, weight = st.weight})
+end
+
+-- The boot/reconcile push: the whole shape, cargo and requests. This is the fresh sync.
+push_full = function(planet)
+    storage_ready()
+    local st = state_of(planet, true, true)
+    st.reason = "ensure"
+    bus.push("connector_state", st)
+    record("push", {planet = planet, reason = "ensure", weight = st.weight})
 end
 
 local function debit_clock()
@@ -1057,10 +1193,22 @@ local function guard_build(event)
             entity.minable_flag = true
             entity.operable = true
         end)
-        -- A local edit must outrank the stale state on the other side. Without the clock
-        -- bump a bay built on space lost the tie to the planet's older list and vanished.
         debit_clock()
-        mark_dirty(planet)
+        local offset = bay_offset(platform, entity)
+        if offset then
+            bus.push("connector_bay", {
+                instance = INSTANCE(),
+                planet = planet,
+                role = role(),
+                action = "build",
+                offset = offset,
+                clock = storage.connector_clock,
+                tick = game.tick,
+            })
+            record("bay", {action = "build", planet = planet, offset = offset})
+        else
+            debug.emit("connector bay build at an unreadable position")
+        end
         return
     end
 
@@ -1107,8 +1255,27 @@ local function guard_mine(event)
         announce_deleted(planet, "mined")
         return
     end
-    debit_clock()
-    mark_dirty(planet)
+    if entity and entity.valid and entity.name == "cargo-bay" then
+        local offset = bay_offset(platform, entity)
+        debit_clock()
+        if offset then
+            bus.push("connector_bay", {
+                instance = INSTANCE(),
+                planet = planet,
+                role = role(),
+                action = "remove",
+                offset = offset,
+                clock = storage.connector_clock,
+                tick = game.tick,
+            })
+            record("bay", {action = "remove", planet = planet, offset = offset})
+        else
+            debug.emit("connector bay mine at an unreadable position")
+        end
+        return
+    end
+    debug.emit("connector: ignoring a mine of %s; only the hub and bays are mirrored",
+        entity and entity.valid and entity.name or "?")
 end
 
 -- A platform state change is the only event a deletion is known to raise on some builds.
@@ -1250,10 +1417,10 @@ local function probe()
         events = storage.connector_events,
     }
     if role() == "planet" then
-        out.platforms[#out.platforms + 1] = state_of(INSTANCE(), true)
+        out.platforms[#out.platforms + 1] = state_of(INSTANCE(), true, true)
     else
         for _, planet in pairs(planets()) do
-            out.platforms[#out.platforms + 1] = state_of(planet, true)
+            out.platforms[#out.platforms + 1] = state_of(planet, true, true)
         end
     end
     return out
@@ -1272,6 +1439,8 @@ return {
     state = state,
     apply = apply,
     delete = delete,
+    build_bay = build_bay,
+    remove_bay = remove_bay,
     edit = edited,
     guard_build = guard_build,
     guard_mine = guard_mine,

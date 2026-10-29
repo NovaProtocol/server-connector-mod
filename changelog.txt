@@ -1,4 +1,12 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.81
+Date: 2026-10-29
+  Changed:
+    - Cargo bays sync as single build/remove events: a player build sends the bay offset and the
+      counterpart creates that one bay at the same offset; a mine removes that one. The full
+      platform shape is only sent on boot and on the startup reconcile, so an edit no longer
+      runs a whole layout comparison.
+---------------------------------------------------------------------------------------------------
 Version: 0.36.80
 Date: 2026-10-29
   Fixed:
