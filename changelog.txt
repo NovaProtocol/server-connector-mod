@@ -1,4 +1,11 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.77
+Date: 2026-10-28
+  Fixed:
+    - Trash-unrequested was cleared on the request point only. A hub and a pad expose several
+      logistic points, so the pad still pushed its inventory into the platform and the hub
+      still ejected its foundation. Every point is cleared now.
+---------------------------------------------------------------------------------------------------
 Version: 0.36.76
 Date: 2026-10-28
   Fixed:

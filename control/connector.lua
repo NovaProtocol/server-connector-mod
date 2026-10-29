@@ -358,6 +358,18 @@ local function pad_point(pad)
     return nil
 end
 
+local function quiet_trash(entity)
+    -- A hub or pad can expose several logistic points; the one the requests are read from
+    -- is not always the one carrying trash_unrequested. Clearing all of them is what stops
+    -- the pad pushing its inventory into the platform and the hub ejecting its cargo.
+    for _, value in pairs(defines.logistic_member_index or {}) do
+        local ok, point = pcall(function() return entity.get_logistic_point(value) end)
+        if ok and point then
+            pcall(function() point.trash_not_requested = false end)
+        end
+    end
+end
+
 local function enforce_pad(pad, incoming, planet)
     local point = pad_point(pad)
     if not point then
@@ -366,7 +378,7 @@ local function enforce_pad(pad, incoming, planet)
 
     -- A pad set to trash unrequested items pushes its whole inventory into the platform as
     -- soon as a request is added. The pad is a request point, not a disposal point.
-    pcall(function() point.trash_not_requested = false end)
+    quiet_trash(pad)
 
     begin_write()
     -- Only the Incoming group. Removing from the highest index down keeps the indices
@@ -598,7 +610,7 @@ enforce_platform = function(platform, incoming, outgoing, planet)
     end
     -- Keep what nobody asked for. A hub left on the default trash setting ejects the
     -- starter-pack foundation over time, and the loss looks like a cargo sync bug.
-    pcall(function() point.trash_not_requested = false end)
+    quiet_trash(platform.hub)
     begin_write()
     local in_name, out_name = group_names(planet)
     local wrote_in = write_section(point, in_name, build_filters(incoming, "platforms", planet))
