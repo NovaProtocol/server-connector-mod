@@ -1,10 +1,10 @@
 -- server-connector-mod / control/map.lua
 --
--- The server list: one "Servers" button in the mod GUI, and a fixed 780x540 window split
+-- The server list: one "Servers" button in the mod GUI, and a content-sized window split
 -- into a sidebar and a detail panel. The sidebar groups the fleet into Planets, Space and
--- Custom; selecting a row rebuilds only the right-hand panel. The footer carries the only
--- Join button and a Cancel button. The window is built only when opened and rebuilt only
--- when the fields it displays change; the selection is kept in storage per player.
+-- Custom; selecting a row rebuilds only the right-hand scroll-pane. The footer carries the
+-- only Join button and a Cancel button. The window is built only when opened and rebuilt
+-- only when the fields it displays change; the selection is kept in storage per player.
 --
 -- Required as "__server-connector-mod__.control.map".
 
@@ -15,6 +15,9 @@ local bus = require("__server-connector-mod__.control.bus")
 local BUTTON = "server-connector-open"
 local WINDOW = "server-connector-window"
 local DETAIL = "server-connector-detail"
+local DETAIL_SCROLL = "server-connector-detail-scroll"
+local LIST = "server-connector-list"
+local PLAYERS = "server-connector-players"
 local SELECT = "server-connector-select"
 local CLOSE = "server-connector-close"
 local CANCEL = "server-connector-cancel"
@@ -115,6 +118,7 @@ local function add_sprite(parent, path, size, tooltip)
         local sprite = parent.add{type = "sprite", sprite = path}
         sprite.style.width = size
         sprite.style.height = size
+        sprite.style.stretch_image_to_widget_size = true
         if tooltip then
             sprite.tooltip = tooltip
         end
@@ -158,22 +162,6 @@ local function find_child(root, name)
         end
     end
     return nil
-end
-
-local function find_children(root, name)
-    local out = {}
-    local function walk(node)
-        for _, child in ipairs(node.children or {}) do
-            if child.name == name then
-                out[#out + 1] = child
-            end
-            walk(child)
-        end
-    end
-    if root then
-        walk(root)
-    end
-    return out
 end
 
 local function sorted_ids()
@@ -235,14 +223,19 @@ local function sprite_for(entry, id)
     return nil
 end
 
-local function status_sprite(entry)
-    if not entry.address then
-        return "utility/status_yellow"
+-- The one status helper. The dot carries the state; the tooltip is the only place the
+-- words appear, and a server never heard from is yellow "Unknown", not green.
+local function status_of(entry)
+    if entry and entry.online == false then
+        return {sprite = "utility/status_not_working", text = "Offline"}
     end
-    if entry.online == false then
-        return "utility/status_not_working"
+    if not entry or not entry.address then
+        return {sprite = "utility/status_yellow", text = "No address yet"}
     end
-    return "utility/status_working"
+    if entry.online == nil then
+        return {sprite = "utility/status_yellow", text = "Unknown"}
+    end
+    return {sprite = "utility/status_working", text = "Online"}
 end
 
 local function kind_text(entry)
@@ -255,57 +248,28 @@ local function kind_text(entry)
     return "Custom server"
 end
 
-local function status_text(entry)
-    if entry.online == nil then
-        return "Unknown"
+local function sorted_names(names)
+    local out = {}
+    if type(names) ~= "table" then
+        return out
     end
-    if entry.online == false then
-        return "Offline"
+    for _, name in pairs(names) do
+        out[#out + 1] = tostring(name)
     end
-    return "Online"
+    table.sort(out)
+    return out
 end
 
-local function status_color(entry)
-    if entry.online == nil then
-        return {r = 0.7, g = 0.7, b = 0.7}
+local function live_players()
+    local names = {}
+    for _, player in pairs(game.connected_players) do
+        names[#names + 1] = player.name
     end
-    if entry.online == false then
-        return {r = 1, g = 0.4, b = 0.4}
-    end
-    return {r = 0.55, g = 0.9, b = 0.45}
+    table.sort(names)
+    return names
 end
 
-local function format_uptime(seconds)
-    local total = math.floor(tonumber(seconds) or 0)
-    local days = math.floor(total / 86400)
-    local hours = math.floor((total % 86400) / 3600)
-    local mins = math.floor((total % 3600) / 60)
-    if days > 0 then
-        return string.format("%dd %dh %dm", days, hours, mins)
-    end
-    if hours > 0 then
-        return string.format("%dh %dm", hours, mins)
-    end
-    return string.format("%dm", mins)
-end
-
-local function player_names_text(names)
-    if type(names) ~= "table" or #names == 0 then
-        return nil
-    end
-    local shown = {}
-    local limit = math.min(#names, 12)
-    for index = 1, limit do
-        shown[index] = tostring(names[index])
-    end
-    local text = table.concat(shown, ", ")
-    if #names > 12 then
-        text = text .. " and " .. tostring(#names - 12) .. " more"
-    end
-    return text
-end
-
-local function info_rows(entry, id)
+local function info_rows(entry, id, current)
     local rows = {}
     local function push(label, value, color)
         rows[#rows + 1] = {
@@ -322,13 +286,8 @@ local function info_rows(entry, id)
     push("Address", address)
     push("Server id", id)
 
-    local players = entry.players
-    local players_value = players ~= nil and (tostring(players) .. " online") or nil
-    local names = player_names_text(entry.player_names)
-    if names then
-        players_value = (players_value or "—") .. "\n" .. names
-    end
-    push("Players", players_value)
+    local players = current and #game.connected_players or entry.players
+    push("Players", players)
 
     if type(entry.ups) == "number" then
         local color
@@ -342,22 +301,16 @@ local function info_rows(entry, id)
         push("UPS", nil)
     end
 
-    push("Version", entry.version)
-    if type(entry.uptime_seconds) == "number" then
-        push("Uptime", format_uptime(entry.uptime_seconds))
+    local speed = current and game.speed or entry.game_speed
+    if type(speed) == "number" then
+        push("Game speed", string.format("%.1fx", speed))
     else
-        push("Uptime", nil)
+        push("Game speed", nil)
     end
-    push("Description", entry.description or entry.note)
-    return rows
-end
 
-local function live_rows()
-    return {
-        {label = "Game tick", value = tostring(game.tick)},
-        {label = "Game speed", value = tostring(game.speed)},
-        {label = "Connected", value = tostring(#game.connected_players)},
-    }
+    local tick = current and game.tick or entry.game_tick
+    push("Game tick", tick)
+    return rows
 end
 
 local function add_info_table(parent, rows)
@@ -369,14 +322,29 @@ local function add_info_table(parent, rows)
     for _, row in ipairs(rows) do
         local left = add_styled(grid, {type = "label", caption = row.label}, "caption_label")
         if left then
-            left.style.width = 140
+            left.style.width = 120
         end
         local right = grid.add{type = "label", caption = row.value}
         right.style.single_line = false
-        right.style.maximal_width = 420
+        right.style.maximal_width = 380
         if row.color then
             right.style.font_color = row.color
         end
+    end
+end
+
+local function add_player_list(parent, names)
+    if #names == 0 then
+        return
+    end
+    add_styled(parent, {type = "label", caption = "Players online"}, "caption_label")
+    local pane = parent.add{type = "scroll-pane", name = PLAYERS, direction = "vertical"}
+    pane.horizontal_scroll_policy = "never"
+    pane.style.maximal_height = 140
+    pane.style.horizontally_stretchable = true
+    local list = pane.add{type = "flow", direction = "vertical"}
+    for _, name in ipairs(names) do
+        list.add{type = "label", caption = name}
     end
 end
 
@@ -394,96 +362,112 @@ local function build_solar(parent, id)
 
     parent.add{type = "line", direction = "horizontal"}
     add_styled(parent, {type = "label", caption = "Solar system"}, "caption_label")
-    local flow = parent.add{type = "flow", direction = "horizontal"}
-    flow.style.horizontal_spacing = 6
+    local strip = parent.add{type = "flow", direction = "horizontal"}
+    strip.style.horizontal_spacing = 6
+    strip.style.horizontal_align = "left"
     for _, item in ipairs(valid) do
         local style = item.name == id and "inside_deep_frame" or "inside_shallow_frame"
-        local frame = add_styled(flow, {type = "frame"}, style)
-        add_sprite(frame, item.path, 40, item.name)
+        local frame = add_styled(strip, {type = "frame"}, style)
+        if frame then
+            frame.style.width = 48
+            frame.style.height = 48
+            frame.style.padding = 0
+            frame.style.horizontal_align = "center"
+            frame.style.vertical_align = "center"
+            frame.tooltip = item.name
+            local holder = frame.add{type = "flow", direction = "horizontal"}
+            holder.style.width = 44
+            holder.style.height = 44
+            holder.style.horizontal_align = "center"
+            holder.style.vertical_align = "center"
+            add_sprite(holder, item.path, 36, item.name)
+        end
     end
 end
 
 local function build_detail(player, id)
     local window = player.gui.screen[WINDOW]
-    local container = window and find_child(window, DETAIL)
-    if not container then
+    local scroll = window and find_child(window, DETAIL_SCROLL)
+    if not scroll then
         return
     end
-    container.clear()
+    scroll.clear()
 
     local entry = (storage.topology or {})[id] or {}
     local full = entry.name or id or "?"
     local current = id == state.instance()
+    local status = status_of(entry)
 
-    local header = container.add{type = "flow", direction = "horizontal"}
+    local header = scroll.add{type = "flow", direction = "horizontal"}
     header.style.vertical_align = "center"
     header.style.horizontal_spacing = 12
+    header.style.horizontally_stretchable = true
 
+    local pic = header.add{type = "flow", direction = "horizontal"}
+    pic.style.width = 72
+    pic.style.height = 72
+    pic.style.horizontal_align = "center"
+    pic.style.vertical_align = "center"
     local icon = sprite_for(entry, id)
     if icon then
-        add_sprite(header, icon, 96, full)
-    else
-        local empty = header.add{type = "empty-widget"}
-        empty.style.width = 96
-        empty.style.height = 96
+        add_sprite(pic, icon, 64, full)
     end
 
     local text = header.add{type = "flow", direction = "vertical"}
+    text.style.horizontally_stretchable = true
+    text.style.vertical_spacing = 0
     add_styled(text, {type = "label", caption = full}, "heading_1_label", "caption_label")
     local kind = text.add{type = "label", caption = kind_text(entry)}
     kind.style.font_color = {r = 0.7, g = 0.7, b = 0.7}
 
-    local stretch = header.add{type = "empty-widget"}
-    stretch.style.horizontally_stretchable = true
+    add_sprite(header, status.sprite, 16, status.text)
 
-    local status = header.add{type = "label", caption = status_text(entry)}
-    status.style.font_color = status_color(entry)
-
-    container.add{type = "line", direction = "horizontal"}
-    add_info_table(container, info_rows(entry, id))
-    if current then
-        add_info_table(container, live_rows())
-    end
-    build_solar(container, id)
+    scroll.add{type = "line", direction = "horizontal"}
+    add_info_table(scroll, info_rows(entry, id, current))
+    add_player_list(scroll, current and live_players() or sorted_names(entry.player_names))
+    build_solar(scroll, id)
 end
 
-local function add_sidebar_row(pane, id, entry, selected)
-    local row = pane.add{type = "flow", direction = "horizontal"}
+local function add_sidebar_row(list, id, entry, selected)
+    local status = status_of(entry)
+    local row = list.add{type = "flow", direction = "horizontal"}
+    row.style.horizontal_spacing = 6
     row.style.vertical_align = "center"
+    row.style.height = 36
 
+    local cell = row.add{type = "flow", direction = "horizontal"}
+    cell.style.width = 28
+    cell.style.height = 28
+    cell.style.horizontal_align = "center"
+    cell.style.vertical_align = "center"
     local icon = sprite_for(entry, id)
     if icon then
-        add_sprite(row, icon, 24, entry.name or id)
-    else
-        local empty = row.add{type = "empty-widget"}
-        empty.style.width = 24
-        empty.style.height = 24
+        add_sprite(cell, icon, 24, entry.name or id)
     end
 
     local full = entry.name or id
+    local caption = display_name(entry, id)
+    if id == state.instance() then
+        caption = caption .. " (Current Location)"
+    end
     local button = add_styled(row, {
         type = "button",
         name = SELECT,
-        caption = display_name(entry, id),
+        caption = caption,
         tags = {instance = id},
-    }, "list_box_item", "button")
+        tooltip = full,
+    }, id == state.instance() and "green_button" or "list_box_item", "confirm_button")
     if button then
-        button.style.horizontally_stretchable = true
-        button.style.height = 36
+        button.style.width = 210
+        button.style.height = 32
         button.style.horizontal_align = "left"
         button.toggled = id == selected
-        button.tooltip = full
     end
 
-    if id == state.instance() then
-        local you = row.add{type = "label", caption = "(you)"}
-        you.style.font_color = {r = 0.55, g = 0.9, b = 0.45}
-    end
-
-    add_sprite(row, status_sprite(entry), 12)
+    add_sprite(row, status.sprite, 12, status.text)
 end
 
-local function build_sidebar(pane, player)
+local function build_sidebar(list, player)
     local groups = grouped()
     local selected = storage.map_selected and storage.map_selected[player.index]
     local total = 0
@@ -492,12 +476,12 @@ local function build_sidebar(pane, player)
         if #rows == 0 then
             return
         end
-        local header = add_styled(pane, {type = "label", caption = caption}, "caption_label")
+        local header = add_styled(list, {type = "label", caption = caption}, "caption_label")
         if header then
             header.style.top_margin = 4
         end
         for _, row in ipairs(rows) do
-            add_sidebar_row(pane, row.id, row.entry, selected)
+            add_sidebar_row(list, row.id, row.entry, selected)
         end
         total = total + #rows
     end
@@ -506,7 +490,7 @@ local function build_sidebar(pane, player)
     section("Space", groups.space)
     section("Custom", groups.custom)
     if total == 0 then
-        pane.add{type = "label", caption = "No servers."}
+        list.add{type = "label", caption = "No servers."}
     end
 end
 
@@ -568,19 +552,24 @@ end
 
 local function update_toggled(player)
     local window = player.gui.screen[WINDOW]
-    if not window then
+    local list = window and find_child(window, LIST)
+    if not list then
         return
     end
     local selected = selected_for(player)
-    for _, button in ipairs(find_children(window, SELECT)) do
-        local id = button.tags and button.tags.instance
-        button.toggled = id == selected
+    for _, row in ipairs(list.children or {}) do
+        for _, child in ipairs(row.children or {}) do
+            if child.name == SELECT then
+                local id = child.tags and child.tags.instance
+                child.toggled = id == selected
+            end
+        end
     end
 end
 
--- Everything the window shows that the manager can change. The current server's live rows
--- (tick, speed, connected) are deliberately absent: including them would rebuild the whole
--- window every tick. Uptime is bucketed to the minute for the same reason.
+-- Everything the window shows that the manager can change. The current server's live speed,
+-- tick and players are deliberately absent: including them would rebuild the whole window
+-- every tick. Player names are included in full so the list stays right past twelve.
 local function signature()
     local parts = {tostring(state.instance()), tostring(storage.hide_addresses)}
     for _, id in ipairs(sorted_ids()) do
@@ -592,11 +581,10 @@ local function signature()
             tostring(entry.address or ""),
             tostring(entry.online),
             tostring(entry.players),
-            tostring(player_names_text(entry.player_names) or ""),
+            table.concat(sorted_names(entry.player_names), "\28"),
             tostring(entry.ups),
-            tostring(entry.version),
-            tostring(math.floor((tonumber(entry.uptime_seconds) or 0) / 60)),
-            tostring(entry.description or entry.note or ""),
+            tostring(entry.game_speed),
+            tostring(entry.game_tick),
         }, "\31")
     end
     return table.concat(parts, "\30")
@@ -616,8 +604,7 @@ local function build(player)
         direction = "vertical",
     }
     frame.auto_center = true
-    frame.style.width = 780
-    frame.style.height = 540
+    frame.style.width = 700
 
     local title = frame.add{type = "flow", direction = "horizontal"}
     local title_label = add_styled(title, {type = "label", caption = "Servers"}, "frame_title")
@@ -635,15 +622,16 @@ local function build(player)
 
     local body = frame.add{type = "flow", direction = "horizontal"}
     body.style.horizontally_stretchable = true
-    body.style.vertically_stretchable = true
+    body.style.vertical_align = "top"
     body.style.horizontal_spacing = 8
 
     local left = add_styled(body, {type = "frame"}, "inside_shallow_frame")
-    left.style.width = 250
-    left.style.vertically_stretchable = true
+    left.style.width = 290
+    left.style.minimal_height = 330
     local pane = left.add{type = "scroll-pane", direction = "vertical"}
     pane.horizontal_scroll_policy = "never"
-    pane.style.vertically_stretchable = true
+    pane.style.maximal_height = 460
+    local list = pane.add{type = "flow", name = LIST, direction = "vertical"}
 
     local right = add_styled(body, {
         type = "frame",
@@ -651,18 +639,19 @@ local function build(player)
         direction = "vertical",
     }, "inside_shallow_frame_with_padding")
     right.style.horizontally_stretchable = true
-    right.style.vertically_stretchable = true
+    right.style.minimal_height = 330
+    local scroll = right.add{type = "scroll-pane", name = DETAIL_SCROLL, direction = "vertical"}
+    scroll.horizontal_scroll_policy = "never"
+    scroll.style.maximal_height = 460
+    scroll.style.horizontally_stretchable = true
 
-    build_sidebar(pane, player)
+    build_sidebar(list, player)
     build_detail(player, selected)
 
     local footer = frame.add{type = "flow", direction = "horizontal"}
     footer.style.horizontally_stretchable = true
     footer.style.horizontal_align = "right"
     footer.style.horizontal_spacing = 8
-
-    local stretch = footer.add{type = "empty-widget"}
-    stretch.style.horizontally_stretchable = true
 
     local cancel = add_styled(footer, {
         type = "button",

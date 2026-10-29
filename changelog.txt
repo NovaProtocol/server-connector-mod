@@ -1,4 +1,9 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.88
+Date: 2026-10-29
+  Changed:
+    - The server window shows only players, UPS, speed and tick; icons are sized and centred; the current server is marked 'Current Location' with a highlighted button; the window fits its content.
+---------------------------------------------------------------------------------------------------
 Version: 0.36.87
 Date: 2026-10-29
   Added:
