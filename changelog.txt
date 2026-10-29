@@ -1,4 +1,12 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.80
+Date: 2026-10-29
+  Fixed:
+    - Building a cargo bay raced the mirror. The counterpart's ensure_bays raised a build event
+      that was treated as a player edit, and the resulting state could win and remove the origin
+      bay. Manager-created bay events are ignored, a player bay build or mine bumps the clock so
+      the origin wins, and a placed bay is protected immediately.
+---------------------------------------------------------------------------------------------------
 Version: 0.36.79
 Date: 2026-10-29
   Fixed:

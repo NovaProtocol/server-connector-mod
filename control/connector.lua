@@ -459,15 +459,18 @@ local function create_platform(planet)
             starter_pack = "space-platform-starter-pack",
         }
     end)
-    storage.connector_creating = nil
     if not ok or not created then
+        storage.connector_creating = nil
         log(string.format("[%s] could not create connector %s at %s: %s",
             INSTANCE(), name, planet, tostring(created)))
         record("create-failed", {planet = planet, error = tostring(created)})
         return nil
     end
 
+    -- The hub build event fires during the starter pack. It is this mod's creation, not a
+    -- player edit, so the flag stays set through it.
     local applied, hub = pcall(function() return created.apply_starter_pack(true) end)
+    storage.connector_creating = nil
     if not applied or not hub then
         log(string.format("[%s] connector %s has no hub; removing it", INSTANCE(), name))
         pcall(function() created.destroy(1) end)
@@ -874,7 +877,12 @@ local function apply(payload)
         end
     end
     if (payload.bays ~= nil) or (payload.layout ~= nil and payload.layout ~= "") then
+        -- ensure_bays creates and destroys entities; those raise the platform build/mine
+        -- events. They are the manager's write, not a player edit, and must not be pushed
+        -- back as a new state.
+        begin_write()
         platforms.ensure_bays(platform, payload.bays, payload.layout)
+        end_write()
     end
 
     protect(platform)
@@ -1024,6 +1032,11 @@ local function guard_build(event)
         return
     end
     storage_ready()
+    -- A bay made by ensure_bays on the counterpart is the manager's write. Treating it as a
+    -- player build pushed a state back, and that race is what removed the origin bay.
+    if (storage.connector_writing or 0) > 0 or storage.connector_creating then
+        return
+    end
     local entity = event.entity
     local platform = event.platform or platform_of_entity(entity)
     if not is_connector(platform) then
@@ -1032,6 +1045,7 @@ local function guard_build(event)
 
     local planet = planet_of(platform)
     if is_hub(entity) then
+        debit_clock()
         mark_dirty(planet)
         return
     end
@@ -1043,6 +1057,9 @@ local function guard_build(event)
             entity.minable_flag = true
             entity.operable = true
         end)
+        -- A local edit must outrank the stale state on the other side. Without the clock
+        -- bump a bay built on space lost the tie to the planet's older list and vanished.
+        debit_clock()
         mark_dirty(planet)
         return
     end
@@ -1077,6 +1094,9 @@ local function guard_mine(event)
         return
     end
     storage_ready()
+    if (storage.connector_writing or 0) > 0 or storage.connector_creating then
+        return
+    end
     local entity = event.entity
     local platform = event.platform or platform_of_entity(entity)
     if not is_connector(platform) then
@@ -1087,6 +1107,7 @@ local function guard_mine(event)
         announce_deleted(planet, "mined")
         return
     end
+    debit_clock()
     mark_dirty(planet)
 end
 
