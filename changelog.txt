@@ -1,4 +1,12 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.78
+Date: 2026-10-28
+  Added:
+    - Cargo accounting. Every insert and remove logs wanted versus moved when DEBUG is on; a
+      shortfall is recorded in the connector event log and returned to the manager, which logs
+      it as an error. A failed request-group or pad write is reported the same way. This does
+      not prevent the both-writable double-use window; it makes it visible.
+---------------------------------------------------------------------------------------------------
 Version: 0.36.77
 Date: 2026-10-28
   Fixed:

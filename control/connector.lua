@@ -714,7 +714,8 @@ end
 local function sync_cargo(platform, target)
     local inventory = platform_api.hub_inventory(platform.hub)
     if not inventory then
-        return 0
+        debug.emit("connector cargo sync skipped: no hub inventory")
+        return 0, {}
     end
 
     local function key(entry)
@@ -734,33 +735,58 @@ local function sync_cargo(platform, target)
     end
 
     local applied = 0
+    local shortfalls = {}
+
+    -- Every move is accounted, not just the ones that worked. A remove that moved fewer
+    -- than it wanted is the signature of the same item being consumed on both sides before
+    -- the mirror caught up; an insert that moved fewer is a full hub.
+    local function note(operation, entry, want, moved)
+        moved = moved or 0
+        debug.emit("connector cargo sync %s %s/%s: wanted %d moved %d",
+            operation, tostring(entry.item), tostring(entry.quality), want, moved)
+        if moved < want then
+            local short = {
+                item = entry.item,
+                quality = entry.quality or "normal",
+                operation = operation,
+                wanted = want,
+                moved = moved,
+            }
+            shortfalls[#shortfalls + 1] = short
+            debug.emit("connector cargo SHORTFALL sync %s %s/%s: wanted %d moved %d",
+                operation, tostring(entry.item), tostring(entry.quality), want, moved)
+            record("cargo_shortfall", short)
+        end
+        if moved > 0 then
+            applied = applied + 1
+        end
+    end
+
     for k, count in pairs(wanted) do
         local have = current[k] or 0
         if count > have then
-            local changed = inventory.insert{
+            local want = count - have
+            local moved = inventory.insert{
                 name = meta[k].item,
                 quality = meta[k].quality,
-                count = count - have,
-            }
-            if changed and changed > 0 then
-                applied = applied + 1
-            end
+                count = want,
+            } or 0
+            note("insert", meta[k], want, moved)
         end
     end
     for k, count in pairs(current) do
         local want = wanted[k] or 0
         if count > want then
-            local changed = inventory.remove{
+            local need = count - want
+            local moved = inventory.remove{
                 name = meta[k].item,
                 quality = meta[k].quality,
-                count = count - want,
-            }
-            if changed and changed > 0 then
-                applied = applied + 1
-            end
+                count = need,
+            } or 0
+            note("remove", meta[k], need, moved)
         end
     end
-    return applied
+    return applied, shortfalls
 end
 
 -- Apply the manager's canonical state to this side. Every field is optional: a pod delta
@@ -790,9 +816,11 @@ local function apply(payload)
         storage.connector_clock = incoming_clock
     end
 
+    local groups_ok = true
     if payload.has_requests or payload.incoming or payload.outgoing then
-        enforce_platform(platform, payload.incoming or {}, payload.outgoing or {}, planet)
+        groups_ok = enforce_platform(platform, payload.incoming or {}, payload.outgoing or {}, planet) and groups_ok
     end
+    local pad_ok = true
     if role() == "planet" and (payload.has_requests or payload.pad or payload.incoming) then
         -- An empty pad from the space side means "space has no pad", not "clear the pad".
         -- Only a planet-originated payload owns the pad list; a space edit reaches the pad
@@ -802,13 +830,18 @@ local function apply(payload)
             pad_list = payload.pad
         end
         for _, pad in ipairs(pads()) do
-            enforce_pad(pad, pad_list, planet)
+            pad_ok = enforce_pad(pad, pad_list, planet) and pad_ok
         end
     end
 
     local applied = 0
+    local shortfalls = {}
     if payload.has_cargo then
-        applied = sync_cargo(platform, payload.cargo or {})
+        local synced, synced_short = sync_cargo(platform, payload.cargo or {})
+        applied = applied + synced
+        for _, short in ipairs(synced_short) do
+            shortfalls[#shortfalls + 1] = short
+        end
     end
     for _, operation in ipairs(payload.ops or {}) do
         local count = math.floor(tonumber(operation.count) or 0)
@@ -818,8 +851,31 @@ local function apply(payload)
                 quality = operation.quality or "normal",
                 count = math.abs(count),
             }
-            local changed = count > 0 and inventory_insert(platform, item) or inventory_remove(platform, item)
-            if changed and changed > 0 then
+            local want = math.abs(count)
+            local moved
+            if count > 0 then
+                moved = inventory_insert(platform, item)
+            else
+                moved = inventory_remove(platform, item)
+            end
+            moved = moved or 0
+            debug.emit("connector cargo pod %s %s/%s: wanted %d moved %d",
+                count > 0 and "insert" or "remove",
+                tostring(item.name), tostring(item.quality), want, moved)
+            if moved < want then
+                local short = {
+                    item = item.name,
+                    quality = item.quality,
+                    operation = count > 0 and "insert" or "remove",
+                    wanted = want,
+                    moved = moved,
+                }
+                shortfalls[#shortfalls + 1] = short
+                debug.emit("connector cargo SHORTFALL pod %s %s/%s: wanted %d moved %d",
+                    short.operation, tostring(item.name), tostring(item.quality), want, moved)
+                record("cargo_shortfall", short)
+            end
+            if moved > 0 then
                 applied = applied + 1
             end
         end
@@ -830,14 +886,21 @@ local function apply(payload)
 
     protect(platform)
     local inventory = platform_api.hub_inventory(platform.hub)
-    return {
+    local result = {
         ok = true,
         planet = planet,
         role = role(),
         applied = applied,
         weight = inventory and inventory.weight or nil,
         clock = storage.connector_clock or 0,
+        groups_ok = groups_ok,
+        pad_ok = pad_ok,
     }
+    -- An empty Lua table encodes as {}, which a Go slice cannot decode; omit it when clean.
+    if #shortfalls > 0 then
+        result.shortfalls = shortfalls
+    end
+    return result
 end
 
 inventory_insert = function(platform, item)
