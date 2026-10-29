@@ -24,6 +24,50 @@ local debug = require("__server-connector-mod__.control.debug")
 
 local MOD = state.MOD
 
+-- The live fields the server window can show. They are optional everywhere: a manager that
+-- never sends one leaves the window on its "—" defaults.
+local optional_types = {
+    online = "boolean",
+    players = "number",
+    player_names = "table",
+    ups = "number",
+    version = "string",
+    uptime_seconds = "number",
+    description = "string",
+    note = "string",
+}
+
+local function merge_options(entry, source)
+    if type(entry) ~= "table" or type(source) ~= "table" then
+        return false
+    end
+    local changed = false
+    for key, want in pairs(optional_types) do
+        local value = source[key]
+        if type(value) == want and entry[key] ~= value then
+            entry[key] = value
+            changed = true
+        end
+    end
+    return changed
+end
+
+local function merge_topology(topology)
+    if type(topology) ~= "table" then
+        return false
+    end
+    local changed = false
+    for id, source in pairs(topology) do
+        if type(id) == "string" and type(source) == "table" then
+            local entry = (storage.topology or {})[id]
+            if entry then
+                changed = merge_options(entry, source) or changed
+            end
+        end
+    end
+    return changed
+end
+
 --------------------------------------------------------------------------------
 -- what the node and the manager drive over RCON
 --------------------------------------------------------------------------------
@@ -70,6 +114,7 @@ local calls = {
         state.ensure_storage()
         local wanted = state.normalize_topology(topology)
         if state.same_topology(wanted, storage.topology) then
+            merge_topology(topology)
             if state.empty() then
                 convert.ensure_surfaces()
                 -- The forms are part of the unchanged topology too. A declared flat surface
@@ -80,6 +125,7 @@ local calls = {
                     convert.create_custom_surfaces(own.forms)
                 end
             end
+            map.refresh_open()
             return {instance = state.instance(), destinations = #state.destinations(), unchanged = true}
         end
         if not state.empty() then
@@ -87,6 +133,7 @@ local calls = {
             -- them. Only surface creation is a world change; that waits for an empty server,
             -- which the leave event picks up.
             state.set_topology(topology)
+            merge_topology(topology)
             debug.dump("topology deferred while connected", topology)
             storage.pending_surfaces = true
             for _, player in pairs(game.connected_players) do
@@ -99,6 +146,7 @@ local calls = {
             }
         end
         state.set_topology(topology)
+        merge_topology(topology)
         debug.dump("topology applied", topology)
         convert.ensure_surfaces()
         connector.ensure_all()
@@ -115,19 +163,36 @@ local calls = {
         return {instance = state.instance(), destinations = #state.destinations()}
     end,
 
-    -- Update only the live status fields of one existing entry. The manager pushes this over
-    -- RCON when a server's online state or player count changes, without resending the whole
-    -- topology. Unknown ids are ignored.
-    set_server_status = function(id, online, players)
+    -- Update the live fields of one existing entry. The current form is
+    -- set_server_status(id, fields); the earlier (id, online, players) form is still
+    -- accepted so an older manager keeps working. Unknown ids are ignored.
+    set_server_status = function(id, fields, players)
         state.ensure_storage()
         local entry = (storage.topology or {})[id]
         if type(id) ~= "string" or not entry then
             return false
         end
-        entry.online = online
-        entry.players = players
+        if type(fields) == "table" then
+            merge_options(entry, fields)
+        else
+            -- Legacy signature: (id, online, players).
+            if type(fields) == "boolean" then
+                entry.online = fields
+            end
+            if type(players) == "number" then
+                entry.players = players
+            end
+        end
         map.refresh_open()
-        return {ok = true, id = id, online = entry.online, players = entry.players}
+        return true
+    end,
+
+    -- Whether the server window shows addresses at all.
+    set_hide_addresses = function(value)
+        state.ensure_storage()
+        storage.hide_addresses = value == true
+        map.refresh_open()
+        return true
     end,
 
     -- Where a player's body is, and what that makes them on this server

@@ -1,4 +1,9 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.86
+Date: 2026-10-29
+  Changed:
+    - The server window is a server list on the left and a detail panel on the right, with Join and Cancel at the bottom right.
+---------------------------------------------------------------------------------------------------
 Version: 0.36.85
 Date: 2026-10-29
   Fixed:
