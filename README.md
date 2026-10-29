@@ -40,7 +40,8 @@ playing, which is why the node talks to this mod through its own command instead
 | `fn` | Does |
 |---|---|
 | `set_instance(id)` | Sets this server's identity. Returns `unchanged` for the id it already holds, and `skipped` while anybody is connected. |
-| `set_topology(servers)` | Replaces the destination set. Returns `unchanged` for the same set, and `skipped` while anybody is connected. |
+| `set_topology(servers)` | Replaces the destination set, including each entry's optional `online`, `players` and `note`. Returns `unchanged` for the same set, and `skipped` while anybody is connected. |
+| `set_server_status(id, online, players)` | Updates only those live fields on one existing entry, then refreshes open server windows. Unknown ids return `false`. |
 | `set_body_location(name, id)` | Tells this server where a player's body is. `nil` or this instance means "here". Reports `destroyed_character` when it removed one here. |
 | `research_state({offset, limit})` | One page of this server's researched technologies, with the total. |
 | `apply_research({researched})` or `{current, progress}` | Marks technologies done, and sets where the shared research stands. |
@@ -83,18 +84,22 @@ at 4096 bytes for the same reason. Paging needs no snapshot: the manager unions 
 it reads on every poll, so a technology that shifts across a page boundary and is
 missed once is picked up on the next pass.
 
-## The server map
+## The server list
 
 There are no copies of another server's surface, so the game's remote view has nothing to
-look at and no surface change to route on. The way across is the map: while the map view is
-open, a frame lists one button per other instance, labelled with the name the manager gave it,
-and a click calls `connect_to_server`. The instance you are already on is not in the list, so
-there is no button to send yourself where you already are.
+look at and no surface change to route on. The way across is one **Servers** button in the
+mod-gui button flow, shown in both the normal and map/remote views. It opens one window that
+lists the fleet in three sections — Planets, Space and Custom — with the current server
+marked "You are here" and a Join button on every other row. A row with no address yet, or one
+the manager reports offline, has its Join disabled. Rows show the live player count and the
+manager's note when those fields are supplied. Escape, the close button and a second click on
+Servers all close the window.
 
 The vanilla space map is disabled (`disable_space_map`), because it would offer every planet
-as a view with no surface behind it. The mod's map is the space map. It is rebuilt on join and
-whenever the topology changes; there is no event for opening the map, so its visibility is
-checked on the one-second pass.
+as a view with no surface behind it. The window is built only when opened and rebuilt only
+when a field it displays changes; the one-second pass touches only windows that are already
+open. The mod pushes `server_menu_open` over UDP when a player opens it, so the manager can
+answer with fresh `set_server_status` calls.
 
 **The address is the one a client dials.** Pointing a player at an RCON port produces
 a prompt that reads perfectly correctly and a client that sits at "connecting" until
@@ -154,7 +159,7 @@ package under `control/`, one file per concern.
 | `control/convert.lua` | the crash site, owned surfaces, custom surfaces, the spawn point and the asteroid sweep |
 | `control/chunks.lua` | chunks on surfaces this server does not own |
 | `control/server.lua` | the join rule: which controller a player gets, and where their body is |
-| `control/map.lua` | the server map: one button per other instance, shown while the map is open |
+| `control/map.lua` | the server map: one Servers button and one window |
 | `control/platforms.lua` | the fleet's platform copies, and the API probes |
 | `control/research.lua` | the shared tech tree: report and apply |
 | `control/events.lua` | every event handler |
