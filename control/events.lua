@@ -158,12 +158,13 @@ script.on_configuration_changed(function()
 end)
 
 -- on_load runs on every save load, unlike on_init, which only runs for a new save. It must
--- not touch game, so it only marks the boot; the first connector tick sends connector_ready
--- from the server once the identity has arrived.
+-- not touch game or storage: Factorio aborts the load when storage changes here. Marking
+-- the boot is a module-local flag; the first connector tick sends connector_ready from the
+-- server once the identity has arrived.
 script.on_load(function()
     guard("on_load", function()
         if rcon then
-            storage.connector_ready_pending = true
+            connector.mark_boot()
         end
     end)
 end)

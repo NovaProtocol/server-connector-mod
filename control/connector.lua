@@ -40,6 +40,13 @@ local push_full
 -- Assigned after create_platform; create_platform uses it to repair a hubless connector.
 local remove
 
+-- The boot marker is module-local on purpose: on_load must not modify storage, and
+-- Factorio refuses to load the save when it does. The first tick reads it and clears it.
+local boot_pending = false
+local function mark_boot()
+    boot_pending = true
+end
+
 local function role()
     return INSTANCE() == "space" and "space" or "planet"
 end
@@ -1414,7 +1421,8 @@ local function tick()
     -- Tell the manager this instance is loaded. One datagram per boot, sent from the
     -- server only (the RCON global exists there), after the identity has arrived. The
     -- manager waits for every instance before it runs the startup pre-sync.
-    if storage.connector_ready_pending and rcon then
+    if (boot_pending or storage.connector_ready_pending) and rcon then
+        boot_pending = false
         storage.connector_ready_pending = nil
         local version = (script.active_mods and script.active_mods["server-connector-mod"]) or "unknown"
         bus.push("connector_ready", {
@@ -1515,6 +1523,7 @@ end
 
 return {
     role = role,
+    mark_boot = mark_boot,
     planet_of = planet_of,
     is_connector = is_connector,
     find_connector = find_connector,

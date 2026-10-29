@@ -1,4 +1,10 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.85
+Date: 2026-10-29
+  Fixed:
+    - on_load wrote the boot marker to storage, which Factorio rejects as a save/load change
+      and refuses to load. The marker is now module-local and on_load touches no storage.
+---------------------------------------------------------------------------------------------------
 Version: 0.36.84
 Date: 2026-10-29
   Added:
