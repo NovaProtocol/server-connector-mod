@@ -15,6 +15,7 @@ local server = require("__server-connector-mod__.control.server")
 local platforms = require("__server-connector-mod__.control.platforms")
 local platform_api = require("__server-connector-mod__.control.platform_api")
 local connector = require("__server-connector-mod__.control.connector")
+local demand = require("__server-connector-mod__.control.demand")
 local pod = require("__server-connector-mod__.control.pod")
 local research = require("__server-connector-mod__.control.research")
 local map = require("__server-connector-mod__.control.map")
@@ -292,7 +293,6 @@ local calls = {
     -- Create the real platform on the space server from a native one found on a planet
     -- (platforms.create_platform).
     platform_create = platforms.create_platform,
-    platform_check = platform_api.check,
     rebuild_platforms = platforms.rebuild_platforms,
 
     -- What this server's platforms are (platforms.platforms).
@@ -303,12 +303,19 @@ local calls = {
     connector_ensure = connector.ensure_all,
     connector_state = connector.state,
     connector_apply = connector.apply,
+    sync_info = demand.sync_info,
+    sync_read_sources = demand.sync_read_sources,
+    sync_read_groups = demand.sync_read_groups,
+    sync_read_cargo = demand.sync_read_cargo,
+    sync_read_layout = demand.sync_read_layout,
+    sync_apply_groups = demand.sync_apply_groups,
+    sync_apply_cargo = demand.sync_apply_cargo,
+    sync_apply_layout = demand.sync_apply_layout,
     connector_build_bay = connector.build_bay,
     connector_remove_bay = connector.remove_bay,
     connector_delete = connector.delete,
     connector_probe = connector.probe,
     connector_edit = connector.edit,
-    connector_pad = connector.pad_requests,
 
     -- Pending platform requests named on the wrong planet server (requests).
     request_platform = requests.create,
@@ -318,10 +325,6 @@ local calls = {
 
     -- The platform helper surface (platform_api). The node and the manager call these
     -- directly for a manual read, a full dump or a computed difference.
-    platform_meta = platform_api.meta,
-    platform_meta_page = platform_api.meta_page,
-    platform_hub_dump = platform_api.dump,
-    platform_audit = platform_api.audit,
     platform_cargo = platform_api.cargo,
     platform_requests = platform_api.requests,
     apply_cargo_delta = platform_api.apply_cargo_delta,
@@ -412,33 +415,11 @@ commands.add_command(
         end
 
         local ok, err = pcall(function()
-            measure("platform_meta full table", platform_api.meta)
-            measure("platform_meta change-driven", outbound.tick_meta)
-            measure("platform_positions", outbound.tick_positions)
-            measure("platform_logistic", outbound.tick_logistic)
-            measure("platform_hub", outbound.tick_hub)
             measure("map_tick", map.tick)
         end)
         if not ok then
             log(string.format("[%s] -profile failed: %s", MOD, tostring(err)))
         end
-    end
-)
-
--- A diagnostic switch for the platform UDP streams. Off makes the manager stop receiving
--- platform updates; everything else the mod does (console, mirror, join rules) keeps
--- working. Turn it back on when done.
-commands.add_command(
-    MOD .. "-streams",
-    "Turn this server's platform UDP streams on or off. Usage: /server-connector-mod-streams on|off",
-    function(event)
-        local value = string.lower(event.parameter or "")
-        if value ~= "on" and value ~= "off" then
-            if rcon then rcon.print("usage: on|off") end
-            return
-        end
-        storage.platform_streams = value == "on"
-        if rcon then rcon.print("platform streams " .. value) end
     end
 )
 

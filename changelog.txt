@@ -1,4 +1,15 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.37.0
+Date: 2026-10-29
+  Changed:
+    - the hubs' Incoming and Outgoing groups are derived. Incoming comes from the landing pads, Outgoing from the space platforms. Both are recalculated in full whenever a request changes.
+    - a platform request with no planet selected counts for every planet's hub, at its full count.
+  Added:
+    - a Buffer group per hub, mirrored between both hubs and never recalculated.
+    - sync_* read and apply calls for the manager's startup sync; protocol number 2 in connector_ready.
+  Removed:
+    - the platform positions/meta/hub dump/audit streams and their calls; the landing pad is no longer written by the mod.
+---------------------------------------------------------------------------------------------------
 Version: 0.36.91
 Date: 2026-10-29
   Fixed:

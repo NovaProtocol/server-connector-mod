@@ -25,6 +25,7 @@ local research = require("__server-connector-mod__.control.research")
 local platforms = require("__server-connector-mod__.control.platforms")
 local platform_api = require("__server-connector-mod__.control.platform_api")
 local connector = require("__server-connector-mod__.control.connector")
+local demand = require("__server-connector-mod__.control.demand")
 local requests = require("__server-connector-mod__.control.requests")
 local debug = require("__server-connector-mod__.control.debug")
 local pod = require("__server-connector-mod__.control.pod")
@@ -98,6 +99,8 @@ every(3600, "the foreign chunks", when_known(chunks.sweep))
 -- a refund is waiting. The queue is empty in the common case, so this is a dispatch, not a
 -- poll of the game.
 every(1, "the connector queue", when_known(connector.tick))
+every(1, "the demand queue", when_known(demand.tick))
+every(18000, "the demand audit", when_known(function() demand.queue("audit") end))
 
 -- Research progress is pushed over UDP only when it moved, once a second.
 every(60, "outbound research", when_known(outbound.tick_research))
@@ -146,6 +149,11 @@ script.on_configuration_changed(function()
     guard("on_configuration_changed", function()
         state.ensure_storage()
         storage.schema = SCHEMA
+        storage.platform_streams = nil
+        storage.meta_seen = nil
+        storage.meta_heartbeat = nil
+        storage.hub_sent = nil
+        storage.hub_weight = nil
         if rcon then
             storage.connector_ready_pending = true
         end
@@ -258,14 +266,24 @@ end
 -- A logistic request change on a connector hub or the landing pad. This is the event the
 -- old polling was standing in for. The whole connector state travels with it: the manager
 -- applies it to the counterpart and compares the hub weight.
+if defines.events.on_surface_deleted then
+    script.on_event(defines.events.on_surface_deleted, function(event)
+        guard("a surface deleted", function()
+            if instance() == "space" then
+                demand.queue("surface deleted")
+            end
+        end)
+    end)
+end
+
 if defines.events.on_entity_logistic_slot_changed then
     script.on_event(defines.events.on_entity_logistic_slot_changed, function(event)
         guard("a logistic slot change", function()
             debug.event("on_entity_logistic_slot_changed", event)
-            -- The mod's own writes set this. A script change fires the same event with a
-            -- nil player_index, so without the guard every enforce would re-enter itself
-            -- and bump the clock for ever.
             if (storage.connector_writing or 0) > 0 then
+                return
+            end
+            if event.player_index == nil and game.tick - (storage.demand_last_write or -1000) <= 2 then
                 return
             end
             local entity = event.entity
@@ -273,9 +291,6 @@ if defines.events.on_entity_logistic_slot_changed then
                 return
             end
 
-            -- A rocket silo is the only place a new platform starts from. This mod no
-            -- longer touches its requests, so a request that disappears with no launch is
-            -- either the game or the client; this line tells the two apart.
             if entity.name == "rocket-silo" then
                 log(string.format("[%s] silo %s on %s: starter-pack requests now %d",
                     instance(), tostring(entity.unit_number),
@@ -285,24 +300,24 @@ if defines.events.on_entity_logistic_slot_changed then
             end
 
             if entity.name == "cargo-landing-pad" then
-                -- The space server owns no planet. A pad on a stale surface there is not a
-                -- connector's pad and must not be pushed as one.
                 if instance() ~= "space" then
-                    connector.edit(instance(), "pad edit")
+                    demand.queue("pad edit")
                 end
                 return
             end
 
+            if entity.name ~= "space-platform-hub" then
+                return
+            end
             local platform = entity.surface and entity.surface.platform
             if not platform or not platform.valid then
                 return
             end
-            if not connector.is_connector(platform) then
-                log(string.format("[%s] ignoring a logistic change on %s: not a connector",
-                    instance(), platform.name))
-                return
+            if connector.is_connector(platform) then
+                demand.queue("hub edit")
+            elseif instance() == "space" then
+                demand.queue("platform edit")
             end
-            connector.edit(connector.planet_of(platform), "request edit")
         end)
     end)
 end
@@ -312,6 +327,11 @@ script.on_event(defines.events.on_space_platform_changed_state, function(event)
         debug.event("on_space_platform_changed_state", event)
         connector.state_changed(event)
         connector.sweep(event.platform)
+        -- A platform changing state can mean it is now scheduled for deletion.
+        if instance() == "space" and event.platform and event.platform.valid
+            and not connector.is_connector(event.platform) then
+            demand.queue("platform state")
+        end
     end)
 end)
 

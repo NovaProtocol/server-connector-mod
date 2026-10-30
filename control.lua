@@ -30,6 +30,7 @@
 --   control/map.lua        the server map: one button, one window
 --   control/platforms.lua  the fleet's platform copies, and the API probes
 --   control/connector.lua  the one connector platform per planet, mirrored both ways
+--   control/demand.lua     the hubs' requests, derived from landing pads and platforms
 --   control/research.lua   the shared tech tree: report and apply
 --   control/requests.lua   pending platform requests named on the wrong planet server
 --   control/debug.lua      the one DEBUG switch, and the detail dumps it gates
@@ -55,6 +56,7 @@ require("__server-connector-mod__.control.map")
 require("__server-connector-mod__.control.platforms")
 require("__server-connector-mod__.control.platform_api")
 require("__server-connector-mod__.control.connector")
+require("__server-connector-mod__.control.demand")
 require("__server-connector-mod__.control.research")
 require("__server-connector-mod__.control.outbound")
 require("__server-connector-mod__.control.requests")

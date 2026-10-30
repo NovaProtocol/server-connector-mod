@@ -402,6 +402,7 @@ end
 return {
     MOD = MOD,
     SCHEMA = SCHEMA,
+    PROTOCOL = 2,
 
     ensure_storage = ensure_storage,
     instance = instance,

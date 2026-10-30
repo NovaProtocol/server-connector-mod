@@ -29,6 +29,7 @@ local INCOMING = "Incoming (Space to Planet)"
 local OUTGOING = "Outgoing (Planet to Space)"
 
 local INSTANCE = state.instance
+local PROTOCOL = state.PROTOCOL
 
 -- Forward declarations: these are called by functions defined above them. A local declared
 -- later is a nil global to an earlier body, which is a runtime error the parser cannot see.
@@ -93,10 +94,11 @@ end
 
 local function group_names(planet)
     if role() == "planet" then
-        return INCOMING, OUTGOING
+        return INCOMING, OUTGOING, "Buffer"
     end
     return string.format("%s Space to [planet=%s] %s", SPACE_ICON, planet, display_name(planet)),
-        string.format("[planet=%s] %s to %s Space", planet, display_name(planet), SPACE_ICON)
+        string.format("[planet=%s] %s to %s Space", planet, display_name(planet), SPACE_ICON),
+        string.format("[planet=%s] %s Buffer", planet, display_name(planet))
 end
 
 -- Which planet a platform belongs to. On a planet that is the instance; on space it is
@@ -197,7 +199,7 @@ local function filter_out(filter)
         quality = quality_name(value.quality),
         count = count,
         max_count = filter.max,
-        request_from = filter.request_from,
+        request_from = text(filter.request_from),
         import_from = text(filter.import_from),
         minimum_delivery_count = filter.minimum_delivery_count,
     }
@@ -282,6 +284,25 @@ local function build_filters(list, source, planet)
                 -- "from all" and "from the wrong planet" are the two states the rule exists
                 -- to prevent.
                 import_from = (source == "planet") and planet or nil,
+                minimum_delivery_count = entry.minimum_delivery_count,
+            }
+        end
+    end
+    return out
+end
+
+local function build_buffer_filters(list)
+    local out = {}
+    for _, entry in ipairs(list or {}) do
+        local count = math.floor(tonumber(entry.count) or 0)
+        local item = entry.item or entry.name
+        if item and count > 0 then
+            out[#out + 1] = {
+                value = {type = "item", name = item, quality = entry.quality or "normal"},
+                min = count,
+                max = nil,
+                request_from = entry.request_from,
+                import_from = entry.import_from,
                 minimum_delivery_count = entry.minimum_delivery_count,
             }
         end
@@ -384,45 +405,6 @@ local function quiet_trash(entity)
             pcall(function() point.trash_not_requested = false end)
         end
     end
-end
-
-local function enforce_pad(pad, incoming, planet)
-    local point = pad_point(pad)
-    if not point then
-        return false
-    end
-
-    -- A pad set to trash unrequested items pushes its whole inventory into the platform as
-    -- soon as a request is added. The pad is a request point, not a disposal point.
-    quiet_trash(pad)
-
-    begin_write()
-    -- Only the Incoming group. Removing from the highest index down keeps the indices
-    -- stable while the list shrinks.
-    local indices = {}
-    for index, section in pairs(point.sections or {}) do
-        if not (section.is_manual and section.group == INCOMING) then
-            indices[#indices + 1] = index
-        end
-    end
-    table.sort(indices, function(a, b) return a > b end)
-    for _, index in ipairs(indices) do
-        pcall(function() point.remove_section(index) end)
-    end
-
-    local wrote = write_section(point, INCOMING, build_filters(incoming, "platforms", planet))
-    end_write()
-    return wrote
-end
-
-local function pad_requests()
-    for _, pad in ipairs(pads()) do
-        local point = pad_point(pad)
-        if point then
-            return read_section(point, INCOMING), true
-        end
-    end
-    return {}, false
 end
 
 --------------------------------------------------------------------------------
@@ -584,20 +566,11 @@ local function ensure_all()
         for _, platform in pairs(force().platforms or {}) do
             if is_connector(platform) then
                 protect(platform)
-                local point = platform_api.request_point(platform.hub)
-                local in_name, out_name = group_names(INSTANCE())
-                local incoming, pad_found = pad_requests()
-                if not pad_found then
-                    -- No landing pad yet: keep the group that is there rather than
-                    -- replacing it with an empty list.
-                    incoming = read_section(point, in_name)
-                end
-                local outgoing = read_section(point, out_name)
-                enforce_platform(platform, incoming, outgoing, INSTANCE())
-                for _, pad in ipairs(pads()) do
-                    enforce_pad(pad, incoming, INSTANCE())
-                end
+                enforce_platform(platform, {}, INSTANCE())
             end
+        end
+        for _, pad in ipairs(pads()) do
+            quiet_trash(pad)
         end
     else
         -- Without a topology there is no list of planets to keep, and pruning on an empty
@@ -619,16 +592,12 @@ local function ensure_all()
         for _, platform in pairs(force().platforms or {}) do
             if is_connector(platform) then
                 protect(platform)
-                local planet = planet_of(platform)
-                local point = platform_api.request_point(platform.hub)
-                local in_name, out_name = group_names(planet)
-                local incoming = read_section(point, in_name)
-                local outgoing = read_section(point, out_name)
-                enforce_platform(platform, incoming, outgoing, planet)
+                enforce_platform(platform, {}, planet_of(platform))
             end
         end
     end
 
+    storage.demand_pending = "ensure"
     if push_full then
         if role() == "planet" then
             push_full(INSTANCE())
@@ -642,26 +611,34 @@ local function ensure_all()
     return {ok = true, role = role(), made = table.concat(made, ",")}
 end
 
-enforce_platform = function(platform, incoming, outgoing, planet)
+enforce_platform = function(platform, lists, planet)
+    lists = lists or {}
     local point = platform_api.request_point(platform.hub)
     if not point then
         return false
     end
-    -- A platform shell with no hub is being repaired; there is nothing to enforce yet.
     if not platform.hub or not platform.hub.valid then
         return false
     end
-    -- Keep what nobody asked for. A hub left on the default trash setting ejects the
-    -- starter-pack foundation over time, and the loss looks like a cargo sync bug.
     quiet_trash(platform.hub)
     begin_write()
-    local in_name, out_name = group_names(planet)
-    local wrote_in = write_section(point, in_name, build_filters(incoming, "platforms", planet))
-    local wrote_out = write_section(point, out_name, build_filters(outgoing, "planet", planet))
-
-    -- Any other manual group on the connector keeps its filters but loses its maximum. A
-    -- finite maximum is what makes a hub offload the excess to the planet below, and on the
-    -- space server the planet below is a stale surface with a landing pad.
+    local in_name, out_name, buffer_name = group_names(planet)
+    -- All three groups always exist, whether or not this call writes them.
+    ensure_section(point, in_name)
+    ensure_section(point, out_name)
+    ensure_section(point, buffer_name)
+    local ok = true
+    if lists.incoming ~= nil then
+        ok = write_section(point, in_name, build_filters(lists.incoming, "platforms", planet)) and ok
+    end
+    if lists.outgoing ~= nil then
+        ok = write_section(point, out_name, build_filters(lists.outgoing, "planet", planet)) and ok
+    end
+    if lists.buffer ~= nil then
+        ok = write_section(point, buffer_name, build_buffer_filters(lists.buffer)) and ok
+    end
+    -- KEEP the existing loop here unchanged: every other manual group keeps its filters
+    -- and loses its maximum. It now also covers Buffer, which is intended.
     for _, section in pairs(point.sections or {}) do
         if section.is_manual and section.group ~= in_name and section.group ~= out_name then
             local filters = {}
@@ -685,7 +662,7 @@ enforce_platform = function(platform, incoming, outgoing, planet)
         end
     end
     end_write()
-    return wrote_in and wrote_out
+    return ok
 end
 
 --------------------------------------------------------------------------------
@@ -717,15 +694,16 @@ local function read_state(platform, with_cargo, with_shape)
             layout = with_shape and platforms.layout_of(platform) or nil,
             incoming = {},
             outgoing = {},
-            pad = role() == "planet" and pad_requests() or {},
+            buffer = {},
             groups_ok = false,
             bay_seq = storage.connector_bay_seq or 0,
         }
     end
     local point = platform_api.request_point(platform.hub)
-    local in_name, out_name = group_names(planet)
+    local in_name, out_name, buffer_name = group_names(planet)
     local incoming = read_section(point, in_name)
     local outgoing = read_section(point, out_name)
+    local buffer = read_section(point, buffer_name)
     local inventory = platform_api.hub_inventory(platform.hub)
     local st = {
         planet = planet,
@@ -750,8 +728,9 @@ local function read_state(platform, with_cargo, with_shape)
         layout = with_shape and platforms.layout_of(platform) or nil,
         incoming = incoming,
         outgoing = outgoing,
-        pad = role() == "planet" and pad_requests() or {},
-        groups_ok = find_section(point, in_name) ~= nil and find_section(point, out_name) ~= nil,
+        buffer = buffer,
+        groups_ok = find_section(point, in_name) ~= nil and find_section(point, out_name) ~= nil
+            and find_section(point, buffer_name) ~= nil,
         bay_seq = storage.connector_bay_seq or 0,
     }
     return st
@@ -769,7 +748,7 @@ local function state_of(planet, with_cargo, with_shape)
             clock = storage.connector_clock or 0,
             incoming = {},
             outgoing = {},
-            pad = role() == "planet" and pad_requests() or {},
+            buffer = {},
             bay_seq = storage.connector_bay_seq or 0,
         }
     end
@@ -889,21 +868,18 @@ local function apply(payload)
     end
 
     local groups_ok = true
-    if payload.has_requests or payload.incoming or payload.outgoing then
-        groups_ok = enforce_platform(platform, payload.incoming or {}, payload.outgoing or {}, planet) and groups_ok
+    -- Each side owns one derived group and ignores the other side's claim to it.
+    -- Absent (nil) is not touched; empty is written as empty.
+    local lists = {}
+    if role() == "space" then lists.incoming = payload.incoming end
+    if role() == "planet" then lists.outgoing = payload.outgoing end
+    lists.buffer = payload.buffer
+    if next(lists) ~= nil then
+        groups_ok = enforce_platform(platform, lists, planet) and groups_ok
     end
-    local pad_ok = true
-    if role() == "planet" and (payload.has_requests or payload.pad or payload.incoming) then
-        -- An empty pad from the space side means "space has no pad", not "clear the pad".
-        -- Only a planet-originated payload owns the pad list; a space edit reaches the pad
-        -- through the incoming list it edited.
-        local pad_list = payload.incoming or {}
-        if payload.role == "planet" and type(payload.pad) == "table" then
-            pad_list = payload.pad
-        end
-        for _, pad in ipairs(pads()) do
-            pad_ok = enforce_pad(pad, pad_list, planet) and pad_ok
-        end
+    if payload.mark_buffer_migrated then
+        storage.buffer_migrated = storage.buffer_migrated or {}
+        storage.buffer_migrated[planet] = true
     end
 
     local applied = 0
@@ -971,7 +947,6 @@ local function apply(payload)
         weight = inventory and inventory.weight or nil,
         clock = storage.connector_clock or 0,
         groups_ok = groups_ok,
-        pad_ok = pad_ok,
     }
     -- An empty Lua table encodes as {}, which a Go slice cannot decode; omit it when clean.
     if #shortfalls > 0 then
@@ -1166,27 +1141,65 @@ local function edited(planet, why)
     debit_clock()
     local platform = find_connector(planet)
     if platform then
-        local point = platform_api.request_point(platform.hub)
-        local in_name, out_name = group_names(planet)
-        local incoming = read_section(point, in_name)
-        local outgoing = read_section(point, out_name)
-        if role() == "planet" then
-            local pad_list, pad_found = pad_requests()
-            if pad_found then
-                incoming = pad_list
-            end
-        end
-        enforce_platform(platform, incoming, outgoing, planet)
-        if role() == "planet" then
-            for _, pad in ipairs(pads()) do
-                enforce_pad(pad, incoming, planet)
-            end
-        end
+        enforce_platform(platform, {}, planet)
         protect(platform)
     end
-    -- No cargo on a request or bay edit: a stale list must not undo a pod that landed in
-    -- the same window. The weight is still carried and compared.
     push_state(planet, why, false)
+end
+
+-- The derived writers: the recalculation and the manager's sync. Quiet writes do not bump
+-- the clock or push a state back.
+local function set_groups(planet, lists, why, quiet)
+    storage_ready()
+    local platform = find_connector(planet)
+    if not platform or not platform.hub or not platform.hub.valid then
+        return false, "no connector hub"
+    end
+    local ok = enforce_platform(platform, lists, planet)
+    protect(platform)
+    if not quiet then
+        debit_clock()
+        push_state(planet, why or "derived", false)
+    end
+    return ok
+end
+
+local function read_groups(planet)
+    local platform = find_connector(planet)
+    if not platform or not platform.hub or not platform.hub.valid then
+        return {exists = platform ~= nil, hub = false, incoming = {}, outgoing = {}, buffer = {}, groups_ok = false}
+    end
+    local point = platform_api.request_point(platform.hub)
+    local in_name, out_name, buffer_name = group_names(planet)
+    local incoming, in_found = read_section(point, in_name)
+    local outgoing, out_found = read_section(point, out_name)
+    local buffer, buffer_found = read_section(point, buffer_name)
+    return {
+        exists = true, hub = true, incoming = incoming, outgoing = outgoing, buffer = buffer,
+        groups_ok = in_found and out_found and buffer_found,
+        clock = storage.connector_clock or 0,
+    }
+end
+
+local function read_cargo(planet)
+    local platform = find_connector(planet)
+    if not platform or not platform.hub or not platform.hub.valid then
+        return {exists = platform ~= nil, hub = false, cargo = {}}
+    end
+    local inventory = platform_api.hub_inventory(platform.hub)
+    return {exists = true, hub = true, cargo = cargo_of(platform), weight = inventory and inventory.weight or nil}
+end
+
+local function read_layout(planet)
+    local platform = find_connector(planet)
+    if not platform or not platform.hub or not platform.hub.valid then
+        return {exists = platform ~= nil, hub = false}
+    end
+    return {
+        exists = true, hub = true,
+        bays = platforms.bay_count(platform), layout = platforms.layout_of(platform),
+        bay_seq = storage.connector_bay_seq or 0,
+    }
 end
 
 local function is_hub(entity)
@@ -1458,6 +1471,7 @@ local function tick()
         bus.push("connector_ready", {
             instance = INSTANCE(),
             role = role(),
+            protocol = PROTOCOL,
             version = version,
             tick = game.tick,
         })
@@ -1572,11 +1586,16 @@ return {
     pod = pod_event,
     tick = tick,
     sweep = sweep_platform,
-    pad_requests = pad_requests,
+    planets = planets,
+    pad_point = pad_point,
+    quiet_trash = quiet_trash,
+    set_groups = set_groups,
+    read_groups = read_groups,
+    read_cargo = read_cargo,
+    read_layout = read_layout,
     read_section = read_section,
     build_filters = build_filters,
     write_section = write_section,
-    enforce_pad = enforce_pad,
     pads = pads,
     probe = probe,
     INCOMING = INCOMING,
