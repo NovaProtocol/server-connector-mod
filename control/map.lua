@@ -99,6 +99,12 @@ local function add_styled(parent, props, style, fallback)
     if not element then
         element = attempt(nil)
     end
+    if not element then
+        local ok, err = pcall(function() return parent.add(props) end)
+        log(string.format("[%s] map: could not add a %s%s: %s", state.instance(),
+            tostring(props.type), props.name and (" named " .. props.name) or "",
+            tostring(err)))
+    end
     return element
 end
 
@@ -395,7 +401,8 @@ local function build_solar(parent, selected)
     strip.style.horizontal_spacing = 6
     for _, item in ipairs(valid) do
         local member = (storage.topology or {})[item.name]
-        local button = add_styled(strip, {
+        local cell = add_cell(strip, SOLAR_BTN_SIZE, SOLAR_BTN_SIZE)
+        local button = add_styled(cell, {
             type = "sprite-button",
             name = SOLAR_BUTTON,
             sprite = item.path,
@@ -478,7 +485,11 @@ local function add_sidebar_row(grid, id, entry, selected)
     if current then
         caption = caption .. " (Current Location)"
     end
-    local button = add_styled(grid, {
+    -- The button lives in its own cell: its name is unique within THAT parent, which is
+    -- what the game requires. Never add it straight to the table.
+    local button_cell = add_cell(grid, BUTTON_W, ROW_H)
+    button_cell.style.horizontal_align = "left"
+    local button = add_styled(button_cell, {
         type = "button",
         name = SELECT,
         caption = caption,

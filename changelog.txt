@@ -1,4 +1,9 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.90
+Date: 2026-10-29
+  Fixed:
+    - the server list lost every sidebar button after the first in a section, and the solar strip lost all but one, because several elements shared one name inside one table. Each button now sits in its own cell, and a failed element creation is logged.
+---------------------------------------------------------------------------------------------------
 Version: 0.36.89
 Date: 2026-10-29
   Changed:
