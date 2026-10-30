@@ -1415,6 +1415,12 @@ local function pod_event(direction, platform, cargo, weight, id)
     return true
 end
 
+local function sweep_platform(platform)
+    if platform and platform.valid and is_connector(platform) then
+        pcall(function() platform.destroy_asteroid_chunks{} end)
+    end
+end
+
 local function tick()
     storage_ready()
 
@@ -1436,14 +1442,12 @@ local function tick()
 
     -- Asteroids accumulate on a real connector platform and damage its tiles; the game
     -- repairs them from the hub's foundation, which is what drained the starter-pack cargo.
-    -- There is no spawn event to hook, so a one-second sweep is the cheapest correct answer,
-    -- the same cadence the fleet's planet asteroid sweep already uses.
-    if game.tick - (storage.connector_asteroids_at or 0) >= 60 then
+    -- The sweep runs every 10 ticks, and an on_entity_spawned hook in events.lua also
+    -- destroys an asteroid chunk the moment the game raises that event for one.
+    if game.tick - (storage.connector_asteroids_at or 0) >= 10 then
         storage.connector_asteroids_at = game.tick
         for _, platform in pairs(force().platforms or {}) do
-            if platform.valid and is_connector(platform) then
-                pcall(function() platform.destroy_asteroid_chunks{} end)
-            end
+            sweep_platform(platform)
         end
     end
 
@@ -1544,6 +1548,7 @@ return {
     state_changed = state_changed,
     pod = pod_event,
     tick = tick,
+    sweep = sweep_platform,
     pad_requests = pad_requests,
     read_section = read_section,
     build_filters = build_filters,

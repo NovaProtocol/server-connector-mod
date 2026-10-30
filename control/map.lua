@@ -313,20 +313,45 @@ local function info_rows(entry, id, current)
     return rows
 end
 
+-- LAYOUT: every size in the window comes from these constants. Do not put a number anywhere
+-- else in the window code.
+local WINDOW_WIDTH = 760
+local SIDEBAR_WIDTH = 320
+local PAD = 8
+local ROW_H = 32
+local ICON_CELL = 28
+local BUTTON_W = 220
+local DOT_CELL = 16
+local DOT = 12
+local HEADER_PIC = 64
+local SOLAR_BTN_SIZE = 44
+local MIN_H = 360
+local MAX_H = 460
+local LABEL_W = 110
+local SOLAR_BUTTON = "server-connector-solar"
+
+-- A fixed-size holder. Icons and dots live in one, so a row's height and a column's width
+-- come from the cell and not from whatever is inside it. The icon fills the cell's width
+-- exactly, so its left edge is the cell's left edge and lines up with the text above it.
+local function add_cell(parent, width, height)
+    local cell = parent.add{type = "flow", direction = "horizontal"}
+    cell.style.width = width
+    cell.style.height = height
+    cell.style.horizontal_align = "center"
+    cell.style.vertical_align = "center"
+    return cell
+end
+
 local function add_info_table(parent, rows)
     local grid = parent.add{type = "table", column_count = 2}
-    grid.style.column_alignments[1] = "left"
     grid.style.horizontal_spacing = 16
     grid.style.vertical_spacing = 6
-
     for _, row in ipairs(rows) do
         local left = add_styled(grid, {type = "label", caption = row.label}, "caption_label")
-        if left then
-            left.style.width = 120
-        end
+        left.style.width = LABEL_W
         local right = grid.add{type = "label", caption = row.value}
         right.style.single_line = false
-        right.style.maximal_width = 380
+        right.style.maximal_width = 250
         if row.color then
             right.style.font_color = row.color
         end
@@ -338,17 +363,21 @@ local function add_player_list(parent, names)
         return
     end
     add_styled(parent, {type = "label", caption = "Players online"}, "caption_label")
-    local pane = parent.add{type = "scroll-pane", name = PLAYERS, direction = "vertical"}
+    local pane = add_styled(parent, {type = "scroll-pane", name = PLAYERS}, "naked_scroll_pane")
     pane.horizontal_scroll_policy = "never"
     pane.style.maximal_height = 140
     pane.style.horizontally_stretchable = true
     local list = pane.add{type = "flow", direction = "vertical"}
+    list.style.vertical_spacing = 2
     for _, name in ipairs(names) do
         list.add{type = "label", caption = name}
     end
 end
 
-local function build_solar(parent, id)
+-- The solar strip. Sprite-buttons centre their own icon, so nothing here positions a
+-- picture. Clicking one selects that server when it is part of the fleet; otherwise it is
+-- disabled.
+local function build_solar(parent, selected)
     local valid = {}
     for _, name in ipairs(SOLAR) do
         local path = "space-location/" .. name
@@ -362,25 +391,22 @@ local function build_solar(parent, id)
 
     parent.add{type = "line", direction = "horizontal"}
     add_styled(parent, {type = "label", caption = "Solar system"}, "caption_label")
-    local strip = parent.add{type = "flow", direction = "horizontal"}
+    local strip = parent.add{type = "table", column_count = #valid}
     strip.style.horizontal_spacing = 6
-    strip.style.horizontal_align = "left"
     for _, item in ipairs(valid) do
-        local style = item.name == id and "inside_deep_frame" or "inside_shallow_frame"
-        local frame = add_styled(strip, {type = "frame"}, style)
-        if frame then
-            frame.style.width = 48
-            frame.style.height = 48
-            frame.style.padding = 0
-            frame.style.horizontal_align = "center"
-            frame.style.vertical_align = "center"
-            frame.tooltip = item.name
-            local holder = frame.add{type = "flow", direction = "horizontal"}
-            holder.style.width = 44
-            holder.style.height = 44
-            holder.style.horizontal_align = "center"
-            holder.style.vertical_align = "center"
-            add_sprite(holder, item.path, 36, item.name)
+        local member = (storage.topology or {})[item.name]
+        local button = add_styled(strip, {
+            type = "sprite-button",
+            name = SOLAR_BUTTON,
+            sprite = item.path,
+            tags = {instance = item.name},
+            tooltip = (member and member.name) or item.name,
+        }, "slot_button", "button")
+        if button then
+            button.style.width = SOLAR_BTN_SIZE
+            button.style.height = SOLAR_BTN_SIZE
+            button.toggled = item.name == selected
+            button.enabled = member ~= nil
         end
     end
 end
@@ -398,98 +424,102 @@ local function build_detail(player, id)
     local current = id == state.instance()
     local status = status_of(entry)
 
-    local header = scroll.add{type = "flow", direction = "horizontal"}
-    header.style.vertical_align = "center"
-    header.style.horizontal_spacing = 12
-    header.style.horizontally_stretchable = true
+    local content = scroll.add{type = "flow", direction = "vertical"}
+    content.style.vertical_spacing = 8
+    content.style.horizontally_stretchable = true
 
-    local pic = header.add{type = "flow", direction = "horizontal"}
-    pic.style.width = 72
-    pic.style.height = 72
-    pic.style.horizontal_align = "center"
-    pic.style.vertical_align = "center"
+    -- Header: [picture][name + kind][dot]. Picture and dot are fixed cells of the same
+    -- height as the picture, so the three line up on one centre line.
+    local header = content.add{type = "flow", direction = "horizontal"}
+    header.style.horizontally_stretchable = true
+    header.style.horizontal_spacing = 12
+    header.style.vertical_align = "center"
+
+    local pic = add_cell(header, HEADER_PIC, HEADER_PIC)
     local icon = sprite_for(entry, id)
     if icon then
-        add_sprite(pic, icon, 64, full)
+        add_sprite(pic, icon, HEADER_PIC, full)
     end
 
     local text = header.add{type = "flow", direction = "vertical"}
     text.style.horizontally_stretchable = true
     text.style.vertical_spacing = 0
-    add_styled(text, {type = "label", caption = full}, "heading_1_label", "caption_label")
+    text.style.vertical_align = "center"
+    text.style.height = HEADER_PIC
+    local name_label = add_styled(text, {type = "label", caption = full}, "heading_1_label", "caption_label")
+    name_label.style.single_line = true
+    name_label.style.maximal_width = 260
     local kind = text.add{type = "label", caption = kind_text(entry)}
     kind.style.font_color = {r = 0.7, g = 0.7, b = 0.7}
 
-    add_sprite(header, status.sprite, 16, status.text)
+    local dot_cell = add_cell(header, DOT_CELL, HEADER_PIC)
+    add_sprite(dot_cell, status.sprite, DOT, status.text)
 
-    scroll.add{type = "line", direction = "horizontal"}
-    add_info_table(scroll, info_rows(entry, id, current))
-    add_player_list(scroll, current and live_players() or sorted_names(entry.player_names))
-    build_solar(scroll, id)
+    content.add{type = "line", direction = "horizontal"}
+    add_info_table(content, info_rows(entry, id, current))
+    add_player_list(content, current and live_players() or sorted_names(entry.player_names))
+    build_solar(content, id)
 end
 
-local function add_sidebar_row(list, id, entry, selected)
+-- One sidebar row = exactly three table cells: [icon cell][button][dot cell]. Every row in
+-- every section has the same three widths, so the buttons and dots form straight columns.
+local function add_sidebar_row(grid, id, entry, selected)
     local status = status_of(entry)
-    local row = list.add{type = "flow", direction = "horizontal"}
-    row.style.horizontal_spacing = 6
-    row.style.vertical_align = "center"
-    row.style.height = 36
+    local full = entry.name or id
+    local current = id == state.instance()
 
-    local cell = row.add{type = "flow", direction = "horizontal"}
-    cell.style.width = 28
-    cell.style.height = 28
-    cell.style.horizontal_align = "center"
-    cell.style.vertical_align = "center"
+    local icon_cell = add_cell(grid, ICON_CELL, ROW_H)
     local icon = sprite_for(entry, id)
     if icon then
-        add_sprite(cell, icon, 24, entry.name or id)
+        add_sprite(icon_cell, icon, ICON_CELL, full)
     end
 
-    local full = entry.name or id
     local caption = display_name(entry, id)
-    if id == state.instance() then
+    if current then
         caption = caption .. " (Current Location)"
     end
-    local button = add_styled(row, {
+    local button = add_styled(grid, {
         type = "button",
         name = SELECT,
         caption = caption,
         tags = {instance = id},
         tooltip = full,
-    }, id == state.instance() and "green_button" or "list_box_item", "confirm_button")
+    }, current and "green_button" or "list_box_item", "confirm_button")
     if button then
-        button.style.width = 210
-        button.style.height = 32
+        button.style.width = BUTTON_W
+        button.style.height = ROW_H
         button.style.horizontal_align = "left"
         button.toggled = id == selected
     end
 
-    add_sprite(row, status.sprite, 12, status.text)
+    local dot_cell = add_cell(grid, DOT_CELL, ROW_H)
+    add_sprite(dot_cell, status.sprite, DOT, status.text)
+end
+
+-- Returns how many rows it added, so the caller can tell whether anything was shown.
+local function add_sidebar_section(list, caption, rows, selected, first)
+    if #rows == 0 then
+        return 0
+    end
+    local header = add_styled(list, {type = "label", caption = caption}, "caption_label")
+    header.style.top_margin = first and 0 or 6
+    local grid = list.add{type = "table", column_count = 3}
+    grid.style.horizontal_spacing = 6
+    grid.style.vertical_spacing = 4
+    for _, row in ipairs(rows) do
+        add_sidebar_row(grid, row.id, row.entry, selected)
+    end
+    return #rows
 end
 
 local function build_sidebar(list, player)
     local groups = grouped()
     local selected = storage.map_selected and storage.map_selected[player.index]
-    local total = 0
-
-    local function section(caption, rows)
-        if #rows == 0 then
-            return
-        end
-        local header = add_styled(list, {type = "label", caption = caption}, "caption_label")
-        if header then
-            header.style.top_margin = 4
-        end
-        for _, row in ipairs(rows) do
-            add_sidebar_row(list, row.id, row.entry, selected)
-        end
-        total = total + #rows
-    end
-
-    section("Planets", groups.planets)
-    section("Space", groups.space)
-    section("Custom", groups.custom)
-    if total == 0 then
+    local shown = 0
+    shown = shown + add_sidebar_section(list, "Planets", groups.planets, selected, shown == 0)
+    shown = shown + add_sidebar_section(list, "Space", groups.space, selected, shown == 0)
+    shown = shown + add_sidebar_section(list, "Custom", groups.custom, selected, shown == 0)
+    if shown == 0 then
         list.add{type = "label", caption = "No servers."}
     end
 end
@@ -550,6 +580,7 @@ local function update_join(player)
     join.tooltip = tooltip
 end
 
+-- Walks the whole list, so it does not care how deep the buttons sit.
 local function update_toggled(player)
     local window = player.gui.screen[WINDOW]
     local list = window and find_child(window, LIST)
@@ -557,14 +588,16 @@ local function update_toggled(player)
         return
     end
     local selected = selected_for(player)
-    for _, row in ipairs(list.children or {}) do
-        for _, child in ipairs(row.children or {}) do
+    local function walk(root)
+        for _, child in ipairs(root.children or {}) do
             if child.name == SELECT then
-                local id = child.tags and child.tags.instance
-                child.toggled = id == selected
+                child.toggled = (child.tags and child.tags.instance) == selected
+            else
+                walk(child)
             end
         end
     end
+    walk(list)
 end
 
 -- Everything the window shows that the manager can change. The current server's live speed,
@@ -591,21 +624,18 @@ local function signature()
 end
 
 local function build(player)
-    local window = player.gui.screen[WINDOW]
-    if window then
-        window.destroy()
+    local old = player.gui.screen[WINDOW]
+    if old then
+        old.destroy()
     end
 
     local selected = selected_for(player)
 
-    local frame = player.gui.screen.add{
-        type = "frame",
-        name = WINDOW,
-        direction = "vertical",
-    }
+    local frame = player.gui.screen.add{type = "frame", name = WINDOW, direction = "vertical"}
     frame.auto_center = true
-    frame.style.width = 700
+    frame.style.width = WINDOW_WIDTH
 
+    -- Title bar.
     local title = frame.add{type = "flow", direction = "horizontal"}
     local title_label = add_styled(title, {type = "label", caption = "Servers"}, "frame_title")
     if title_label then
@@ -620,52 +650,47 @@ local function build(player)
     end
     add_close(title)
 
+    -- Body: two frames with IDENTICAL padding and identical minimal height, so the first
+    -- line of each side starts at the same y and the same inset.
     local body = frame.add{type = "flow", direction = "horizontal"}
     body.style.horizontally_stretchable = true
     body.style.vertical_align = "top"
     body.style.horizontal_spacing = 8
 
-    local left = add_styled(body, {type = "frame"}, "inside_shallow_frame")
-    left.style.width = 290
-    left.style.minimal_height = 330
-    local pane = left.add{type = "scroll-pane", direction = "vertical"}
+    local left = add_styled(body, {type = "frame", direction = "vertical"}, "inside_shallow_frame")
+    left.style.width = SIDEBAR_WIDTH
+    left.style.minimal_height = MIN_H
+    left.style.padding = PAD
+    local pane = add_styled(left, {type = "scroll-pane"}, "naked_scroll_pane")
     pane.horizontal_scroll_policy = "never"
-    pane.style.maximal_height = 460
+    pane.style.maximal_height = MAX_H
+    pane.style.horizontally_stretchable = true
     local list = pane.add{type = "flow", name = LIST, direction = "vertical"}
+    list.style.horizontally_stretchable = true
 
-    local right = add_styled(body, {
-        type = "frame",
-        name = DETAIL,
-        direction = "vertical",
-    }, "inside_shallow_frame_with_padding")
+    local right = add_styled(body, {type = "frame", name = DETAIL, direction = "vertical"}, "inside_shallow_frame")
     right.style.horizontally_stretchable = true
-    right.style.minimal_height = 330
-    local scroll = right.add{type = "scroll-pane", name = DETAIL_SCROLL, direction = "vertical"}
+    right.style.minimal_height = MIN_H
+    right.style.padding = PAD
+    local scroll = add_styled(right, {type = "scroll-pane", name = DETAIL_SCROLL}, "naked_scroll_pane")
     scroll.horizontal_scroll_policy = "never"
-    scroll.style.maximal_height = 460
+    scroll.style.maximal_height = MAX_H
     scroll.style.horizontally_stretchable = true
 
     build_sidebar(list, player)
     build_detail(player, selected)
 
+    -- Footer.
     local footer = frame.add{type = "flow", direction = "horizontal"}
     footer.style.horizontally_stretchable = true
     footer.style.horizontal_align = "right"
     footer.style.horizontal_spacing = 8
 
-    local cancel = add_styled(footer, {
-        type = "button",
-        name = CANCEL,
-        caption = "Cancel",
-    }, "back_button", "button")
+    local cancel = add_styled(footer, {type = "button", name = CANCEL, caption = "Cancel"}, "back_button", "button")
     if cancel then
         cancel.style.width = 100
     end
-    local join = add_styled(footer, {
-        type = "button",
-        name = JOIN,
-        caption = "Join",
-    }, "confirm_button", "button")
+    local join = add_styled(footer, {type = "button", name = JOIN, caption = "Join"}, "confirm_button", "button")
     if join then
         join.style.width = 100
     end
@@ -778,7 +803,7 @@ local function click(event)
         return
     end
 
-    if element.name == SELECT then
+    if element.name == SELECT or element.name == SOLAR_BUTTON then
         local id = element.tags and element.tags.instance
         if type(id) ~= "string" or not (storage.topology or {})[id] then
             return

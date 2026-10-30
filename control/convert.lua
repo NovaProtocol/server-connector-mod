@@ -534,11 +534,32 @@ local function settle()
     return {instance = instance(), settled = true, surfaces = table.concat(names, ",")}
 end
 
+-- The space server holds no one's base. Biters near the body on Nauvis killed the
+-- player, so: peaceful on every surface, cease-fire both ways, expansion off.
+-- Existing enemies are NOT removed. Map settings live in the save, so this is
+-- re-asserted rather than assumed.
+local function make_space_peaceful()
+    if instance() ~= "space" then
+        return
+    end
+    pcall(function() game.map_settings.enemy_expansion.enabled = false end)
+    for _, surface in pairs(game.surfaces) do
+        pcall(function() surface.peaceful_mode = true end)
+    end
+    local enemy = game.forces.enemy
+    local main = main_force()
+    if enemy and main then
+        pcall(function() enemy.set_cease_fire(main, true) end)
+        pcall(function() main.set_cease_fire(enemy, true) end)
+    end
+end
+
 return {
     disable_crash_site = disable_crash_site,
     ensure_surfaces = ensure_surfaces,
     settle_steps = settle_steps,
     sweep_asteroids = sweep_asteroids,
+    make_space_peaceful = make_space_peaceful,
     spawn_on_owned_surface = spawn_on_owned_surface,
 
     create_custom_surfaces = create_custom_surfaces,

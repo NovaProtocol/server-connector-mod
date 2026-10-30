@@ -1,4 +1,12 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.36.89
+Date: 2026-10-29
+  Changed:
+    - server window rebuilt on tables and fixed-size cells so every column aligns; planet strip is clickable.
+    - connector platforms are swept for asteroids every 10 ticks and on every platform state change.
+  Added:
+    - space server turns on peaceful mode, cease-fire and disables enemy expansion.
+---------------------------------------------------------------------------------------------------
 Version: 0.36.88
 Date: 2026-10-29
   Changed:

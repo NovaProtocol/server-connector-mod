@@ -113,6 +113,9 @@ every(60, "the heartbeat", when_known(outbound.tick_heartbeat))
 -- deterministic); the manager de-duplicates by event id.
 every(600, "the pod queue", pod.tick)
 
+-- The space server stays peaceful; re-asserted every ten seconds, a no-op elsewhere.
+every(600, "the space peace", when_known(convert.make_space_peaceful))
+
 -- The speed this world is kept at, put back on the game as the world comes up. The game
 -- writes its speed to nothing, so without this a restart is 1x until the manager says
 -- otherwise, and the manager is a poll away.
@@ -136,6 +139,7 @@ script.on_init(function()
         log("[" .. MOD .. "] instance=" .. state.instance())
         convert.disable_crash_site()
         convert.ensure_surfaces()
+        convert.make_space_peaceful()
         connector.ensure_all()
         restore_speed()
         debug.boot()
@@ -151,6 +155,7 @@ script.on_configuration_changed(function()
         end
         convert.disable_crash_site()
         convert.ensure_surfaces()
+        convert.make_space_peaceful()
         connector.ensure_all()
         restore_speed()
         -- Every player in the save gets the new one-button server menu, and the old
@@ -235,6 +240,7 @@ if defines.events.on_surface_created then
                 tostring(platform ~= nil and platforms.is_copy(platform))))
 
             reject_native_platform(surface, "a surface creation")
+            convert.make_space_peaceful()
         end)
     end)
 end
@@ -248,6 +254,32 @@ if defines.events.on_space_platform_created then
                 return
             end
             reject_native_platform(platform and platform.surface, "a platform creation")
+        end)
+    end)
+end
+
+
+-- An asteroid chunk spawning on a connector platform is destroyed at once. The event is
+-- optional across builds, so it is registered only when the game exposes it; the 10-tick
+-- sweep in connector.tick is the fallback.
+if defines.events.on_entity_spawned then
+    script.on_event(defines.events.on_entity_spawned, function(event)
+        guard("an entity spawn", function()
+            local entity = event.entity
+            if not entity or not entity.valid or entity.type ~= "asteroid-chunk" then
+                return
+            end
+            local surface = entity.surface
+            local platform = surface and surface.platform
+            if not platform or not connector.is_connector(platform) then
+                return
+            end
+            if not storage.asteroid_event_seen then
+                storage.asteroid_event_seen = true
+                log(string.format("[%s] on_entity_spawned fired for an asteroid chunk on %s",
+                    state.instance(), platform.name))
+            end
+            entity.destroy()
         end)
     end)
 end
@@ -308,6 +340,7 @@ script.on_event(defines.events.on_space_platform_changed_state, function(event)
     guard("a platform state change", function()
         debug.event("on_space_platform_changed_state", event)
         connector.state_changed(event)
+        connector.sweep(event.platform)
     end)
 end)
 
