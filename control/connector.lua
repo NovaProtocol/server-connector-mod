@@ -1416,8 +1416,32 @@ local function pod_event(direction, platform, cargo, weight, id)
 end
 
 local function sweep_platform(platform)
-    if platform and platform.valid and is_connector(platform) then
-        pcall(function() platform.destroy_asteroid_chunks{} end)
+    if not platform or not platform.valid or not is_connector(platform) then
+        return
+    end
+    pcall(function() platform.destroy_asteroid_chunks{} end)
+
+    -- Asteroids that already reached the surface are ordinary entities (type
+    -- "asteroid" for the medium and big ones, "asteroid-chunk" for the small ones).
+    -- destroy_asteroid_chunks does not remove those, so remove them directly.
+    local surface = platform.surface
+    if not surface then
+        return
+    end
+    local ok, entities = pcall(function() return surface.find_entities_filtered{} end)
+    if not ok or not entities then
+        return
+    end
+    local destroyed = 0
+    for _, entity in ipairs(entities) do
+        if entity.valid and (entity.type == "asteroid" or entity.type == "asteroid-chunk") then
+            if pcall(function() entity.destroy() end) then
+                destroyed = destroyed + 1
+            end
+        end
+    end
+    if destroyed > 0 then
+        debug.emit("connector swept %d asteroid(s) off %s", destroyed, platform.name)
     end
 end
 
@@ -1440,10 +1464,9 @@ local function tick()
         record("ready", {role = role(), version = version})
     end
 
-    -- Asteroids accumulate on a real connector platform and damage its tiles; the game
-    -- repairs them from the hub's foundation, which is what drained the starter-pack cargo.
-    -- The sweep runs every 10 ticks, and an on_entity_spawned hook in events.lua also
-    -- destroys an asteroid chunk the moment the game raises that event for one.
+    -- There is no event for an asteroid appearing. The sweep runs every 10 ticks on
+    -- connector platforms only and destroys both entity types: the chunk spawns and the
+    -- asteroids that already reached the surface.
     if game.tick - (storage.connector_asteroids_at or 0) >= 10 then
         storage.connector_asteroids_at = game.tick
         for _, platform in pairs(force().platforms or {}) do

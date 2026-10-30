@@ -99,10 +99,6 @@ every(3600, "the foreign chunks", when_known(chunks.sweep))
 -- poll of the game.
 every(1, "the connector queue", when_known(connector.tick))
 
--- The map is shown only while the map view is open, and there is no event for opening it,
--- so the list is refreshed (and shown or hidden) on this pass.
-every(60, "the server map", when_known(map.tick))
-
 -- Research progress is pushed over UDP only when it moved, once a second.
 every(60, "outbound research", when_known(outbound.tick_research))
 
@@ -258,31 +254,6 @@ if defines.events.on_space_platform_created then
     end)
 end
 
-
--- An asteroid chunk spawning on a connector platform is destroyed at once. The event is
--- optional across builds, so it is registered only when the game exposes it; the 10-tick
--- sweep in connector.tick is the fallback.
-if defines.events.on_entity_spawned then
-    script.on_event(defines.events.on_entity_spawned, function(event)
-        guard("an entity spawn", function()
-            local entity = event.entity
-            if not entity or not entity.valid or entity.type ~= "asteroid-chunk" then
-                return
-            end
-            local surface = entity.surface
-            local platform = surface and surface.platform
-            if not platform or not connector.is_connector(platform) then
-                return
-            end
-            if not storage.asteroid_event_seen then
-                storage.asteroid_event_seen = true
-                log(string.format("[%s] on_entity_spawned fired for an asteroid chunk on %s",
-                    state.instance(), platform.name))
-            end
-            entity.destroy()
-        end)
-    end)
-end
 
 -- A logistic request change on a connector hub or the landing pad. This is the event the
 -- old polling was standing in for. The whole connector state travels with it: the manager

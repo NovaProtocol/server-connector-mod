@@ -4,7 +4,8 @@
 -- into a sidebar and a detail panel. The sidebar groups the fleet into Planets, Space and
 -- Custom; selecting a row rebuilds only the right-hand scroll-pane. The footer carries the
 -- only Join button and a Cancel button. The window is built only when opened and rebuilt
--- only when the fields it displays change; the selection is kept in storage per player.
+-- only when the server list itself changes; live values are updated in place by
+-- set_server_status. There is no polling. The selection is kept in storage per player.
 --
 -- Required as "__server-connector-mod__.control.map".
 
@@ -25,6 +26,9 @@ local JOIN = "server-connector-join"
 local LEGACY = "server-connector-map"
 
 local SOLAR = {"nauvis", "vulcanus", "gleba", "fulgora", "aquilo", "solar-system-edge", "shattered-planet"}
+
+local DOT_NAME = "server-connector-dot"
+local VALUE_PREFIX = "server-connector-v-"
 
 local function destroy_legacy(player)
     if not player or not player.valid then
@@ -266,6 +270,30 @@ local function sorted_names(names)
     return out
 end
 
+local function ups_band(entry)
+    if type(entry.ups) ~= "number" then
+        return "none"
+    end
+    if entry.ups < 30 then
+        return "red"
+    end
+    if entry.ups < 55 then
+        return "yellow"
+    end
+    return "ok"
+end
+
+-- Everything that needs a REBUILD of the detail panel (a colour, a list, a status).
+-- Plain numbers are not in here: they change in place.
+local function detail_key(entry)
+    return table.concat({
+        tostring(entry.online),
+        tostring(entry.address or ""),
+        ups_band(entry),
+        table.concat(sorted_names(entry.player_names), "\28"),
+    }, "\31")
+end
+
 local function live_players()
     local names = {}
     for _, player in pairs(game.connected_players) do
@@ -277,8 +305,9 @@ end
 
 local function info_rows(entry, id, current)
     local rows = {}
-    local function push(label, value, color)
+    local function push(key, label, value, color)
         rows[#rows + 1] = {
+            key = key,
             label = label,
             value = value == nil and "—" or tostring(value),
             color = color,
@@ -289,11 +318,9 @@ local function info_rows(entry, id, current)
     if storage.hide_addresses == true then
         address = "hidden"
     end
-    push("Address", address)
-    push("Server id", id)
-
-    local players = current and #game.connected_players or entry.players
-    push("Players", players)
+    push("address", "Address", address)
+    push("id", "Server id", id)
+    push("players", "Players", current and #game.connected_players or entry.players)
 
     if type(entry.ups) == "number" then
         local color
@@ -302,20 +329,19 @@ local function info_rows(entry, id, current)
         elseif entry.ups < 55 then
             color = {r = 1, g = 0.9, b = 0.2}
         end
-        push("UPS", string.format("%.1f", entry.ups), color)
+        push("ups", "UPS", string.format("%.1f", entry.ups), color)
     else
-        push("UPS", nil)
+        push("ups", "UPS", nil)
     end
 
     local speed = current and game.speed or entry.game_speed
     if type(speed) == "number" then
-        push("Game speed", string.format("%.1fx", speed))
+        push("speed", "Game speed", string.format("%.1fx", speed))
     else
-        push("Game speed", nil)
+        push("speed", "Game speed", nil)
     end
 
-    local tick = current and game.tick or entry.game_tick
-    push("Game tick", tick)
+    push("tick", "Game tick", current and game.tick or entry.game_tick)
     return rows
 end
 
@@ -355,7 +381,7 @@ local function add_info_table(parent, rows)
     for _, row in ipairs(rows) do
         local left = add_styled(grid, {type = "label", caption = row.label}, "caption_label")
         left.style.width = LABEL_W
-        local right = grid.add{type = "label", caption = row.value}
+        local right = grid.add{type = "label", name = VALUE_PREFIX .. row.key, caption = row.value}
         right.style.single_line = false
         right.style.maximal_width = 250
         if row.color then
@@ -466,6 +492,9 @@ local function build_detail(player, id)
     add_info_table(content, info_rows(entry, id, current))
     add_player_list(content, current and live_players() or sorted_names(entry.player_names))
     build_solar(content, id)
+
+    storage.map_detail = storage.map_detail or {}
+    storage.map_detail[player.index] = {id = id, key = detail_key(entry)}
 end
 
 -- One sidebar row = exactly three table cells: [icon cell][button][dot cell]. Every row in
@@ -504,7 +533,9 @@ local function add_sidebar_row(grid, id, entry, selected)
     end
 
     local dot_cell = add_cell(grid, DOT_CELL, ROW_H)
-    add_sprite(dot_cell, status.sprite, DOT, status.text)
+    local dot = add_sprite(dot_cell, status.sprite, DOT, status.text)
+    dot.name = DOT_NAME
+    dot.tags = {instance = id}
 end
 
 -- Returns how many rows it added, so the caller can tell whether anything was shown.
@@ -611,9 +642,64 @@ local function update_toggled(player)
     walk(list)
 end
 
--- Everything the window shows that the manager can change. The current server's live speed,
--- tick and players are deliberately absent: including them would rebuild the whole window
--- every tick. Player names are included in full so the list stays right past twelve.
+local function find_dot(root, id)
+    for _, child in ipairs(root.children or {}) do
+        if child.name == DOT_NAME and child.tags and child.tags.instance == id then
+            return child
+        end
+        local found = find_dot(child, id)
+        if found then
+            return found
+        end
+    end
+    return nil
+end
+
+-- A status push for one server. Called by the manager's set_server_status. This is the
+-- event; there is no timer. It touches only what changed.
+local function update_status(id)
+    local entry = (storage.topology or {})[id]
+    if not entry then
+        return
+    end
+    local status = status_of(entry)
+    for _, player in pairs(game.connected_players) do
+        local window = player.gui.screen[WINDOW]
+        if window then
+            local list = find_child(window, LIST)
+            local dot = list and find_dot(list, id)
+            if dot and dot.valid and dot.type == "sprite" then
+                if dot.sprite ~= status.sprite then
+                    dot.sprite = status.sprite
+                end
+                if dot.tooltip ~= status.text then
+                    dot.tooltip = status.text
+                end
+            end
+
+            if selected_for(player) == id then
+                local seen = storage.map_detail and storage.map_detail[player.index]
+                if not seen or seen.id ~= id or seen.key ~= detail_key(entry) then
+                    build_detail(player, id)
+                else
+                    local scroll = find_child(window, DETAIL_SCROLL)
+                    if scroll then
+                        for _, row in ipairs(info_rows(entry, id, id == state.instance())) do
+                            local label = find_child(scroll, VALUE_PREFIX .. row.key)
+                            if label and label.valid and label.caption ~= row.value then
+                                label.caption = row.value
+                            end
+                        end
+                    end
+                end
+                update_join(player)
+            end
+        end
+    end
+end
+
+-- Only what forces a rebuild: the server list itself. Live values are updated in place by
+-- update_status, so none of them may appear here.
 local function signature()
     local parts = {tostring(state.instance()), tostring(storage.hide_addresses)}
     for _, id in ipairs(sorted_ids()) do
@@ -623,12 +709,6 @@ local function signature()
             tostring(entry.name or id),
             tostring(entry.kind or ""),
             tostring(entry.address or ""),
-            tostring(entry.online),
-            tostring(entry.players),
-            table.concat(sorted_names(entry.player_names), "\28"),
-            tostring(entry.ups),
-            tostring(entry.game_speed),
-            tostring(entry.game_tick),
         }, "\31")
     end
     return table.concat(parts, "\30")
@@ -721,6 +801,9 @@ local function close(player)
     if storage.map_seen then
         storage.map_seen[player.index] = nil
     end
+    if storage.map_detail then
+        storage.map_detail[player.index] = nil
+    end
 end
 
 local function open(player)
@@ -787,7 +870,6 @@ local function refresh_all()
 end
 
 local function tick()
-    refresh_open()
 end
 
 local function click(event)
@@ -867,6 +949,7 @@ return {
     refresh = refresh,
     refresh_all = refresh_all,
     refresh_open = refresh_open,
+    update_status = update_status,
     tick = tick,
     click = click,
     closed = closed,

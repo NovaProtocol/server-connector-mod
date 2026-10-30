@@ -209,7 +209,7 @@ local calls = {
                 entry.players = players
             end
         end
-        map.refresh_open()
+        map.update_status(id)
         return true
     end,
 
