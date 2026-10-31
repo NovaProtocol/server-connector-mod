@@ -846,15 +846,15 @@ local function refresh(player)
     end
 end
 
--- Only players who currently have the window open. If nobody has it open this does nothing.
+-- Every connected player, not only those with the window open: refresh() also puts the
+-- button back. A player who joined before the identity arrived had their button removed,
+-- and nothing else re-added it -- the topology push lands here.
 local function refresh_open()
     if not state.known() then
         return
     end
     for _, player in pairs(game.connected_players) do
-        if player.gui.screen[WINDOW] then
-            refresh(player)
-        end
+        refresh(player)
     end
 end
 

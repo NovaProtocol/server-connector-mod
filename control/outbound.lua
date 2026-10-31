@@ -10,6 +10,8 @@
 local state = require("__server-connector-mod__.control.state")
 local bus = require("__server-connector-mod__.control.bus")
 
+local main_force = state.main_force
+
 -- The transport lives in bus.lua so that platforms.lua can push without requiring this
 -- module, which requires it. The names stay exported here: every caller outside this file
 -- keeps using outbound.push, and the cycle has no way back.

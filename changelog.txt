@@ -1,4 +1,10 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.37.2
+Date: 2026-10-31
+  Fixed:
+    - the Servers button never came back for a player who joined before the identity arrived. The topology push refreshes every connected player now, not only the ones with the window open.
+    - outbound research threw on every tick because main_force was not in scope, so no research progress was ever pushed.
+---------------------------------------------------------------------------------------------------
 Version: 0.37.1
 Date: 2026-10-31
   Fixed:
