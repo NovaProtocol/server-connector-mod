@@ -1,4 +1,11 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.37.1
+Date: 2026-10-31
+  Fixed:
+    - peaceful mode is set on the space server's nauvis body only. It was applied to every surface, and the cease-fire was a force-pair setting, so the platforms' turrets stopped firing at asteroids.
+  Added:
+    - the body's freshly generated chunks are swept for ten seconds after a join, keeping the player's 3x3 chunk block. The body has no chunks of its own and regenerates around whoever stands on it.
+---------------------------------------------------------------------------------------------------
 Version: 0.37.0
 Date: 2026-10-29
   Changed:

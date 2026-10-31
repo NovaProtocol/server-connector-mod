@@ -534,24 +534,71 @@ local function settle()
     return {instance = instance(), settled = true, surfaces = table.concat(names, ",")}
 end
 
--- The space server holds no one's base. Biters near the body on Nauvis killed the
--- player, so: peaceful on every surface, cease-fire both ways, expansion off.
--- Existing enemies are NOT removed. Map settings live in the save, so this is
--- re-asserted rather than assumed.
-local function make_space_peaceful()
+-- The space server's body. Nobody can build on it, so it stays peaceful: biters there
+-- killed the player who stepped onto it. Peaceful is a per-surface flag on nauvis alone.
+-- Cease-fire is a force-pair setting and applies to every surface, the platforms
+-- included, where it disarmed their turrets -- so it is not used at all. Existing
+-- enemies are not removed, and the flag is re-asserted because it lives in the save.
+local BODY = "nauvis"
+
+local function body()
     if instance() ~= "space" then
+        return nil
+    end
+    return game.surfaces[BODY]
+end
+
+local function keep_body_calm()
+    local surface = body()
+    if not surface then
         return
     end
-    pcall(function() game.map_settings.enemy_expansion.enabled = false end)
-    for _, surface in pairs(game.surfaces) do
-        pcall(function() surface.peaceful_mode = true end)
+    if surface.peaceful_mode then
+        return
     end
-    local enemy = game.forces.enemy
-    local main = main_force()
-    if enemy and main then
-        pcall(function() enemy.set_cease_fire(main, true) end)
-        pcall(function() main.set_cease_fire(enemy, true) end)
+    pcall(function() surface.peaceful_mode = true end)
+end
+
+-- The body carries no chunks of its own: they generate around whoever stands on it, with
+-- fresh biter nests. Deleting is therefore a sweep rather than a fix, and it is bounded
+-- so a join cannot stall the server. The player's 3x3 chunk block is kept, because the
+-- chunk under a player cannot be deleted and taking its neighbours out can drop the
+-- ground away from under them.
+local CLEAR_PER_TICK = 64
+
+local function clear_body_chunks()
+    local surface = body()
+    if not surface then
+        return 0
     end
+    local keep = {}
+    for _, player in pairs(game.connected_players) do
+        if player.valid and player.surface == surface then
+            local x = math.floor(player.position.x / 32)
+            local y = math.floor(player.position.y / 32)
+            for dx = -1, 1 do
+                for dy = -1, 1 do
+                    keep[(x + dx) .. ":" .. (y + dy)] = true
+                end
+            end
+        end
+    end
+    local removed, kept = 0, 0
+    for chunk in surface.get_chunks() do
+        if removed >= CLEAR_PER_TICK then
+            break
+        end
+        if keep[chunk.x .. ":" .. chunk.y] then
+            kept = kept + 1
+        elseif pcall(function() return surface.delete_chunk(chunk) end) then
+            removed = removed + 1
+        end
+    end
+    if removed > 0 then
+        log(string.format("[%s] cleared %d chunk(s) off the body, kept %d",
+            instance(), removed, kept))
+    end
+    return removed
 end
 
 return {
@@ -559,7 +606,8 @@ return {
     ensure_surfaces = ensure_surfaces,
     settle_steps = settle_steps,
     sweep_asteroids = sweep_asteroids,
-    make_space_peaceful = make_space_peaceful,
+    keep_body_calm = keep_body_calm,
+    clear_body_chunks = clear_body_chunks,
     spawn_on_owned_surface = spawn_on_owned_surface,
 
     create_custom_surfaces = create_custom_surfaces,

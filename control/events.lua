@@ -112,8 +112,16 @@ every(60, "the heartbeat", when_known(outbound.tick_heartbeat))
 -- deterministic); the manager de-duplicates by event id.
 every(600, "the pod queue", pod.tick)
 
--- The space server stays peaceful; re-asserted every ten seconds, a no-op elsewhere.
-every(600, "the space peace", when_known(convert.make_space_peaceful))
+-- The space server's body stays peaceful, and chunks that generate around a player who
+-- is standing on it are swept for ten seconds after a join. A no-op elsewhere.
+every(60, "the body calm", when_known(function()
+    convert.keep_body_calm()
+    local left = tonumber(storage.body_clear) or 0
+    if left > 0 then
+        storage.body_clear = left - 60
+        convert.clear_body_chunks()
+    end
+end))
 
 -- The speed this world is kept at, put back on the game as the world comes up. The game
 -- writes its speed to nothing, so without this a restart is 1x until the manager says
@@ -138,7 +146,7 @@ script.on_init(function()
         log("[" .. MOD .. "] instance=" .. state.instance())
         convert.disable_crash_site()
         convert.ensure_surfaces()
-        convert.make_space_peaceful()
+        convert.keep_body_calm()
         connector.ensure_all()
         restore_speed()
         debug.boot()
@@ -159,7 +167,7 @@ script.on_configuration_changed(function()
         end
         convert.disable_crash_site()
         convert.ensure_surfaces()
-        convert.make_space_peaceful()
+        convert.keep_body_calm()
         connector.ensure_all()
         restore_speed()
         -- Every player in the save gets the new one-button server menu, and the old
@@ -244,7 +252,7 @@ if defines.events.on_surface_created then
                 tostring(platform ~= nil and platforms.is_copy(platform))))
 
             reject_native_platform(surface, "a surface creation")
-            convert.make_space_peaceful()
+            convert.keep_body_calm()
         end)
     end)
 end
@@ -387,6 +395,9 @@ script.on_event(defines.events.on_player_joined_game, function(event)
             state.note("joined", player)
             server.apply_join_rule(player)
             map.refresh(player)
+            -- Ten seconds of sweeping the body's freshly generated chunks. The pass itself
+            -- does nothing on an instance that has no body.
+            storage.body_clear = 600
         end
     end)
 end)
