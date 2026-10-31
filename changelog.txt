@@ -1,4 +1,9 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.37.3
+Date: 2026-10-31
+  Fixed:
+    - a space platform created on a planet server was destroyed there and never rebuilt, because the adoption path was never called. The request is carried to the space server with the same name and the same planet, and re-sent until it lands. A platform created on the space server is left exactly as it is.
+---------------------------------------------------------------------------------------------------
 Version: 0.37.2
 Date: 2026-10-31
   Fixed:

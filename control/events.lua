@@ -112,6 +112,11 @@ every(60, "the heartbeat", when_known(outbound.tick_heartbeat))
 -- deterministic); the manager de-duplicates by event id.
 every(600, "the pod queue", pod.tick)
 
+-- Re-send a carried platform request until the space server has it. The first message is
+-- a datagram and can be dropped; the record lives until a copy of the platform exists
+-- here again or the platform has been renamed.
+every(600, "the native creates", when_known(platforms.retry_native_creates))
+
 -- The space server's body stays peaceful, and chunks that generate around a player who
 -- is standing on it are swept for ten seconds after a join. A no-op elsewhere.
 every(60, "the body calm", when_known(function()
@@ -211,22 +216,26 @@ script.on_event(defines.events.on_space_platform_mined_entity, function(event)
     end)
 end)
 
--- A native platform surface on a planet is a duplicate. The connector already exists (or
--- is made here); the native one goes, and the connector is ensured on both sides by the
--- manager. There is no separate adoption message any more.
+-- A native platform surface on a planet cannot be owned by that planet. The player's
+-- request is carried to the space server, which is the only place a real platform lives.
 local function reject_native_platform(surface, what)
     guard(what, function()
         -- A platform this mod is creating raises the same events. Let create_platform
         -- finish; its own checks and the next ensure handle the result.
-        if storage.connector_creating then
+        if storage.connector_creating or storage.creating_copy then
             return
         end
         local platform = surface and surface.platform
-        if platform and platform.valid and connector.is_connector(platform) then
-            return
-        end
         if platform and platform.valid then
-            debug.dump("reject_native platform", debug.platform_table(platform))
+            if connector.is_connector(platform) then
+                return
+            end
+            debug.dump("native platform", debug.platform_table(platform))
+            -- A platform the game made natively on a planet is a request, not something
+            -- that planet can own: it is destroyed here and asked for on the space server
+            -- under the same name at the same planet. The space server leaves its own
+            -- platforms exactly as they are (adopt_native_platform returns there).
+            platforms.adopt_native_platform(platform, platform.name)
         end
         connector.ensure_all()
     end)

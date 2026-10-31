@@ -321,6 +321,16 @@ end
 -- platform and for an extra one with a duplicate name; the two branches had the same body.
 -- Defined here because it calls destroy_copy, which is below the transport helpers.
 local function adopt_native_platform(platform, name)
+    -- The space server is where the real platforms live: a platform created there is
+    -- already in the right place and is left exactly as it is.
+    if instance() == "space" then
+        return false
+    end
+    -- A copy is this server's own mirror, not a request from a player. Only a native one
+    -- is carried over.
+    if not platform or not platform.valid or is_copy(platform) then
+        return false
+    end
     local location = platform.space_location and platform.space_location.name or instance()
     if not destroy_copy(platform) then
         log(string.format("[%s] could not remove native %s", instance(), tostring(name)))
@@ -328,8 +338,8 @@ local function adopt_native_platform(platform, name)
     end
     remember_native_create(name, location)
     report_platform_create(name, location)
-    log(string.format("[%s] removed native %s and asked the space server to create it",
-        instance(), tostring(name)))
+    log(string.format("[%s] removed native %s and asked the space server to create it at %s",
+        instance(), tostring(name), tostring(location)))
     return true
 end
 
