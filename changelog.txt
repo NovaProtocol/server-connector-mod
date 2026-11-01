@@ -1,4 +1,13 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.37.4
+Date: 2026-10-31
+  Added:
+    - every connector hub gets a free base grid of 320 cargo bays (18x18 bays, the hub in the middle 2x2), on foundation tiles. The bays cannot be mined and are not part of the mirrored layout.
+  Fixed:
+    - a planet server no longer deletes pending platform requests or native platforms in ensure_all. A native platform is reported to the manager and then removed.
+    - the wrong-planet request move runs (it was never scheduled), is live by default, and uses destroy(1).
+    - a platform created on a planet server is carried to the space server with its starter pack, quality, a request id and an ack; a name collision gets a suffix instead of merging.
+---------------------------------------------------------------------------------------------------
 Version: 0.37.3
 Date: 2026-10-31
   Fixed:

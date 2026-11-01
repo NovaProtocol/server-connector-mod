@@ -24,7 +24,7 @@ local debug = require("__server-connector-mod__.control.debug")
 local instance = state.instance
 local main_force = state.main_force
 
-local TTL = 18000
+local TTL = 216000
 local MAX_PER_PASS = 5
 local DEFAULT_PACK = "space-platform-starter-pack"
 local PROBE_VERSION = 60
@@ -36,29 +36,12 @@ local function ensure()
 end
 
 local function live()
-    return storage.request_purge_live == true
+    return storage.request_purge_live ~= false
 end
 
 -- Pending only if every check passes. Anything unclear means "keep".
 local function is_pending(p)
-    if not p or not p.valid or p.scheduled_for_deletion ~= 0 then
-        return false
-    end
-    if platforms.is_copy(p) then
-        return false
-    end
-
-    local ok1, hub = pcall(function() return p.hub end)
-    local ok2, surface = pcall(function() return p.surface end)
-    if not (ok1 and ok2) or hub ~= nil or surface ~= nil then
-        return false
-    end
-
-    local waiting = defines.space_platform_state.waiting_for_starter_pack
-    if waiting ~= nil and p.state ~= waiting then
-        return false
-    end
-    return true
+    return platforms.is_pending_request(p)
 end
 
 -- The one place that decides which planet a request is for. nil means unknown, and an
@@ -226,11 +209,11 @@ local function purge()
                         quality = quality,
                         at = game.tick,
                     })
-                    local destroyed = pcall(function() p.destroy() end)
+                    local destroyed, derr = pcall(function() p.destroy(1) end)
                     if not destroyed then
                         storage.request_moves[name] = nil
-                        log(string.format("[%s] could not destroy the request %s; keeping it",
-                            instance(), tostring(name)))
+                        log(string.format("[%s] could not destroy the request %s; keeping it: %s",
+                            instance(), tostring(name), tostring(derr)))
                         debug.emit("purge: p.destroy() failed for %s", tostring(name))
                     else
                         bus.push("platform_request_moved", {
@@ -242,9 +225,10 @@ local function purge()
                             quality = quality,
                             tick = game.tick,
                         })
+                        local owner = (storage.topology or {})[planet]
                         main_force().print(string.format(
                             "Platform request '%s' belongs to the %s server and was moved there. Go there to launch it.",
-                            tostring(name), tostring(planet)))
+                            tostring(name), tostring(owner and owner.name or planet)))
                         moved = moved + 1
                     end
                 end
@@ -258,6 +242,16 @@ end
 -- sequence has to be identical on every peer.
 local function resend()
     ensure()
+    -- The anti-bounce records are short-lived: an hour is long enough that a request that
+    -- bounced is not moved back and forth for ever.
+    for name, at in pairs(storage.request_in) do
+        if game.tick - at > 3600 then
+            storage.request_in[name] = nil
+            if storage.request_in_id then
+                storage.request_in_id[name] = nil
+            end
+        end
+    end
     local names = {}
     for name in pairs(storage.request_moves) do
         names[#names + 1] = name
@@ -278,7 +272,9 @@ local function resend()
             age = age,
             acked = record.acked,
         })
-        if age > TTL then
+        if record.acked and game.tick - (record.acked_at or record.at or 0) > 600 then
+            storage.request_moves[name] = nil
+        elseif age > TTL then
             if not record.acked then
                 log(string.format("[%s] request %s moved but was never acknowledged", instance(), name))
             end
@@ -322,15 +318,30 @@ local function create(args)
         return {ok = false, error = "name too long"}
     end
 
+    -- A resend of the same request is idempotent; a DIFFERENT platform with the same name
+    -- gets a suffix instead of merging.
+    ensure()
+    storage.request_in_id = storage.request_in_id or {}
+    local final = name
     for _, p in pairs(main_force().platforms or {}) do
         if p and p.valid and p.name == name then
-            ensure()
-            if storage.request_in[name] then
-                debug.emit("request_platform: %s already here (existed)", name)
+            if args.id and storage.request_in_id[name] == args.id then
                 return {ok = true, existed = true, name = name, index = p.index}
             end
-            debug.emit("request_platform: %s is taken on %s", name, here)
-            return {ok = false, error = "name_taken"}
+            if not args.id and storage.request_in[name] then
+                return {ok = true, existed = true, name = name, index = p.index}
+            end
+            local n = 1
+            repeat
+                n = n + 1
+                final = string.format("%s (%s%s)", name, tostring(args.origin or here),
+                    n > 2 and (" " .. (n - 1)) or "")
+                local taken = false
+                for _, q in pairs(main_force().platforms or {}) do
+                    if q.valid and q.name == final then taken = true break end
+                end
+            until not taken or n > 50
+            break
         end
     end
 
@@ -348,28 +359,29 @@ local function create(args)
 
     local ok, made = pcall(function()
         return main_force().create_space_platform{
-            name = name,
+            name = final,
             planet = here,
             starter_pack = quality and {name = pack, quality = quality} or pack,
         }
     end)
     if not ok or not made then
-        debug.emit("request_platform: create_space_platform failed for %s: %s", name, tostring(made))
+        debug.emit("request_platform: create_space_platform failed for %s: %s", final, tostring(made))
         return {ok = false, error = tostring(made)}
     end
 
     ensure()
-    storage.request_in[name] = game.tick
+    storage.request_in[final] = game.tick
+    storage.request_in_id[final] = args.id
     debug.dump("request_platform created", {
-        name = name,
+        name = final,
         index = made.index,
         planet = here,
         pack = pack,
         quality = quality,
         platform = debug.platform_table(made),
     })
-    log(string.format("[%s] recreated platform request %s for %s", instance(), name, here))
-    return {ok = true, name = name, index = made.index}
+    log(string.format("[%s] recreated platform request %s for %s", instance(), final, here))
+    return {ok = true, name = final, requested = name, renamed = final ~= name, index = made.index}
 end
 
 local function ack(args)
@@ -381,6 +393,13 @@ local function ack(args)
     for name, record in pairs(storage.request_moves) do
         if record.id == args.id then
             record.acked = true
+            record.acked_at = game.tick
+            if args.failed then
+                main_force().print(string.format(
+                    "Platform request '%s' could not be moved: %s. Please make it again.",
+                    name, tostring(args.error or "unknown error")))
+                storage.request_moves[name] = nil
+            end
             debug.emit("request_moved_ack: %s acknowledged", name)
             return {ok = true, name = name}
         end

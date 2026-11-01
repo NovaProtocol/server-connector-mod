@@ -424,8 +424,32 @@ local function protect(platform)
         end
     end
     one(platform.hub)
-    for _, bay in ipairs(platforms.bay_list(platform) or {}) do
+    for _, bay in ipairs(platforms.all_bays(platform) or {}) do
         one(bay)
+        if platforms.is_base_bay(platform.hub, bay) then
+            pcall(function() bay.minable_flag = false end)
+        end
+    end
+end
+
+-- The base grid is built one platform per tick, never in a burst. The key is the hub's
+-- unit number and position, so a rebuilt hub is a new grid while a moved one is not.
+local function grid_key(platform)
+    local hub = platform.hub
+    return string.format("%s:%.1f,%.1f", tostring(hub.unit_number), hub.position.x, hub.position.y)
+end
+
+local function queue_base_grid(platform)
+    if not platform or not platform.valid or not platform.hub or not platform.hub.valid then
+        return
+    end
+    storage.base_grid_done = storage.base_grid_done or {}
+    if storage.base_grid_done[platform.name] == grid_key(platform) then
+        return
+    end
+    storage.base_grid_queue = storage.base_grid_queue or {}
+    if storage.base_grid_queue[platform.name] == nil then
+        storage.base_grid_queue[platform.name] = 0
     end
 end
 
@@ -493,6 +517,7 @@ local function create_platform(planet)
 
     pcall(function() created.destroy_asteroid_chunks{} end)
     protect(created)
+    queue_base_grid(created)
     storage.connector_repairing[planet] = nil
     record("created", {planet = planet, name = name})
     log(string.format("[%s] created connector %s at %s", INSTANCE(), name, planet))
@@ -507,7 +532,7 @@ remove = function(platform, why)
         pcall(function() platform.hub.destructible = true end)
         pcall(function() platform.hub.minable_flag = true end)
     end
-    for _, bay in ipairs(platforms.bay_list(platform) or {}) do
+    for _, bay in ipairs(platforms.all_bays(platform) or {}) do
         pcall(function() bay.destructible = true end)
         pcall(function() bay.minable_flag = true end)
     end
@@ -560,12 +585,13 @@ local function ensure_all()
         end
         for _, platform in pairs(force().platforms or {}) do
             if platform.valid and platform.name ~= PLANET_PLATFORM_NAME then
-                remove(platform, "not the connector")
+                platforms.settle_stray(platform)
             end
         end
         for _, platform in pairs(force().platforms or {}) do
             if is_connector(platform) then
                 protect(platform)
+                queue_base_grid(platform)
                 enforce_platform(platform, {}, INSTANCE())
             end
         end
@@ -592,6 +618,7 @@ local function ensure_all()
         for _, platform in pairs(force().platforms or {}) do
             if is_connector(platform) then
                 protect(platform)
+                queue_base_grid(platform)
                 enforce_platform(platform, {}, planet_of(platform))
             end
         end
@@ -1016,6 +1043,9 @@ local function build_bay(payload)
     if not x or not y then
         return {ok = false, error = "bad offset"}
     end
+    if platforms.is_base_offset(x, y) then
+        return {ok = true, skipped = "base slot"}
+    end
 
     local hub = platform.hub.position
     local position = {x = hub.x + x, y = hub.y + y}
@@ -1059,6 +1089,9 @@ local function remove_bay(payload)
     local x, y = parse_offset(payload.offset)
     if not x or not y then
         return {ok = false, error = "bad offset"}
+    end
+    if platforms.is_base_offset(x, y) then
+        return {ok = true, skipped = "base slot"}
     end
 
     local hub = platform.hub.position
@@ -1259,6 +1292,9 @@ local function guard_build(event)
         debit_clock()
         -- A rebuilt hub is a new anchor for every bay offset. A state push carries no shape,
         -- so the pair could stay different until a restart; push the whole shape instead.
+        storage.base_grid_done = storage.base_grid_done or {}
+        storage.base_grid_done[platform.name] = nil
+        queue_base_grid(platform)
         push_full(planet)
         return
     end
@@ -1485,6 +1521,37 @@ local function tick()
         storage.connector_asteroids_at = game.tick
         for _, platform in pairs(force().platforms or {}) do
             sweep_platform(platform)
+        end
+    end
+
+    -- The base grid, one platform per tick. Five tries with a second between them, then the
+    -- platform is left alone: a base slot a player already built is never moved or removed.
+    local queue = storage.base_grid_queue
+    if queue and next(queue) ~= nil and game.tick >= (storage.base_grid_not_before or 0) then
+        local name, tries = next(queue)
+        queue[name] = nil
+        local target = nil
+        for _, candidate in pairs(force().platforms or {}) do
+            if candidate.valid and candidate.name == name and is_connector(candidate) then
+                target = candidate
+                break
+            end
+        end
+        if target and target.hub and target.hub.valid and (target.scheduled_for_deletion or 0) == 0 then
+            local result = platforms.ensure_base_grid(target)
+            log(string.format("[%s] base grid on %s: ok=%s created=%d missing=%d tiles=%d %s",
+                INSTANCE(), name, tostring(result.ok), result.created, result.missing, result.tiles,
+                result.error or ""))
+            if result.ok then
+                storage.base_grid_done = storage.base_grid_done or {}
+                storage.base_grid_done[name] = grid_key(target)
+                protect(target)
+            elseif tries < 4 then
+                queue[name] = tries + 1
+                storage.base_grid_not_before = game.tick + 60
+            else
+                log(string.format("[%s] base grid on %s: giving up after 5 tries", INSTANCE(), name))
+            end
         end
     end
 

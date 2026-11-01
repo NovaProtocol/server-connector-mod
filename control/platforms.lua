@@ -22,28 +22,22 @@ local main_force = state.main_force
 -- platforms. A require here used to be lazy (inside this function) to dodge the cycle, and
 -- Factorio refuses that at runtime, so every adoption destroyed the platform and then threw
 -- before the create was sent.
-local function report_platform_create(name, location)
+local function report_platform_create(name, record)
     bus.push("platform_create", {
         instance = instance(),
         name = name,
-        location = location,
+        location = record.location,
+        starter_pack = record.starter_pack,
+        quality = record.quality,
+        request_id = record.request_id,
+        tries = record.tries,
         tick = game.tick,
     })
 end
 
--- Adoption is destroy-then-ask, and the ask is a best-effort datagram. A record per name is
--- kept until a copy of it exists here (the create landed) or the native one is still alive,
--- and re-sent on the minute timer. Without this a single dropped packet loses the platform.
-local NATIVE_CREATE_TTL = 18000
-
-local function remember_native_create(name, location)
-    storage.native_creates = storage.native_creates or {}
-    storage.native_creates[name] = {
-        location = location or instance(),
-        at = game.tick,
-        tries = 1,
-    }
-end
+-- A carried request is re-sent until the manager acks it. One hour is long enough for a
+-- manager restart to be noticed and for the space server to come back.
+local NATIVE_CREATE_TTL = 216000
 
 -- A fake platform must not be deleted by an asteroid chunk that survives the sweep, and a
 -- player must not be able to take it apart. `destructible` is damage only; `minable_flag`
@@ -100,7 +94,61 @@ end
 -- the fleet's platforms, as copies
 --------------------------------------------------------------------------------
 
-local function bay_list(platform)
+-- The free base grid every connector hub carries: 18 x 18 cargo bays (a bay is 4 tiles, so
+-- 72 x 72 tiles) with the hub's own 2 x 2 in the middle, which leaves 320. They cannot be
+-- mined or destroyed and they are not part of the mirrored layout, so a planet's copy and
+-- the space server's real platform describe the same ship with the extras only.
+local GRID = 18
+local FALLBACK_HUB = 8
+local FALLBACK_BAY = 4
+local base_cache = nil
+
+local function offset_key(dx, dy)
+    return string.format("%.1f,%.1f", dx, dy)
+end
+
+-- The grid is a constant of the prototypes, so one table per load is fine. It is not saved.
+local function base_offsets()
+    if base_cache then
+        return base_cache
+    end
+    local hub_size, bay_size = FALLBACK_HUB, FALLBACK_BAY
+    local ok, h, b = pcall(function()
+        return prototypes.entity["space-platform-hub"].tile_width,
+            prototypes.entity["cargo-bay"].tile_width
+    end)
+    if ok and type(h) == "number" and type(b) == "number" and b > 0 and h >= b and h % b == 0 then
+        hub_size, bay_size = h, b
+    end
+    local half = hub_size / 2
+    local list, lookup = {}, {}
+    for i = 0, GRID - 1 do
+        local dx = (i - (GRID - 1) / 2) * bay_size
+        for j = 0, GRID - 1 do
+            local dy = (j - (GRID - 1) / 2) * bay_size
+            if not (math.abs(dx) < half and math.abs(dy) < half) then
+                list[#list + 1] = {x = dx, y = dy}
+                lookup[offset_key(dx, dy)] = true
+            end
+        end
+    end
+    base_cache = {list = list, lookup = lookup, hub = hub_size, bay = bay_size, span = GRID * bay_size}
+    return base_cache
+end
+
+local function is_base_offset(dx, dy)
+    return base_offsets().lookup[offset_key(dx, dy)] == true
+end
+
+local function is_base_bay(hub, bay)
+    if not hub or not hub.valid or not bay or not bay.valid then
+        return false
+    end
+    return is_base_offset(bay.position.x - hub.position.x, bay.position.y - hub.position.y)
+end
+
+-- Every cargo bay on the surface, sorted.
+local function all_bays(platform)
     local surface = platform.surface
     if not surface then
         return nil
@@ -118,6 +166,25 @@ local function bay_list(platform)
         return a.position.y < b.position.y
     end)
     return bays
+end
+
+-- The EXTRA bays only: everything that is not a base bay. This is the mirrored shape.
+local function bay_list(platform)
+    local all = all_bays(platform)
+    if not all then
+        return nil
+    end
+    local hub = platform.hub
+    if not hub or not hub.valid then
+        return all
+    end
+    local out = {}
+    for _, bay in ipairs(all) do
+        if not is_base_bay(hub, bay) then
+            out[#out + 1] = bay
+        end
+    end
+    return out
 end
 
 local function bay_count(platform)
@@ -177,7 +244,7 @@ local function other_entities(platform)
     local count = 0
     for _, entity in ipairs(entities) do
         if entity.valid and entity.name ~= "space-platform-hub" and entity.name ~= "cargo-bay"
-            and entity.type ~= "asteroid-chunk" then
+            and entity.type ~= "asteroid-chunk" and entity.type ~= "asteroid" then
             count = count + 1
         end
     end
@@ -262,6 +329,96 @@ local function ensure_bays(platform, count, layout)
 end
 
 
+-- Give a connector its free base grid: foundation tiles first, then the 320 bays, all of
+-- them unminable and indestructible. Script creation raises no build event, so nothing is
+-- mirrored and no clock is bumped -- raise_built is deliberately not passed.
+local function ensure_base_grid(platform)
+    local result = {ok = false, created = 0, missing = 0, tiles = 0}
+    if not platform or not platform.valid then
+        result.error = "invalid platform"
+        return result
+    end
+    local hub, surface = platform.hub, platform.surface
+    if not hub or not hub.valid or not surface then
+        result.error = "no hub"
+        return result
+    end
+
+    local grid = base_offsets()
+    local origin = hub.position
+    local half = grid.span / 2
+
+    -- The tiles must exist before a bay can stand on them.
+    pcall(function() surface.request_to_generate_chunks(origin, math.ceil(half / 32) + 1) end)
+    pcall(function() surface.force_generate_chunk_requests() end)
+
+    -- The tile under the hub is the platform's own foundation. Use its name.
+    local foundation = nil
+    local ok_tile, tile = pcall(function() return surface.get_tile(origin.x, origin.y) end)
+    if ok_tile and tile and tile.valid then
+        foundation = tile.name
+    end
+    if not foundation or foundation == "empty-space" then
+        foundation = "space-platform-foundation"
+    end
+    if not (prototypes.tile and prototypes.tile[foundation]) then
+        result.error = "no foundation tile " .. tostring(foundation)
+        return result
+    end
+
+    local x0 = math.floor(origin.x - half)
+    local y0 = math.floor(origin.y - half)
+    local tiles = {}
+    for x = x0, x0 + grid.span - 1 do
+        for y = y0, y0 + grid.span - 1 do
+            local current = surface.get_tile(x, y)
+            if current.name ~= foundation then
+                tiles[#tiles + 1] = {name = foundation, position = {x = x, y = y}}
+            end
+        end
+    end
+    if #tiles > 0 then
+        local ok, err = pcall(function() surface.set_tiles(tiles, true) end)
+        if not ok then
+            result.error = "set_tiles failed: " .. tostring(err)
+            return result
+        end
+        result.tiles = #tiles
+    end
+
+    local existing = {}
+    for _, bay in ipairs(all_bays(platform) or {}) do
+        existing[offset_key(bay.position.x - origin.x, bay.position.y - origin.y)] = bay
+    end
+    local force_name = main_force().name
+    for _, offset in ipairs(grid.list) do
+        local bay = existing[offset_key(offset.x, offset.y)]
+        if not bay then
+            local ok, made = pcall(function()
+                return surface.create_entity{
+                    name = "cargo-bay",
+                    position = {x = origin.x + offset.x, y = origin.y + offset.y},
+                    force = force_name,
+                }
+            end)
+            if ok and made then
+                bay = made
+                result.created = result.created + 1
+            else
+                result.missing = result.missing + 1
+            end
+        end
+        if bay and bay.valid then
+            pcall(function()
+                bay.destructible = false
+                bay.minable_flag = false
+            end)
+        end
+    end
+    result.ok = result.missing == 0
+    return result
+end
+
 -- Remove a copy. The hub and bays are protected (destructible=false); a protected copy
 -- survives destroy(0), which looked like a successful call and left the platform in place.
 -- Make them destructible, cancel any earlier schedule and destroy on the next tick -- the
@@ -273,7 +430,7 @@ local function destroy_copy(platform)
     if platform.hub then
         pcall(function() platform.hub.destructible = true end)
     end
-    for _, bay in ipairs(bay_list(platform) or {}) do
+    for _, bay in ipairs(all_bays(platform) or {}) do
         pcall(function() bay.destructible = true end)
     end
     pcall(function() platform.cancel_deletion() end)
@@ -298,6 +455,40 @@ local function is_copy(platform)
     return storage.copies and storage.copies[platform.name] or false
 end
 
+-- A pending request: no hub, no surface, waiting for its starter pack. The game holds it in
+-- the force's platform list, so it must never be read as a platform this server owns.
+local function is_pending_request(p)
+    if not p or not p.valid or (p.scheduled_for_deletion or 0) ~= 0 then
+        return false
+    end
+    if is_copy(p) then
+        return false
+    end
+    local ok1, hub = pcall(function() return p.hub end)
+    local ok2, surface = pcall(function() return p.surface end)
+    if not (ok1 and ok2) or hub ~= nil or surface ~= nil then
+        return false
+    end
+    local waiting = defines.space_platform_state.waiting_for_starter_pack
+    if waiting ~= nil and p.state ~= waiting then
+        return false
+    end
+    return true
+end
+
+local function owns_planet()
+    local own = (storage.topology or {})[instance()]
+    return own ~= nil and own.kind == "planet"
+end
+
+-- A prototype field as a plain string (a name can be a prototype too).
+local function plain_value(value)
+    if type(value) == "table" or type(value) == "userdata" then
+        return value.name
+    end
+    return value
+end
+
 -- Remove a platform that the game created natively on a planet. The space server owns the
 -- real one; the planet only gets a protected copy back from the normal mirror.
 local function remove_native_platform(platform)
@@ -307,95 +498,190 @@ local function remove_native_platform(platform)
     return destroy_copy(platform)
 end
 
--- Make, keep or remove this server's copies of the fleet's platforms.
---
--- An order, not a decision: the list comes from the manager, which is the only thing
--- that can see the real platforms wherever they are. A planet server's copy is a hub and
--- cargo bays -- the starter pack and nothing else, no asteroid collectors, no chemical
--- plants -- with no asteroids and nothing that can damage it, because nothing here runs a
--- platform. It is a place to look at and to launch to.
---
--- Only a planet gets copies: the space server is where the real platforms live, and a
--- custom world has no business holding one. Called over RCON, so only the server runs it.
--- Destroy a native platform and ask the space server for the real one. Used for an unlisted
--- platform and for an extra one with a duplicate name; the two branches had the same body.
--- Defined here because it calls destroy_copy, which is below the transport helpers.
+-- Carry a player's platform request to the space server. It reports first and destroys
+-- second, so a failed destroy still leaves the request with the manager; it is idempotent,
+-- because two events, ensure_all and the retry pass can all reach the same platform.
 local function adopt_native_platform(platform, name)
-    -- The space server is where the real platforms live: a platform created there is
-    -- already in the right place and is left exactly as it is.
-    if instance() == "space" then
+    if instance() == "space" or not state.known() or not owns_planet() then
         return false
     end
-    -- A copy is this server's own mirror, not a request from a player. Only a native one
-    -- is carried over.
     if not platform or not platform.valid or is_copy(platform) then
         return false
     end
-    local location = platform.space_location and platform.space_location.name or instance()
-    if not destroy_copy(platform) then
-        log(string.format("[%s] could not remove native %s", instance(), tostring(name)))
+    name = name or platform.name
+    if (platform.scheduled_for_deletion or 0) ~= 0 then
+        return true
+    end
+    if is_pending_request(platform) then
         return false
     end
-    remember_native_create(name, location)
-    report_platform_create(name, location)
-    log(string.format("[%s] removed native %s and asked the space server to create it at %s",
-        instance(), tostring(name), tostring(location)))
+
+    -- A platform with buildings on it is somebody's work. It is reported once, never destroyed.
+    local others = other_entities(platform)
+    if others and others > 0 then
+        storage.stray_warned = storage.stray_warned or {}
+        if not storage.stray_warned[name] then
+            storage.stray_warned[name] = true
+            log(string.format("[%s] platform %s holds %d buildings; it was NOT moved to the space server",
+                instance(), tostring(name), others))
+            main_force().print(string.format(
+                "Platform '%s' holds buildings and stays on this server. Only a fresh platform is moved.",
+                tostring(name)))
+        end
+        return false
+    end
+
+    storage.native_creates = storage.native_creates or {}
+    local record = storage.native_creates[name]
+    local location = platform.space_location and platform.space_location.name or instance()
+    local pack, quality = nil, nil
+    local ok_pack, starter = pcall(function() return platform.starter_pack end)
+    if ok_pack and starter then
+        pack, quality = plain_value(starter.name), plain_value(starter.quality)
+    end
+    record = record or {}
+    record.location = record.location or location
+    record.starter_pack = record.starter_pack or pack
+    record.quality = record.quality or quality
+    record.request_id = record.request_id or string.format("%s:%s:%d", instance(), name, game.tick)
+    record.at = record.at or game.tick
+    record.tries = (record.tries or 0) + 1
+    storage.native_creates[name] = record
+
+    -- Report FIRST. If the destroy fails the manager still has the request.
+    report_platform_create(name, record)
+    if not destroy_copy(platform) then
+        log(string.format("[%s] could not remove native %s; the retry pass will try again",
+            instance(), tostring(name)))
+        return false
+    end
+    if storage.request_in then
+        storage.request_in[name] = nil
+    end
+    main_force().print(string.format("Platform '%s' is being built on the space server.", tostring(name)))
+    log(string.format("[%s] removed native %s and asked the space server to create it at %s (id %s)",
+        instance(), tostring(name), tostring(record.location), record.request_id))
     return true
 end
 
--- Re-send every adoption that has not yet produced a copy here. Defined after is_copy, so
--- the name means the local function and not a nil global.
+-- Called for every platform on a planet server that is not the connector.
+local function settle_stray(platform)
+    if instance() == "space" or not state.known() or not owns_planet() then
+        return "skipped"
+    end
+    if not platform or not platform.valid then
+        return "gone"
+    end
+    if (platform.scheduled_for_deletion or 0) ~= 0 then
+        return "leaving"
+    end
+    if is_pending_request(platform) then
+        return "pending"
+    end
+    if is_copy(platform) then
+        destroy_copy(platform)
+        return "copy removed"
+    end
+    if adopt_native_platform(platform, platform.name) then
+        return "adopted"
+    end
+    return "kept"
+end
+
+-- A surface that is a platform's but has no platform attached yet is checked again for five
+-- seconds. Platform surfaces are named "platform-<n>".
+local function watch_surface(index)
+    storage.surface_watch = storage.surface_watch or {}
+    storage.surface_watch[index] = game.tick
+end
+
+local function tick(is_connector)
+    local watch = storage.surface_watch
+    if not watch or next(watch) == nil then
+        return
+    end
+    for index, since in pairs(watch) do
+        local surface = game.get_surface(index)
+        if not surface or not surface.valid or game.tick - since > 300 then
+            watch[index] = nil
+        elseif surface.platform and surface.platform.valid then
+            watch[index] = nil
+            local platform = surface.platform
+            if not (is_connector and is_connector(platform)) and not storage.connector_creating
+                and not storage.creating_copy then
+                adopt_native_platform(platform, platform.name)
+            end
+        end
+    end
+end
+
+-- Re-send a carried request until the manager acks it. A platform that reappeared here is
+-- re-adopted; one that never comes back is given up on after the TTL.
 local function retry_native_creates()
-    if instance() == "space" then
+    if instance() == "space" or not state.known() then
         return 0
     end
     local records = storage.native_creates
     if not records then
         return 0
     end
-
     local names = {}
     for name in pairs(records) do
         names[#names + 1] = name
     end
     table.sort(names)
 
-    local copies, natives = {}, {}
-    for _, platform in pairs(main_force().platforms or {}) do
-        if platform and platform.valid then
-            if is_copy(platform) then
-                copies[platform.name] = true
-            elseif platform.scheduled_for_deletion == 0 then
-                natives[platform.name] = true
-            end
-        end
-    end
-
     local sent = 0
     for _, name in ipairs(names) do
         local record = records[name]
         local age = game.tick - (record.at or 0)
-        if copies[name] then
+        local native = nil
+        for _, p in pairs(main_force().platforms or {}) do
+            if p.valid and p.name == name and not is_copy(p) and (p.scheduled_for_deletion or 0) == 0 then
+                native = p
+                break
+            end
+        end
+        if age > NATIVE_CREATE_TTL then
             records[name] = nil
-            log(string.format("[%s] native %s is a copy here now; the create landed",
-                instance(), tostring(name)))
-        elseif natives[name] then
-            records[name] = nil
-            log(string.format("[%s] native %s is still here; dropping its create record",
-                instance(), tostring(name)))
-        elseif age > NATIVE_CREATE_TTL then
-            records[name] = nil
-            log(string.format("[%s] native %s was never recreated after %d ticks; giving up",
+            log(string.format("[%s] native %s was never confirmed after %d ticks; giving up",
                 instance(), tostring(name), age))
+        elseif native then
+            adopt_native_platform(native, name)
+            sent = sent + 1
         else
             record.tries = (record.tries or 1) + 1
-            report_platform_create(name, record.location or instance())
+            report_platform_create(name, record)
             sent = sent + 1
-            log(string.format("[%s] re-sent the create of native %s (try %d, age %d)",
-                instance(), tostring(name), record.tries, age))
         end
     end
     return sent
+end
+
+-- The manager's confirmation. failed=true means the space server could not make it.
+local function create_ack(args)
+    if type(args) ~= "table" or type(args.name) ~= "string" then
+        return {ok = false, error = "a name is required"}
+    end
+    local records = storage.native_creates or {}
+    local record = records[args.name]
+    if not record then
+        return {ok = true, already = true}
+    end
+    if args.request_id and record.request_id and args.request_id ~= record.request_id then
+        return {ok = false, error = "another request holds that name"}
+    end
+    records[args.name] = nil
+    if args.failed then
+        main_force().print(string.format("Platform '%s' could not be built on the space server: %s",
+            args.name, tostring(args.error or "unknown error")))
+    elseif args.final_name and args.final_name ~= args.name then
+        main_force().print(string.format("Platform '%s' was built on the space server as '%s'.",
+            args.name, tostring(args.final_name)))
+    else
+        main_force().print(string.format("Platform '%s' is on the space server.", args.name))
+    end
+    return {ok = true}
 end
 
 local function mirror_platforms(entries)
@@ -597,6 +883,29 @@ local function plain(value)
     return value
 end
 
+local function reserved_name(name)
+    return name == "Space Platforms" or string.match(name, "^%[planet=[^%]]+%] .+ Hub$") ~= nil
+end
+
+local function name_in_use(force, name)
+    for _, p in pairs(force.platforms or {}) do
+        if p.valid and p.name == name then
+            return p
+        end
+    end
+    return nil
+end
+
+local function free_name(force, name, tag)
+    local candidate = string.format("%s (%s)", name, tag)
+    local n = 2
+    while (name_in_use(force, candidate) or reserved_name(candidate)) and n < 50 do
+        candidate = string.format("%s (%s %d)", name, tag, n)
+        n = n + 1
+    end
+    return candidate
+end
+
 local function create_platform(entry)
     if instance() ~= "space" then
         return {ok = false, error = "only the space server creates real platforms"}
@@ -605,15 +914,31 @@ local function create_platform(entry)
         return {ok = false, error = "a platform needs a name"}
     end
     local force = main_force()
-    for _, platform in pairs(force.platforms or {}) do
-        if platform.name == entry.name then
-            return {ok = true, name = entry.name, existed = true}
-        end
-    end
 
     local planet = entry.location
     if type(planet) ~= "string" or planet == "" or planet == "space" then
         planet = "nauvis"
+    elseif not (game.planets and game.planets[planet]) then
+        return {ok = false, error = "unknown planet " .. tostring(planet), permanent = true}
+    end
+
+    -- A request that is re-sent is the same request: same id means "already done". A
+    -- different request that happens to share a name gets a suffix instead of merging.
+    storage.platform_origin = storage.platform_origin or {}
+    local request_id = entry.request_id
+    local existing = name_in_use(force, entry.name)
+    local final = entry.name
+    if existing then
+        if (existing.scheduled_for_deletion or 0) ~= 0 then
+            return {ok = false, retry = true, error = "a platform with that name is being deleted"}
+        end
+        local record = storage.platform_origin[entry.name]
+        if request_id == nil or (record and record.id == request_id) then
+            return {ok = true, name = entry.name, existed = true}
+        end
+        final = free_name(force, entry.name, tostring(entry.origin or planet))
+    elseif reserved_name(entry.name) then
+        final = free_name(force, entry.name, tostring(entry.origin or planet))
     end
 
     -- The pack travels with the platform: a request moved between servers must come back as
@@ -639,7 +964,7 @@ local function create_platform(entry)
     local ok, created = pcall(function()
         return force.create_space_platform{
             planet = planet,
-            name = entry.name,
+            name = final,
             starter_pack = quality and {name = pack, quality = quality} or pack,
         }
     end)
@@ -656,15 +981,28 @@ local function create_platform(entry)
     end)
     if not applied or not hub then
         debug.emit("create_platform: starter pack failed for %s (%s); destroying it",
-            entry.name, tostring(hub))
+            final, tostring(hub))
         pcall(function() created.destroy(1) end)
         return {ok = false, error = "the starter pack could not be applied: " .. tostring(hub)}
     end
 
+    storage.platform_origin[final] = {
+        id = request_id,
+        origin = entry.origin,
+        requested = entry.name,
+        at = game.tick,
+    }
+    for stored in pairs(storage.platform_origin) do
+        if not name_in_use(force, stored) then
+            storage.platform_origin[stored] = nil
+        end
+    end
+
     debug.emit("create_platform: created %s at %s pack=%s quality=%s hub=%s",
-        entry.name, planet, pack, tostring(quality), tostring(hub.name))
-    log(string.format("[%s] created platform %s at %s", instance(), entry.name, planet))
-    return {ok = true, name = entry.name, location = planet, starter_pack = pack, quality = quality}
+        final, planet, pack, tostring(quality), tostring(hub.name))
+    log(string.format("[%s] created platform %s at %s", instance(), final, planet))
+    return {ok = true, name = final, requested = entry.name, renamed = final ~= entry.name,
+        location = planet, starter_pack = pack, quality = quality}
 end
 
 -- What this server's platforms are.
@@ -837,6 +1175,11 @@ return {
     rebuild_platforms = rebuild_platforms,
     adopt_native_platform = adopt_native_platform,
     retry_native_creates = retry_native_creates,
+    settle_stray = settle_stray,
+    watch_surface = watch_surface,
+    tick = tick,
+    create_ack = create_ack,
+    is_pending_request = is_pending_request,
     starter_pack_requests = starter_pack_requests,
     watch = watch,
     create_platform = create_platform,
@@ -849,6 +1192,10 @@ return {
     layout_hash = layout_hash,
     bay_count = bay_count,
     bay_list = bay_list,
+    all_bays = all_bays,
+    is_base_bay = is_base_bay,
+    is_base_offset = is_base_offset,
+    ensure_base_grid = ensure_base_grid,
     ensure_bays = ensure_bays,
     destroy_copy = destroy_copy,
     asteroid_count = asteroid_count,

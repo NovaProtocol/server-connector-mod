@@ -293,6 +293,7 @@ local calls = {
     -- Create the real platform on the space server from a native one found on a planet
     -- (platforms.create_platform).
     platform_create = platforms.create_platform,
+    platform_create_ack = platforms.create_ack,
     rebuild_platforms = platforms.rebuild_platforms,
 
     -- What this server's platforms are (platforms.platforms).

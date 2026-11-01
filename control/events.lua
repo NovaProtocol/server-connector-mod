@@ -113,9 +113,14 @@ every(60, "the heartbeat", when_known(outbound.tick_heartbeat))
 every(600, "the pod queue", pod.tick)
 
 -- Re-send a carried platform request until the space server has it. The first message is
--- a datagram and can be dropped; the record lives until a copy of the platform exists
--- here again or the platform has been renamed.
+-- a datagram and can be dropped; the record lives until the manager acks it.
 every(600, "the native creates", when_known(platforms.retry_native_creates))
+
+-- A platform surface can exist for a moment before surface.platform answers. Five seconds
+-- of watching is enough; on any other surface these three passes do nothing.
+every(5, "the native platforms", when_known(function() platforms.tick(connector.is_connector) end))
+every(120, "platform requests", when_known(requests.purge))
+every(600, "platform request resend", when_known(requests.resend))
 
 -- The space server's body stays peaceful, and chunks that generate around a player who
 -- is standing on it are swept for ten seconds after a join. A no-op elsewhere.
@@ -167,6 +172,8 @@ script.on_configuration_changed(function()
         storage.meta_heartbeat = nil
         storage.hub_sent = nil
         storage.hub_weight = nil
+        -- Every connector re-checks its base grid after an update.
+        storage.base_grid_done = nil
         if rcon then
             storage.connector_ready_pending = true
         end
@@ -232,10 +239,12 @@ local function reject_native_platform(surface, what)
             end
             debug.dump("native platform", debug.platform_table(platform))
             -- A platform the game made natively on a planet is a request, not something
-            -- that planet can own: it is destroyed here and asked for on the space server
-            -- under the same name at the same planet. The space server leaves its own
-            -- platforms exactly as they are (adopt_native_platform returns there).
+            -- that planet can own: it is carried to the space server under the same name at
+            -- the same planet. The space server leaves its own platforms exactly as they are.
             platforms.adopt_native_platform(platform, platform.name)
+        elseif surface and surface.valid and string.find(surface.name, "^platform") then
+            -- The surface exists before surface.platform answers. Watch it for five seconds.
+            platforms.watch_surface(surface.index)
         end
         connector.ensure_all()
     end)
@@ -348,6 +357,9 @@ script.on_event(defines.events.on_space_platform_changed_state, function(event)
         if instance() == "space" and event.platform and event.platform.valid
             and not connector.is_connector(event.platform) then
             demand.queue("platform state")
+        end
+        if instance() ~= "space" then
+            requests.purge()
         end
     end)
 end)
