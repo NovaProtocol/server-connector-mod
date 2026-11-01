@@ -12,8 +12,12 @@
 local mod_gui = require("mod-gui")
 local state = require("__server-connector-mod__.control.state")
 local bus = require("__server-connector-mod__.control.bus")
+local checks = require("__server-connector-mod__.control.checks")
 
 local BUTTON = "server-connector-open"
+local CHECKS = "server-connector-checks"
+local CHECKS_WINDOW = "server-connector-checks-window"
+local CHECKS_CLOSE = "server-connector-checks-close"
 local WINDOW = "server-connector-window"
 local DETAIL = "server-connector-detail"
 local DETAIL_SCROLL = "server-connector-detail-scroll"
@@ -63,6 +67,7 @@ local function ensure_button(player)
         if window then
             window.destroy()
         end
+        close_checks(player)
         return
     end
 
@@ -75,6 +80,50 @@ local function ensure_button(player)
             style = mod_gui.button_style,
         }
     end
+    if flow and not flow[CHECKS] then
+        flow.add{
+            type = "button",
+            name = CHECKS,
+            caption = "Checks",
+            style = mod_gui.button_style,
+            tooltip = "Look for request loops and requests with no planet set",
+        }
+    end
+end
+
+local function close_checks(player)
+    local frame = player.gui.screen[CHECKS_WINDOW]
+    if frame then
+        frame.destroy()
+    end
+end
+
+-- The report only: it never edits a request. Fixed height so a long list scrolls.
+local function open_checks(player)
+    close_checks(player)
+    local frame = player.gui.screen.add{
+        type = "frame",
+        name = CHECKS_WINDOW,
+        direction = "vertical",
+    }
+    frame.add{type = "label", caption = "Platform checks"}
+    local scroll = frame.add{
+        type = "scroll-pane",
+        name = CHECKS_WINDOW .. "-scroll",
+    }
+    scroll.style.maximal_height = 420
+    scroll.style.minimal_width = 420
+    local found = checks.run()
+    if #found == 0 then
+        scroll.add{type = "label", caption = "No problems found."}
+    else
+        for _, line in ipairs(found) do
+            scroll.add{type = "label", caption = line}
+        end
+    end
+    local footer = frame.add{type = "flow", direction = "horizontal"}
+    footer.add{type = "button", name = CHECKS_CLOSE, caption = "Close"}
+    frame.force_auto_center()
 end
 
 -- A style name is not a runtime-checked value; an unknown one errors when the element is
@@ -887,6 +936,16 @@ local function click(event)
         else
             open(player)
         end
+        return
+    end
+
+    if element.name == CHECKS then
+        open_checks(player)
+        return
+    end
+
+    if element.name == CHECKS_CLOSE then
+        close_checks(player)
         return
     end
 

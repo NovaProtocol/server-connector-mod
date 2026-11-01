@@ -1,4 +1,9 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.38.0
+Date: 2026-11-01
+  Added:
+    - a Checks button beside Servers. It reports request loops (the same item in a planet hub's Incoming and Outgoing group) and planet-sourced requests with no planet set on real platforms. It only reports; nothing in the world is changed.
+---------------------------------------------------------------------------------------------------
 Version: 0.37.9
 Date: 2026-11-01
   Fixed:
