@@ -1,4 +1,9 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.37.6
+Date: 2026-11-01
+  Fixed:
+    - the derived hub groups attributed a request to a planet by request_from, so once a platform was set to request from platforms every one of its requests vanished from the planet hubs' Outgoing groups. Attribution is import_from.
+---------------------------------------------------------------------------------------------------
 Version: 0.37.5
 Date: 2026-11-01
   Fixed:

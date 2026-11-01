@@ -121,10 +121,10 @@ end
 -- Which planets' Outgoing groups a platform request belongs to. Returns a list of planets,
 -- or nil and a reason.
 local function planets_for(entry, totals)
-    local source = entry.request_from
-    if source ~= nil and string.lower(source) ~= "planet" then
-        return nil, "not from a planet"
-    end
+    -- The planet a request belongs to is import_from, not request_from. request_from says
+    -- where the platform pulls the item from ("platforms" after the conversion forces it),
+    -- and gating on it here made every platform-sourced request invisible to the planet
+    -- hubs, which emptied their Outgoing groups.
     local target = entry.import_from
     local lowered = target ~= nil and string.lower(target) or nil
     if target == nil or target == "" or lowered == "any" or lowered == "all" then
