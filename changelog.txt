@@ -1,4 +1,9 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.37.9
+Date: 2026-11-01
+  Fixed:
+    - the join button was still greyed out with "Server is offline" after the join itself stopped refusing an offline server. The online flag now only decorates the row.
+---------------------------------------------------------------------------------------------------
 Version: 0.37.8
 Date: 2026-11-01
   Changed:

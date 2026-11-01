@@ -613,10 +613,9 @@ local function update_join(player)
     elseif not entry or not entry.address then
         enabled = false
         tooltip = "No address yet"
-    elseif entry.online == false then
-        enabled = false
-        tooltip = "Server is offline"
     end
+    -- The online flag only decorates the row; it never disables the join. A stale "offline"
+    -- from the manager must not stop a connect that would have worked.
 
     join.enabled = enabled
     join.tooltip = tooltip
