@@ -1,4 +1,9 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.38.1
+Date: 2026-11-01
+  Fixed:
+    - the Checks window missed a request with no planet set when that request was platform-sourced, and reported the game's automatic construction entries instead. It reads import_from only, in manual sections.
+---------------------------------------------------------------------------------------------------
 Version: 0.38.0
 Date: 2026-11-01
   Added:

@@ -77,15 +77,19 @@ local function run()
             and platform.hub and platform.hub.valid then
             local point = point_of(platform.hub)
             if point then
+                -- Manual sections only: the automated/construction sections are the game's
+                -- own and carry no import_from by design. The planet filter is import_from,
+                -- so request_from is not consulted at all -- a platform-sourced calcite
+                -- request with no planet is exactly the case this reports.
                 for _, section in pairs(point.sections or {}) do
-                    for _, filter in ipairs(section.filters or {}) do
-                        local name = item_of(filter)
-                        local from_planet = filter.request_from == nil
-                            or filter.request_from == "planet"
-                        local target = filter.import_from
-                        if name and from_planet and (target == nil or target == "") then
-                            out[#out + 1] = string.format("no planet set on %s at item %s",
-                                platform.name, name)
+                    if section.is_manual then
+                        for _, filter in ipairs(section.filters or {}) do
+                            local name = item_of(filter)
+                            local target = filter.import_from
+                            if name and (target == nil or target == "") then
+                                out[#out + 1] = string.format("no planet set on %s at item %s",
+                                    platform.name, name)
+                            end
                         end
                     end
                 end
