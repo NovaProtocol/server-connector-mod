@@ -1,4 +1,9 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.37.5
+Date: 2026-11-01
+  Fixed:
+    - a call that answers with a plain value (set_server_status answers true) failed to encode its reply, so the manager got nothing and the mod logged a -call failure every time.
+---------------------------------------------------------------------------------------------------
 Version: 0.37.4
 Date: 2026-10-31
   Added:

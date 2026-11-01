@@ -591,7 +591,11 @@ commands.add_command(
 
             -- rcon.print reaches the RCON client and nobody else, which is the point.
             if rcon then
-                rcon.print(helpers.table_to_json(out))
+                -- A handler may answer with a plain value (set_server_status answers true);
+                -- table_to_json rejects anything that is not a table, which used to swallow
+                -- the whole reply and log a -call failure instead.
+                local encoded = type(out) == "table" and out or {ok = out}
+                rcon.print(helpers.table_to_json(encoded))
             end
         end)
         if not handled then
