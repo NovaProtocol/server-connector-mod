@@ -89,6 +89,15 @@ local function connector_name(planet)
     if role() == "planet" then
         return PLANET_PLATFORM_NAME
     end
+    return string.format("~[planet=%s] %s Hub", planet, display_name(planet))
+end
+
+-- The name this build used before the tilde. Kept so an existing save's connectors are still
+-- recognised and renamed in place instead of being duplicated by ensure_all.
+local function legacy_connector_name(planet)
+    if role() == "planet" then
+        return PLANET_PLATFORM_NAME
+    end
     return string.format("[planet=%s] %s Hub", planet, display_name(planet))
 end
 
@@ -114,7 +123,7 @@ local function planet_of(platform)
     if location and location.name then
         return location.name
     end
-    return string.match(tostring(platform.name), "^%[planet=([^%]]+)%]")
+    return string.match(tostring(platform.name), "^~?%[planet=([^%]]+)%]")
 end
 
 local function is_connector(platform)
@@ -131,7 +140,8 @@ local function is_connector(platform)
     if not planet then
         return false
     end
-    return platform.name == connector_name(planet)
+    local name = platform.name
+    return name == connector_name(planet) or name == legacy_connector_name(planet)
 end
 
 local function find_connector(planet)
@@ -603,6 +613,23 @@ local function ensure_all()
         -- list would remove every platform on the space server -- including the connectors
         -- the converter just made. set_instance arrives before set_topology, so this is a
         -- real boot order, not a hypothetical.
+        -- A connector named the old way is renamed in place: is_connector already accepts
+        -- both, so nothing is duplicated either way, and a failed rename is only a log line.
+        for _, platform in pairs(force().platforms or {}) do
+            if platform.valid then
+                local planet = planet_of(platform)
+                if planet and platform.name == legacy_connector_name(planet)
+                    and connector_name(planet) ~= legacy_connector_name(planet) then
+                    local ok, err = pcall(function() platform.name = connector_name(planet) end)
+                    if ok then
+                        record("renamed", {from = legacy_connector_name(planet), to = connector_name(planet)})
+                    else
+                        log(string.format("[%s] could not rename %s: %s",
+                            INSTANCE(), tostring(platform.name), tostring(err)))
+                    end
+                end
+            end
+        end
         local wantedPlanets = planets()
         if #wantedPlanets == 0 then
             return {ok = false, skipped = "no topology"}

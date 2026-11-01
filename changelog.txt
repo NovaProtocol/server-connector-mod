@@ -1,4 +1,12 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.37.7
+Date: 2026-11-01
+  Changed:
+    - planet hubs are named "~[planet=x] X Hub" so the platform list sorts them to the bottom. An existing connector is renamed in place, and both names are recognised.
+  Fixed:
+    - the Servers button comes back as soon as the identity arrives; the identity call refreshes every player's window instead of leaving it removed.
+    - a platform request made on the space server is moved to the planet it names, instead of sitting there and never launching.
+---------------------------------------------------------------------------------------------------
 Version: 0.37.6
 Date: 2026-11-01
   Fixed:

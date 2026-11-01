@@ -884,7 +884,7 @@ local function plain(value)
 end
 
 local function reserved_name(name)
-    return name == "Space Platforms" or string.match(name, "^%[planet=[^%]]+%] .+ Hub$") ~= nil
+    return name == "Space Platforms" or string.match(name, "^~?%[planet=[^%]]+%] .+ Hub$") ~= nil
 end
 
 local function name_in_use(force, name)

@@ -131,6 +131,9 @@ local calls = {
         state.set_instance(id)
         convert.ensure_surfaces()
         connector.ensure_all()
+        -- The identity is what lets the map window exist: without this the button stays
+        -- removed from anybody who joined before it arrived.
+        map.refresh_all()
         debug.boot()
         return {instance = state.instance()}
     end,

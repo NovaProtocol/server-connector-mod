@@ -132,7 +132,11 @@ local function purge()
         return 0
     end
     local here = own_planet()
-    if not here then
+    -- The space server owns no planet, but a request made there still names the planet it
+    -- must launch from, so it is moved like any other. Without this, a request created on
+    -- the space server sat there for ever and never reached a planet.
+    local on_space = instance() == "space"
+    if not here and not on_space then
         debug.emit("purge: skipped (instance %s owns no planet)", instance())
         return 0
     end
@@ -169,7 +173,7 @@ local function purge()
             })
             if planet == nil then
                 debug.emit("purge: pending %s has no readable planet; kept", tostring(name))
-            elseif planet == here then
+            elseif planet == here or planet == "space" or planet == instance() then
                 debug.emit("purge: pending %s belongs here; kept", tostring(name))
             end
             if planet ~= nil and planet ~= here then
