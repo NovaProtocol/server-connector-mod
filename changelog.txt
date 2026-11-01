@@ -1,4 +1,9 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.37.8
+Date: 2026-11-01
+  Changed:
+    - joining another server no longer refuses when the manager reports it offline. The address is enough to try; a stale online flag was blocking joins.
+---------------------------------------------------------------------------------------------------
 Version: 0.37.7
 Date: 2026-11-01
   Changed:

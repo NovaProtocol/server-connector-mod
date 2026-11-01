@@ -918,7 +918,9 @@ local function click(event)
         return
     end
     local entry = (storage.topology or {})[id]
-    if not entry or not entry.address or entry.online == false then
+    -- No online check: the manager's view of a server can lag, and a refused join is worse
+    -- than a connect that fails. The address is the only thing needed to try.
+    if not entry or not entry.address then
         return
     end
 
