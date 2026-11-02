@@ -1,4 +1,11 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.38.3
+Date: 2026-11-02
+  Fixed:
+    - the same item was written into more than one request group on one hub, so the game filled every row and a hub received a multiple of the requested amount. Incoming now wins and the duplicate is removed from Outgoing and Buffer.
+  Changed:
+    - connector hub contents are emptied once on the first load after this build, so the request cap can be watched from zero.
+---------------------------------------------------------------------------------------------------
 Version: 0.38.2
 Date: 2026-11-01
   Fixed:

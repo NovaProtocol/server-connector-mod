@@ -677,6 +677,28 @@ enforce_platform = function(platform, lists, planet)
     quiet_trash(platform.hub)
     begin_write()
     local in_name, out_name, buffer_name = group_names(planet)
+
+    -- One row per item per hub. The game fills every request row it is handed, so the same
+    -- item in Incoming and in Outgoing is requested twice and the hub is delivered twice
+    -- what anybody asked for. Incoming wins; Outgoing and Buffer lose the duplicate.
+    if type(lists.incoming) == "table" then
+        local taken = {}
+        for _, entry in ipairs(lists.incoming) do
+            taken[(entry.item or "?") .. "|" .. tostring(entry.quality)] = true
+        end
+        for _, group in ipairs({"outgoing", "buffer"}) do
+            if lists[group] ~= nil then
+                local kept = {}
+                for _, entry in ipairs(lists[group]) do
+                    if not taken[(entry.item or "?") .. "|" .. tostring(entry.quality)] then
+                        kept[#kept + 1] = entry
+                    end
+                end
+                lists[group] = kept
+            end
+        end
+    end
+
     -- All three groups always exist, whether or not this call writes them.
     ensure_section(point, in_name)
     ensure_section(point, out_name)
