@@ -903,6 +903,22 @@ local function apply(payload)
     end
     payload = payload or {}
 
+    -- Pod deltas are re-sent for a minute and the manager's de-dupe is in memory only, so a
+    -- restart used to apply the same cargo again. The id makes this exactly-once here.
+    local id = payload.id
+    if type(id) == "string" and id ~= "" then
+        storage.pod_done = storage.pod_done or {}
+        if storage.pod_done[id] then
+            return {ok = true, duplicate = true}
+        end
+        storage.pod_done[id] = game.tick
+        for key, at in pairs(storage.pod_done) do
+            if game.tick - at > 216000 then
+                storage.pod_done[key] = nil
+            end
+        end
+    end
+
     local planet = payload.planet
     if role() == "planet" then
         planet = INSTANCE()

@@ -1,4 +1,9 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.38.2
+Date: 2026-11-01
+  Fixed:
+    - a cargo pod delta applied twice. The manager's de-duplication is in memory, so every restart re-applied the events the mod was still re-sending, and a lost reply re-applied one. The event id now travels with the apply and the mod ignores a repeat.
+---------------------------------------------------------------------------------------------------
 Version: 0.38.1
 Date: 2026-11-01
   Fixed:
