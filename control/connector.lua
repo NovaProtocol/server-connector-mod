@@ -1562,6 +1562,27 @@ end
 local function tick()
     storage_ready()
 
+    -- One-shot: a hub that was over-delivered keeps its stock for ever, because nothing
+    -- spends it. Empty the connector hubs once per build, after identity is known, so the
+    -- request cap can be watched from zero. Ships are untouched.
+    local build = (script.active_mods or {})["server-connector-mod"]
+    if build and storage.hubs_cleared ~= build then
+        storage.hubs_cleared = build
+        for _, platform in pairs(force().platforms or {}) do
+            if platform.valid and platform.hub and platform.hub.valid and is_connector(platform) then
+                for _, value in pairs(defines.inventory or {}) do
+                    local ok, inventory = pcall(function()
+                        return platform.hub.get_inventory(value)
+                    end)
+                    if ok and inventory then
+                        pcall(function() inventory.clear() end)
+                    end
+                end
+                log(string.format("[%s] cleared the contents of %s", INSTANCE(), platform.name))
+            end
+        end
+    end
+
     -- Tell the manager this instance is loaded. One datagram per boot, sent from the
     -- server only (the RCON global exists there), after the identity has arrived. The
     -- manager waits for every instance before it runs the startup pre-sync.

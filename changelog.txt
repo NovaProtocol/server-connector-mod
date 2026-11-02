@@ -1,4 +1,9 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.38.4
+Date: 2026-11-02
+  Fixed:
+    - the one-shot hub clear ran before the identity was known, so no hub was ever recognised. It runs from the tick that waits for identity now.
+---------------------------------------------------------------------------------------------------
 Version: 0.38.3
 Date: 2026-11-02
   Fixed:
