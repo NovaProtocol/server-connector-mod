@@ -1,4 +1,9 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.38.11
+Date: 2026-11-03
+  Added:
+    - connector_clear: empties a connector hub's inventories in place, without destroying the platform, and returns how many items were removed.
+---------------------------------------------------------------------------------------------------
 Version: 0.38.10
 Date: 2026-11-03
   Added:

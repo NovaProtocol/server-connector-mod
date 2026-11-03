@@ -1180,6 +1180,33 @@ local function remove_bay(payload)
     return {ok = true, removed = #existing, offset = payload.offset}
 end
 
+-- Empty a connector hub without rebuilding it. Returns how many items were taken out.
+local function clear(planet)
+    storage_ready()
+    if role() == "planet" then
+        planet = INSTANCE()
+    end
+    local platform = find_connector(planet)
+    if not platform or not platform.hub or not platform.hub.valid then
+        return {ok = true, existed = false, planet = planet, cleared = 0}
+    end
+    local cleared = 0
+    for _, value in pairs(defines.inventory or {}) do
+        local ok, inventory = pcall(function() return platform.hub.get_inventory(value) end)
+        if ok and inventory then
+            local okc, contents = pcall(function() return inventory.get_contents() end)
+            if okc and contents then
+                for _, item in ipairs(contents) do
+                    cleared = cleared + item.count
+                end
+            end
+            pcall(function() inventory.clear() end)
+        end
+    end
+    log(string.format("[%s] cleared %d item(s) from %s", INSTANCE(), cleared, platform.name))
+    return {ok = true, planet = planet, name = platform.name, cleared = cleared}
+end
+
 local function delete(planet)
     storage_ready()
     if role() == "planet" then
@@ -1753,6 +1780,7 @@ return {
     state = state,
     apply = apply,
     delete = delete,
+    clear = clear,
     build_bay = build_bay,
     remove_bay = remove_bay,
     edit = edited,
