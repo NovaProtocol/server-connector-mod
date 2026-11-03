@@ -1,4 +1,9 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.38.7
+Date: 2026-11-03
+  Changed:
+    - diagnostic build: the connector platforms are rebuilt from scratch once on the first load after this version, which starts their inventories at zero. The mod recreates them on the next ensure pass.
+---------------------------------------------------------------------------------------------------
 Version: 0.38.6
 Date: 2026-11-03
   Fixed:

@@ -1565,31 +1565,32 @@ local function tick()
     -- One-shot: a hub that was over-delivered keeps its stock for ever, because nothing
     -- spends it. Empty the connector hubs once per build, after identity is known, so the
     -- request cap can be watched from zero. Ships are untouched.
+    -- Diagnostic reset: a connector rebuilt from scratch starts empty, which is the reliable
+    -- way to begin from zero. ensure_all makes a fresh one on the next pass.
     local build = (script.active_mods or {})["server-connector-mod"]
-    if build and storage.hubs_cleared ~= build then
-        local seen, cleared = 0, 0
+    if build and storage.connectors_rebuilt ~= build then
+        local seen, removed = 0, 0
         for _, platform in pairs(force().platforms or {}) do
-            if platform.valid and platform.hub and platform.hub.valid and is_connector(platform) then
+            if platform.valid and is_connector(platform) then
                 seen = seen + 1
-                for _, value in pairs(defines.inventory or {}) do
-                    local ok, inventory = pcall(function()
-                        return platform.hub.get_inventory(value)
-                    end)
-                    if ok and inventory then
-                        pcall(function() inventory.clear() end)
+                pcall(function()
+                    if platform.hub and platform.hub.valid then
+                        platform.hub.destructible = true
+                        platform.hub.minable_flag = true
                     end
-                end
-                cleared = cleared + 1
-                log(string.format("[%s] cleared the contents of %s", INSTANCE(), platform.name))
+                    platform.cancel_deletion()
+                    platform.destroy(2)
+                end)
+                removed = removed + 1
             end
         end
-        -- The flag only sticks once something was actually cleared, so a pass that matched
-        -- nothing retries on the next tick instead of silently consuming the one-shot.
-        if cleared > 0 then
-            storage.hubs_cleared = build
+        if removed > 0 then
+            storage.connectors_rebuilt = build
+            storage.base_grid_done = nil
+            storage.connector_retry = nil
         end
-        log(string.format("[%s] hub clear pass: build=%s seen=%d cleared=%d",
-            INSTANCE(), tostring(build), seen, cleared))
+        log(string.format("[%s] connector reset: build=%s seen=%d removed=%d",
+            INSTANCE(), tostring(build), seen, removed))
     end
 
     -- Tell the manager this instance is loaded. One datagram per boot, sent from the
