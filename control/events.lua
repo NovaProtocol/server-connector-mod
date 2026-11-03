@@ -246,6 +246,30 @@ script.on_event(defines.events.on_space_platform_mined_entity, function(event)
     end)
 end)
 
+-- Debug trace: every rocket launch, with what it carried. Cargo pods from a platform have
+-- their own trace in pod.lua; this is the planet side, where a silo fires.
+if defines.events.on_rocket_launched then
+    script.on_event(defines.events.on_rocket_launched, function(event)
+        guard("a rocket launch", function()
+            local silo = nil
+            pcall(function() silo = event.rocket_silo and event.rocket_silo.unit_number end)
+            local total = 0
+            pcall(function()
+                local entity = event.rocket_silo
+                if entity and entity.valid then
+                    local inventory = entity.get_inventory(defines.inventory.rocket_silo_rocket)
+                    for _, item in ipairs(inventory and inventory.get_contents() or {}) do
+                        total = total + item.count
+                        debug.emit("rocket silo=%s item %s/%s x%d", tostring(silo),
+                            item.name, tostring(item.quality), item.count)
+                    end
+                end
+            end)
+            debug.emit("rocket launched silo=%s cargo=%d", tostring(silo), total)
+        end)
+    end)
+end
+
 -- A native platform surface on a planet cannot be owned by that planet. The player's
 -- request is carried to the space server, which is the only place a real platform lives.
 local function reject_native_platform(surface, what)
