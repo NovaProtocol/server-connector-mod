@@ -166,39 +166,6 @@ end
 -- A pod has left a platform hub or a surface. If the source is a copy hub, the cargo has left
 -- the copy and must leave the real hub. If it left a planet, remember it for delivery.
 local function started(event)
-    -- Debug-only trace: what this pod carries, and the receiver's contents at launch time.
-    -- A pod that keeps launching shows as repeated large totals here; a duplicated sync does
-    -- not, because nothing launches.
-    if event and event.cargo_pod and event.cargo_pod.valid then
-        local pod = event.cargo_pod
-        local total = 0
-        pcall(function()
-            local inv = pod.get_inventory(defines.inventory.cargo_unit)
-            for _, it in ipairs(inv and inv.get_contents() or {}) do
-                total = total + it.count
-                debug.emit("pod %s cargo %s/%s x%d", tostring(pod.unit_number), it.name,
-                    tostring(it.quality), it.count)
-            end
-        end)
-        pcall(function()
-            local station = pod.cargo_pod_destination and pod.cargo_pod_destination.station
-            local hub_total = 0
-            if station and station.valid then
-                for _, value in pairs(defines.inventory or {}) do
-                    local ok, inv = pcall(function() return station.get_inventory(value) end)
-                    if ok and inv then
-                        local okc, contents = pcall(function() return inv.get_contents() end)
-                        if okc and contents then
-                            for _, it in ipairs(contents) do hub_total = hub_total + it.count end
-                        end
-                    end
-                end
-                debug.emit("pod %s receiver=%s total=%d", tostring(pod.unit_number),
-                    tostring(station.name), hub_total)
-            end
-        end)
-        debug.emit("pod %s launched total=%d", tostring(pod.unit_number), total)
-    end
     if not known() then
         return
     end

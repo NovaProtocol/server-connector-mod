@@ -1,4 +1,9 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.38.14
+Date: 2026-11-03
+  Fixed:
+    - the debug trace added in 0.38.10 called debug.emit inside pod.lua, where that name is not the mod's debug module, so every cargo-pod event threw and pod tracking stopped. The trace is removed; pod handling is untouched otherwise.
+---------------------------------------------------------------------------------------------------
 Version: 0.38.13
 Date: 2026-11-03
   Fixed:
