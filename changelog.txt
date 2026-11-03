@@ -1,4 +1,9 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.38.10
+Date: 2026-11-03
+  Added:
+    - debug-only trace on a cargo pod launch: every stack it carries, the destination hub's total contents at that moment, and the pod's total. Guarded by the existing debug flag.
+---------------------------------------------------------------------------------------------------
 Version: 0.38.9
 Date: 2026-11-03
   Fixed:
