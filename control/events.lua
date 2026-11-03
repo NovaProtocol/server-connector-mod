@@ -248,6 +248,30 @@ end)
 
 -- Debug trace: every rocket launch, with what it carried. Cargo pods from a platform have
 -- their own trace in pod.lua; this is the planet side, where a silo fires.
+-- The cargo is still in the silo when the launch is ordered; by on_rocket_launched it has
+-- already gone, which is why every cargo count there read 0.
+if defines.events.on_rocket_launch_ordered then
+    script.on_event(defines.events.on_rocket_launch_ordered, function(event)
+        guard("a rocket order", function()
+            local silo = nil
+            pcall(function() silo = event.rocket_silo and event.rocket_silo.unit_number end)
+            local total = 0
+            pcall(function()
+                local entity = event.rocket_silo
+                if entity and entity.valid then
+                    local inventory = entity.get_inventory(defines.inventory.rocket_silo_rocket)
+                    for _, item in ipairs(inventory and inventory.get_contents() or {}) do
+                        total = total + item.count
+                        debug.emit("rocket order silo=%s item %s/%s x%d", tostring(silo),
+                            item.name, tostring(item.quality), item.count)
+                    end
+                end
+            end)
+            debug.emit("rocket order silo=%s cargo=%d", tostring(silo), total)
+        end)
+    end)
+end
+
 if defines.events.on_rocket_launched then
     script.on_event(defines.events.on_rocket_launched, function(event)
         guard("a rocket launch", function()

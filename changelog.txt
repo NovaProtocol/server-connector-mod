@@ -1,4 +1,9 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.38.13
+Date: 2026-11-03
+  Fixed:
+    - the rocket trace read the silo's rocket inventory after the rocket had left, so it reported cargo=0. It reads on the launch order instead, while the cargo is still there.
+---------------------------------------------------------------------------------------------------
 Version: 0.38.12
 Date: 2026-11-03
   Added:
