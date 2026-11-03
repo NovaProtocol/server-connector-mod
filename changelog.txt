@@ -1,4 +1,9 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.38.9
+Date: 2026-11-03
+  Fixed:
+    - a rebuilt connector never got its base grid back, because the queue is only filled from creation and ensure passes, and a load can run those before the identity is known. Any connector with no bays is queued once a minute.
+---------------------------------------------------------------------------------------------------
 Version: 0.38.8
 Date: 2026-11-03
   Fixed:

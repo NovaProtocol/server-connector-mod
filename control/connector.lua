@@ -1622,6 +1622,18 @@ local function tick()
         end
     end
 
+    -- Self-heal: a connector with no bays has been rebuilt or lost its grid, and nothing in
+    -- the event-driven path may ever queue it again. Once a minute is enough.
+    if game.tick - (storage.grid_sweep_at or 0) >= 600 then
+        storage.grid_sweep_at = game.tick
+        for _, platform in pairs(force().platforms or {}) do
+            if platform.valid and is_connector(platform)
+                and (platforms.bay_count(platform) or 0) == 0 then
+                queue_base_grid(platform)
+            end
+        end
+    end
+
     -- The base grid, one platform per tick. Five tries with a second between them, then the
     -- platform is left alone: a base slot a player already built is never moved or removed.
     local queue = storage.base_grid_queue
