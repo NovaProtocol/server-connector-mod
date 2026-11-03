@@ -1567,9 +1567,10 @@ local function tick()
     -- request cap can be watched from zero. Ships are untouched.
     local build = (script.active_mods or {})["server-connector-mod"]
     if build and storage.hubs_cleared ~= build then
-        storage.hubs_cleared = build
+        local seen, cleared = 0, 0
         for _, platform in pairs(force().platforms or {}) do
             if platform.valid and platform.hub and platform.hub.valid and is_connector(platform) then
+                seen = seen + 1
                 for _, value in pairs(defines.inventory or {}) do
                     local ok, inventory = pcall(function()
                         return platform.hub.get_inventory(value)
@@ -1578,9 +1579,17 @@ local function tick()
                         pcall(function() inventory.clear() end)
                     end
                 end
+                cleared = cleared + 1
                 log(string.format("[%s] cleared the contents of %s", INSTANCE(), platform.name))
             end
         end
+        -- The flag only sticks once something was actually cleared, so a pass that matched
+        -- nothing retries on the next tick instead of silently consuming the one-shot.
+        if cleared > 0 then
+            storage.hubs_cleared = build
+        end
+        log(string.format("[%s] hub clear pass: build=%s seen=%d cleared=%d",
+            INSTANCE(), tostring(build), seen, cleared))
     end
 
     -- Tell the manager this instance is loaded. One datagram per boot, sent from the

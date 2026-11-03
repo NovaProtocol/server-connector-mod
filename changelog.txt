@@ -1,4 +1,9 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.38.6
+Date: 2026-11-03
+  Fixed:
+    - the one-shot hub clear consumed its flag before doing the work, so a pass that matched no hub cleared nothing and never retried. The flag now sticks only when a hub was actually emptied, and every pass logs what it saw.
+---------------------------------------------------------------------------------------------------
 Version: 0.38.5
 Date: 2026-11-03
   Changed:
