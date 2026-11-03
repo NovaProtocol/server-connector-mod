@@ -1584,13 +1584,15 @@ local function tick()
                 removed = removed + 1
             end
         end
-        if removed > 0 then
+        -- Done once a connector was removed, and also on an instance that has none: a server
+        -- with no connector must not retry and log every tick.
+        if removed > 0 or seen == 0 then
             storage.connectors_rebuilt = build
             storage.base_grid_done = nil
             storage.connector_retry = nil
+            log(string.format("[%s] connector reset: build=%s seen=%d removed=%d",
+                INSTANCE(), tostring(build), seen, removed))
         end
-        log(string.format("[%s] connector reset: build=%s seen=%d removed=%d",
-            INSTANCE(), tostring(build), seen, removed))
     end
 
     -- Tell the manager this instance is loaded. One datagram per boot, sent from the

@@ -1,4 +1,9 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.38.8
+Date: 2026-11-03
+  Fixed:
+    - the one-shot connector reset retried and logged every tick on an instance with no connector, because the flag only stuck when something was removed. It sticks when there is nothing to do as well.
+---------------------------------------------------------------------------------------------------
 Version: 0.38.7
 Date: 2026-11-03
   Changed:
