@@ -1,4 +1,9 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.38.5
+Date: 2026-11-03
+  Changed:
+    - diagnostic build: the connector hubs are emptied once on the first load after this version, so the request cap can be observed from zero.
+---------------------------------------------------------------------------------------------------
 Version: 0.38.4
 Date: 2026-11-02
   Fixed:
