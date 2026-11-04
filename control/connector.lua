@@ -1198,8 +1198,9 @@ local function hub_inventory(platform)
     return nil
 end
 
--- Set one item's count in a connector hub, exactly. Inventory only: requests are untouched,
--- so this can leave a hub holding more than it asks for.
+-- Set one item's count in a connector hub, exactly. Absolute, never a delta: the mirror's
+-- sweep states the count it wants, and the hub ends up holding that many. Requests are not
+-- touched. A cargo pod's arrival still applies a delta, because there the change is real.
 local function hub_set_item(args)
     storage_ready()
     args = args or {}
@@ -1215,36 +1216,75 @@ local function hub_set_item(args)
     if not platform or not platform.hub or not platform.hub.valid then
         return {ok = false, error = "no connector hub"}
     end
-    local inventory = hub_inventory(platform)
-    if not inventory then
-        return {ok = false, error = "no hub inventory"}
-    end
     local quality = args.quality
     if quality == "normal" then
         quality = nil
     end
-    local before = 0
-    pcall(function() before = inventory.get_item_count{name = args.item, quality = quality} end)
-    local delta = want - before
-    if delta > 0 then
-        local ok, err = pcall(function()
-            inventory.insert{name = args.item, count = delta, quality = quality}
-        end)
-        if not ok then
-            return {ok = false, error = tostring(err), before = before}
+
+    local function matches(entry)
+        if entry.name ~= args.item then
+            return false
         end
-    elseif delta < 0 then
+        local entry_quality = entry.quality and tostring(entry.quality) or "normal"
+        return entry_quality == (quality or "normal")
+    end
+
+    -- Read every inventory once: the one that actually holds the item is the one to write,
+    -- and its count is the base. A probe that answers 0 for an inventory that is not holding
+    -- the item is what turned an absolute set into an extra delivery.
+    local target_inventory, before = nil, 0
+    for _, value in pairs(defines.inventory or {}) do
+        local ok, inventory = pcall(function() return platform.hub.get_inventory(value) end)
+        if ok and inventory then
+            local okc, contents = pcall(function() return inventory.get_contents() end)
+            if okc and contents then
+                local found = 0
+                for _, entry in ipairs(contents) do
+                    if matches(entry) then
+                        found = found + entry.count
+                    end
+                end
+                if found > 0 then
+                    target_inventory, before = inventory, found
+                    break
+                end
+            end
+        end
+    end
+    if not target_inventory then
+        target_inventory = hub_inventory(platform)
+    end
+    if not target_inventory then
+        return {ok = false, error = "no hub inventory"}
+    end
+
+    if before > 0 then
+        pcall(function()
+            target_inventory.remove{name = args.item, count = before, quality = quality}
+        end)
+    end
+    if want > 0 then
         local ok, err = pcall(function()
-            inventory.remove{name = args.item, count = -delta, quality = quality}
+            target_inventory.insert{name = args.item, count = want, quality = quality}
         end)
         if not ok then
             return {ok = false, error = tostring(err), before = before}
         end
     end
-    local after = before
-    pcall(function() after = inventory.get_item_count{name = args.item, quality = quality} end)
-    debug.emit("hub_set_item %s %s/%s %d -> %d", planet, args.item,
-        tostring(args.quality or "normal"), before, after)
+
+    local after = 0
+    pcall(function()
+        local okc, contents = pcall(function() return target_inventory.get_contents() end)
+        if okc and contents then
+            for _, entry in ipairs(contents) do
+                if matches(entry) then
+                    after = after + entry.count
+                end
+            end
+        end
+    end)
+    debug.emit("hub_set_item %s %s/%s %d -> %d (absolute, want %d)", planet, args.item,
+        tostring(args.quality or "normal"), before, after, want)
     return {ok = after == want, planet = planet, item = args.item, before = before, after = after}
 end
 

@@ -1,4 +1,9 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.39.1
+Date: 2026-11-04
+  Fixed:
+    - connector_set_item applied a delta computed from a probed count, so a hub that already held the item had the whole amount inserted again (every over-item read exactly 200%). It now reads the inventory that holds the item, removes that many, inserts exactly the requested count, and reports before/after.
+---------------------------------------------------------------------------------------------------
 Version: 0.39.0
 Date: 2026-11-03
   Added:
