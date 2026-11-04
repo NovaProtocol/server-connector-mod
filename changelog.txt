@@ -1,4 +1,11 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.39.2
+Date: 2026-11-04
+  Added:
+    - every connector_pod push carries the last ten pod events, so one dropped datagram cannot lose a delta; the receiver dedupes by id.
+  Changed:
+    - the rotating cargo sweep is removed. The mirror runs on pod events only.
+---------------------------------------------------------------------------------------------------
 Version: 0.39.1
 Date: 2026-11-04
   Fixed:

@@ -160,11 +160,30 @@ local function enqueue(direction, desc, cargo, unit)
         at = game.tick,
     }
     storage.pod_queue[id] = entry
-    outbound.push("connector_pod", entry)
+    push_pod(entry)
 end
 
 -- A pod has left a platform hub or a surface. If the source is a copy hub, the cargo has left
 -- the copy and must leave the real hub. If it left a planet, remember it for delivery.
+-- One push, with the last ten events attached. A single lost datagram — or ten in a row —
+-- is then repaired by the next one, because the receiver dedupes by id.
+local POD_RECENT = 10
+local function push_pod(entry)
+    storage.pod_recent = storage.pod_recent or {}
+    local recent = {}
+    local first = math.max(1, #storage.pod_recent - POD_RECENT + 1)
+    for i = first, #storage.pod_recent do
+        recent[#recent + 1] = storage.pod_recent[i]
+    end
+    entry.recent = recent
+    push_pod(entry)
+    entry.recent = nil
+    storage.pod_recent[#storage.pod_recent + 1] = entry
+    if #storage.pod_recent > POD_RECENT then
+        table.remove(storage.pod_recent, 1)
+    end
+end
+
 local function started(event)
     if not known() then
         return
@@ -230,7 +249,7 @@ local function tick()
         if now - (entry.at or now) > QUEUE_TTL then
             storage.pod_queue[id] = nil
         else
-            outbound.push("connector_pod", entry)
+            push_pod(entry)
         end
     end
     for unit, record in pairs(storage.pod_cargo) do
@@ -533,7 +552,7 @@ local function test(kind, platform_name, item, count)
             tick = game.tick, at = game.tick,
         }
         storage.pod_queue[id] = entry
-        outbound.push("connector_pod", entry)
+        push_pod(entry)
         log(string.format("[%s] podtest %s %s x%d on %s", instance(), direction, item, count, platform_name))
         return {ok = true, id = id}
     end
