@@ -319,6 +319,8 @@ local calls = {
     connector_remove_bay = connector.remove_bay,
     connector_delete = connector.delete,
     connector_clear = connector.clear,
+    connector_set_item = connector.hub_set_item,
+    connector_cargo_page = connector.hub_cargo_page,
     connector_probe = connector.probe,
     connector_edit = connector.edit,
 

@@ -1180,6 +1180,114 @@ local function remove_bay(payload)
     return {ok = true, removed = #existing, offset = payload.offset}
 end
 
+-- The hub's storage inventory, asked for by name first and then by probing, so this works
+-- whichever index the hub exposes on this build.
+local function hub_inventory(platform)
+    local ok, inv = pcall(function()
+        return platform.hub.get_inventory(defines.inventory.space_platform_hub_main)
+    end)
+    if ok and inv then
+        return inv
+    end
+    for _, value in pairs(defines.inventory or {}) do
+        local ok2, candidate = pcall(function() return platform.hub.get_inventory(value) end)
+        if ok2 and candidate then
+            return candidate
+        end
+    end
+    return nil
+end
+
+-- Set one item's count in a connector hub, exactly. Inventory only: requests are untouched,
+-- so this can leave a hub holding more than it asks for.
+local function hub_set_item(args)
+    storage_ready()
+    args = args or {}
+    local planet = args.planet
+    if role() == "planet" then
+        planet = INSTANCE()
+    end
+    if not planet or type(args.item) ~= "string" then
+        return {ok = false, error = "planet and item are required"}
+    end
+    local want = math.max(0, math.floor(tonumber(args.count) or 0))
+    local platform = find_connector(planet)
+    if not platform or not platform.hub or not platform.hub.valid then
+        return {ok = false, error = "no connector hub"}
+    end
+    local inventory = hub_inventory(platform)
+    if not inventory then
+        return {ok = false, error = "no hub inventory"}
+    end
+    local quality = args.quality
+    if quality == "normal" then
+        quality = nil
+    end
+    local before = 0
+    pcall(function() before = inventory.get_item_count{name = args.item, quality = quality} end)
+    local delta = want - before
+    if delta > 0 then
+        local ok, err = pcall(function()
+            inventory.insert{name = args.item, count = delta, quality = quality}
+        end)
+        if not ok then
+            return {ok = false, error = tostring(err), before = before}
+        end
+    elseif delta < 0 then
+        local ok, err = pcall(function()
+            inventory.remove{name = args.item, count = -delta, quality = quality}
+        end)
+        if not ok then
+            return {ok = false, error = tostring(err), before = before}
+        end
+    end
+    local after = before
+    pcall(function() after = inventory.get_item_count{name = args.item, quality = quality} end)
+    debug.emit("hub_set_item %s %s/%s %d -> %d", planet, args.item,
+        tostring(args.quality or "normal"), before, after)
+    return {ok = after == want, planet = planet, item = args.item, before = before, after = after}
+end
+
+-- One page of a hub's contents, sorted, for the mirror's slow sweep. Read-only.
+local function hub_cargo_page(args)
+    storage_ready()
+    args = args or {}
+    local planet = args.planet
+    if role() == "planet" then
+        planet = INSTANCE()
+    end
+    local offset = math.max(1, math.floor(tonumber(args.offset) or 1))
+    local limit = math.max(1, math.min(50, math.floor(tonumber(args.limit) or 5)))
+    local platform = planet and find_connector(planet) or nil
+    if not platform or not platform.hub or not platform.hub.valid then
+        return {ok = false, error = "no connector hub", planet = planet}
+    end
+    local inventory = hub_inventory(platform)
+    if not inventory then
+        return {ok = false, error = "no hub inventory", planet = planet}
+    end
+    local ok, contents = pcall(function() return inventory.get_contents() end)
+    if not ok or not contents then
+        return {ok = false, error = "could not read the hub", planet = planet}
+    end
+    table.sort(contents, function(a, b)
+        if a.name ~= b.name then return a.name < b.name end
+        local qa = a.quality and tostring(a.quality) or "normal"
+        local qb = b.quality and tostring(b.quality) or "normal"
+        return qa < qb
+    end)
+    local items = {}
+    for i = offset, math.min(#contents, offset + limit - 1) do
+        local entry = contents[i]
+        items[#items + 1] = {
+            item = entry.name,
+            quality = entry.quality and tostring(entry.quality) or "normal",
+            count = entry.count,
+        }
+    end
+    return {ok = true, planet = planet, offset = offset, total = #contents, items = items}
+end
+
 -- Empty a connector hub without rebuilding it. Returns how many items were taken out.
 local function clear(planet)
     storage_ready()
@@ -1781,6 +1889,8 @@ return {
     apply = apply,
     delete = delete,
     clear = clear,
+    hub_set_item = hub_set_item,
+    hub_cargo_page = hub_cargo_page,
     build_bay = build_bay,
     remove_bay = remove_bay,
     edit = edited,
