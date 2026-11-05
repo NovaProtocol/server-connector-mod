@@ -87,6 +87,13 @@ local function research_state(payload)
         count = count + 1
     end
 
+    local queue = {}
+    for _, technology in pairs(force.research_queue or {}) do
+        if technology and technology.name then
+            queue[#queue + 1] = technology.name
+        end
+    end
+
     return {
         instance = instance(),
         items = items,
@@ -98,6 +105,7 @@ local function research_state(payload)
         -- next and the manager cannot tell a level-up from a bar going backwards.
         level = force.current_research and force.current_research.level or 0,
         progress = force.research_progress,
+        queue = queue,
         tick = game.tick,
     }
 end

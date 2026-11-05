@@ -14,6 +14,8 @@ local chunks = require("__server-connector-mod__.control.chunks")
 local server = require("__server-connector-mod__.control.server")
 local platforms = require("__server-connector-mod__.control.platforms")
 local platform_api = require("__server-connector-mod__.control.platform_api")
+local platform_detail = require("__server-connector-mod__.control.platform_detail")
+local players = require("__server-connector-mod__.control.players")
 local connector = require("__server-connector-mod__.control.connector")
 local demand = require("__server-connector-mod__.control.demand")
 local pod = require("__server-connector-mod__.control.pod")
@@ -334,6 +336,9 @@ local calls = {
     -- directly for a manual read, a full dump or a computed difference.
     platform_cargo = platform_api.cargo,
     platform_requests = platform_api.requests,
+    platform_detail = platform_detail.detail,
+    platform_hub_dump = platform_detail.dump,
+    player_detail = players.detail,
     apply_cargo_delta = platform_api.apply_cargo_delta,
     apply_requests = platform_api.apply_requests,
 

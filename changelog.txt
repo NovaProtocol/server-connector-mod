@@ -1,4 +1,14 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.39.4
+Date: 2026-11-05
+  Added:
+    - platform_detail(index): read-only platform name, location, pause state, bay count, hub contents, requests and schedule when the build exposes it.
+    - platform_hub_dump(index, cursor, limit): the paged hub read the manager's platform store already expects.
+    - player_detail(name): read-only player server, surface, body and inventory contents.
+    - the research state now carries the ordered research queue.
+  Notes:
+    - no new writes; every call above is a read for the manager's runtime pages.
+---------------------------------------------------------------------------------------------------
 Version: 0.39.3
 Date: 2026-11-04
   Fixed:
