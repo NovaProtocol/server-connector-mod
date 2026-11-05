@@ -167,8 +167,14 @@ end
 -- the copy and must leave the real hub. If it left a planet, remember it for delivery.
 -- One push, with the last ten events attached. A single lost datagram — or ten in a row —
 -- is then repaired by the next one, because the receiver dedupes by id.
+--
+-- A global on purpose: the handlers that push are defined above this line and resolve the
+-- name at call time, so a local here would be nil for them. Each stored event is a shallow
+-- copy WITHOUT its own `recent`, otherwise every replay nests the previous one until the
+-- stack overflows.
 local POD_RECENT = 10
-local function push_pod(entry)
+
+function push_pod(entry)
     storage.pod_recent = storage.pod_recent or {}
     local recent = {}
     local first = math.max(1, #storage.pod_recent - POD_RECENT + 1)
@@ -176,9 +182,16 @@ local function push_pod(entry)
         recent[#recent + 1] = storage.pod_recent[i]
     end
     entry.recent = recent
-    push_pod(entry)
+    outbound.push("connector_pod", entry)
     entry.recent = nil
-    storage.pod_recent[#storage.pod_recent + 1] = entry
+    storage.pod_recent[#storage.pod_recent + 1] = {
+        id = entry.id,
+        planet = entry.planet,
+        role = entry.role,
+        direction = entry.direction,
+        cargo = entry.cargo,
+        weight = entry.weight,
+    }
     if #storage.pod_recent > POD_RECENT then
         table.remove(storage.pod_recent, 1)
     end

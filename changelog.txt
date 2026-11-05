@@ -1,4 +1,9 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.39.3
+Date: 2026-11-04
+  Fixed:
+    - the ten-event replay made push_pod a local defined after the handlers that call it, so they saw a nil global, and it stored each event with its own replay list, nesting until the stack overflowed. The helper is a global now and stores a shallow copy without the replay list.
+---------------------------------------------------------------------------------------------------
 Version: 0.39.2
 Date: 2026-11-04
   Added:
