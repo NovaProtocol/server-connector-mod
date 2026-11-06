@@ -77,13 +77,22 @@ local function when_known(fn)
     end
 end
 
+-- Fleet work, as opposed to the solo connector's telemetry and speed control.
+local function when_multi(fn)
+    return when_known(function()
+        if state.is_multi() then
+            fn()
+        end
+    end)
+end
+
 -- A planet server and asteroids, once a second.
-every(60, "the asteroid sweep", when_known(convert.sweep_asteroids))
+every(60, "the asteroid sweep", when_multi(convert.sweep_asteroids))
 
 -- The surface check, once a second: a body standing where this instance does not own it is
 -- put back, a queued space body is removed when the server is empty, and the spawn point is
 -- re-asserted if it drifted. Every one of these is a no-op in the common case.
-every(60, "the surface check", when_known(function()
+every(60, "the surface check", when_multi(function()
     for _, player in pairs(game.connected_players) do
         server.enforce_surface(player)
     end
@@ -93,38 +102,38 @@ end))
 
 -- Chunks on a surface this server does not own, once a minute. Per chunk, and a chunk with a
 -- body in it is kept: that is the joining player or a copy from another save.
-every(3600, "the foreign chunks", when_known(chunks.sweep))
+every(3600, "the foreign chunks", when_multi(chunks.sweep))
 
 -- The connector queue: one pass per tick, and it does nothing unless an edit, a build or
 -- a refund is waiting. The queue is empty in the common case, so this is a dispatch, not a
 -- poll of the game.
-every(1, "the connector queue", when_known(connector.tick))
-every(1, "the demand queue", when_known(demand.tick))
-every(18000, "the demand audit", when_known(function() demand.queue("audit") end))
+every(1, "the connector queue", when_multi(connector.tick))
+every(1, "the demand queue", when_multi(demand.tick))
+every(18000, "the demand audit", when_multi(function() demand.queue("audit") end))
 
 -- Research progress is pushed over UDP only when it moved, once a second.
-every(60, "outbound research", when_known(outbound.tick_research))
+every(60, "outbound research", when_multi(outbound.tick_research))
 
 -- The server window's live rows: players, speed and version, once a second.
 every(60, "the heartbeat", when_known(outbound.tick_heartbeat))
 
 -- Re-send cargo-pod events for a minute. The queue write is on every peer (the tick is
 -- deterministic); the manager de-duplicates by event id.
-every(600, "the pod queue", pod.tick)
+every(600, "the pod queue", when_multi(pod.tick))
 
 -- Re-send a carried platform request until the space server has it. The first message is
 -- a datagram and can be dropped; the record lives until the manager acks it.
-every(600, "the native creates", when_known(platforms.retry_native_creates))
+every(600, "the native creates", when_multi(platforms.retry_native_creates))
 
 -- A platform surface can exist for a moment before surface.platform answers. Five seconds
 -- of watching is enough; on any other surface these three passes do nothing.
-every(5, "the native platforms", when_known(function() platforms.tick(connector.is_connector) end))
-every(120, "platform requests", when_known(requests.purge))
-every(600, "platform request resend", when_known(requests.resend))
+every(5, "the native platforms", when_multi(function() platforms.tick(connector.is_connector) end))
+every(120, "platform requests", when_multi(requests.purge))
+every(600, "platform request resend", when_multi(requests.resend))
 
 -- The space server's body stays peaceful, and chunks that generate around a player who
 -- is standing on it are swept for ten seconds after a join. A no-op elsewhere.
-every(60, "the body calm", when_known(function()
+every(60, "the body calm", when_multi(function()
     convert.keep_body_calm()
     local left = tonumber(storage.body_clear) or 0
     if left > 0 then
@@ -179,7 +188,7 @@ script.on_configuration_changed(function()
         -- spends it. Empty the connector hubs once per build so the request cap can be
         -- observed from zero. Ships are untouched.
         local build = (script.active_mods or {})["server-connector-mod"]
-        if build and storage.hubs_cleared ~= build then
+        if state.is_multi() and build and storage.hubs_cleared ~= build then
             storage.hubs_cleared = build
             for _, platform in pairs(state.main_force().platforms or {}) do
                 if platform.valid and platform.hub and platform.hub.valid
@@ -200,10 +209,12 @@ script.on_configuration_changed(function()
         if rcon then
             storage.connector_ready_pending = true
         end
-        convert.disable_crash_site()
-        convert.ensure_surfaces()
-        convert.keep_body_calm()
-        connector.ensure_all()
+        if state.is_multi() then
+            convert.disable_crash_site()
+            convert.ensure_surfaces()
+            convert.keep_body_calm()
+            connector.ensure_all()
+        end
         restore_speed()
         -- Every player in the save gets the new one-button server menu, and the old
         -- per-server frame is removed if this save still has one.
@@ -298,6 +309,9 @@ end
 -- request is carried to the space server, which is the only place a real platform lives.
 local function reject_native_platform(surface, what)
     guard(what, function()
+        if not state.is_multi() then
+            return
+        end
         -- A platform this mod is creating raises the same events. Let create_platform
         -- finish; its own checks and the next ensure handle the result.
         if storage.connector_creating or storage.creating_copy then
@@ -330,6 +344,9 @@ if defines.events.on_surface_created then
                 return
             end
             debug.dump("surface created", debug.surface_table(surface))
+            if not state.is_multi() then
+                return
+            end
 
             -- Every creation is logged, including the one that has no platform attached yet.
             -- That was the silent case: a new platform surface can exist for a moment before
@@ -482,6 +499,9 @@ end)
 script.on_event(defines.events.on_player_joined_game, function(event)
     guard("a join", function()
         debug.event("on_player_joined_game", event)
+        if not state.is_multi() then
+            return
+        end
         local player = game.get_player(event.player_index)
         if player then
             state.note("joined", player)
@@ -499,7 +519,7 @@ end)
 script.on_event(defines.events.on_player_left_game, function(event)
     guard("a leave", function()
         debug.event("on_player_left_game", event)
-        if not state.empty() then
+        if not state.is_multi() or not state.empty() then
             return
         end
 

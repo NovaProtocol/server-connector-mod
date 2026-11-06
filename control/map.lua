@@ -61,7 +61,7 @@ local function ensure_button(player)
     end
     destroy_legacy(player)
 
-    if not state.known() then
+    if not state.known() or not state.is_multi() then
         destroy_button(player)
         local window = player.gui.screen[WINDOW]
         if window then
@@ -875,7 +875,7 @@ local function refresh(player)
         return
     end
     ensure_button(player)
-    if not state.known() then
+    if not state.known() or not state.is_multi() then
         return
     end
 
@@ -898,7 +898,7 @@ end
 -- button back. A player who joined before the identity arrived had their button removed,
 -- and nothing else re-added it -- the topology push lands here.
 local function refresh_open()
-    if not state.known() then
+    if not state.known() or not state.is_multi() then
         return
     end
     for _, player in pairs(game.connected_players) do

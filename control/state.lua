@@ -64,6 +64,26 @@ local function known()
     return setting ~= nil and setting.value ~= "unconfigured"
 end
 
+-- Whether this world is a fleet node or a solo world.
+--
+-- The manager deliberately withholds the topology from a solo profile. That is the mode
+-- signal: an identified server with no topology has no other servers to route to, so the
+-- connector keeps telemetry and speed control and leaves planet connectors, the server
+-- selector, custom surfaces and fleet research alone.
+local function is_multi()
+    if storage == nil then
+        return false
+    end
+    local count = 0
+    for _ in pairs(storage.topology or {}) do
+        count = count + 1
+        if count > 1 then
+            return true
+        end
+    end
+    return false
+end
+
 -- Whether the fleet is empty of players.
 --
 -- World changes driven from outside the game -- orders arriving over RCON -- are NOT
@@ -407,6 +427,7 @@ return {
     ensure_storage = ensure_storage,
     instance = instance,
     known = known,
+    is_multi = is_multi,
     empty = empty,
     main_force = main_force,
     destinations = destinations,

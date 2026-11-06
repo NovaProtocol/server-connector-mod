@@ -57,7 +57,9 @@ local function force()
 end
 
 local function known()
-    return state.known()
+    -- A solo profile has an identity but no topology. Its connector is a telemetry and
+    -- speed endpoint only; every planet-side operation below stays dormant.
+    return state.known() and state.is_multi()
 end
 
 local function storage_ready()
