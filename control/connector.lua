@@ -23,10 +23,13 @@ local bus = require("__server-connector-mod__.control.bus")
 local platforms = require("__server-connector-mod__.control.platforms")
 local platform_api = require("__server-connector-mod__.control.platform_api")
 
-local PLANET_PLATFORM_NAME = "Space Platforms"
+local PLANET_PLATFORM_NAME = "~Space Platforms"
+local LEGACY_PLANET_PLATFORM_NAME = "Space Platforms"
 local SPACE_ICON = "[space-location=solar-system-edge]"
-local INCOMING = "Incoming (Space to Planet)"
-local OUTGOING = "Outgoing (Planet to Space)"
+local INCOMING = "~Incoming (Space to Planet)"
+local OUTGOING = "~Outgoing (Planet to Space)"
+local LEGACY_INCOMING = "Incoming (Space to Planet)"
+local LEGACY_OUTGOING = "Outgoing (Planet to Space)"
 
 local INSTANCE = state.instance
 local PROTOCOL = state.PROTOCOL
@@ -98,18 +101,26 @@ end
 -- recognised and renamed in place instead of being duplicated by ensure_all.
 local function legacy_connector_name(planet)
     if role() == "planet" then
-        return PLANET_PLATFORM_NAME
+        return LEGACY_PLANET_PLATFORM_NAME
     end
     return string.format("[planet=%s] %s Hub", planet, display_name(planet))
 end
 
-local function group_names(planet)
+local function legacy_group_names(planet)
     if role() == "planet" then
-        return INCOMING, OUTGOING, "Buffer"
+        return LEGACY_INCOMING, LEGACY_OUTGOING, "Buffer"
     end
     return string.format("%s Space to [planet=%s] %s", SPACE_ICON, planet, display_name(planet)),
         string.format("[planet=%s] %s to %s Space", planet, display_name(planet), SPACE_ICON),
         string.format("[planet=%s] %s Buffer", planet, display_name(planet))
+end
+
+local function group_names(planet)
+    if role() == "planet" then
+        return INCOMING, OUTGOING, "~Buffer"
+    end
+    local in_name, out_name, buffer_name = legacy_group_names(planet)
+    return "~" .. in_name, "~" .. out_name, "~" .. buffer_name
 end
 
 -- Which planet a platform belongs to. On a planet that is the instance; on space it is
@@ -153,9 +164,9 @@ local function find_connector(planet)
     if role() == "planet" and planet ~= INSTANCE() then
         return nil
     end
-    local want = connector_name(planet)
+    local want, old = connector_name(planet), legacy_connector_name(planet)
     for _, platform in pairs(force().platforms or {}) do
-        if platform.valid and platform.name == want then
+        if platform.valid and (platform.name == want or platform.name == old) then
             return platform
         end
     end
@@ -580,6 +591,34 @@ local function planets()
     return out
 end
 
+-- Rename the three groups made by older builds to their tilde-prefixed names. The tilde is
+-- deliberately cosmetic: it sorts generated groups below a player's own groups, and the
+-- connector's identity is still the platform name, not these labels.
+local function migrate_group_names(platform, planet)
+    if not platform or not platform.valid or not platform.hub or not platform.hub.valid then
+        return
+    end
+    local point = platform_api.request_point(platform.hub)
+    if not point then
+        return
+    end
+    local old_in, old_out, old_buffer = legacy_group_names(planet)
+    local new_in, new_out, new_buffer = group_names(planet)
+    for _, pair in ipairs({
+        {old = old_in, new = new_in},
+        {old = old_out, new = new_out},
+        {old = old_buffer, new = new_buffer},
+    }) do
+        if pair.old ~= pair.new then
+            local old_section = find_section(point, pair.old)
+            local new_section = find_section(point, pair.new)
+            if old_section and not new_section then
+                pcall(function() old_section.group = pair.new end)
+            end
+        end
+    end
+end
+
 -- A platform that is not the connector for its planet is a duplicate: a starter pack that
 -- was launched, an older copy, or a platform made before this design. It goes, and the
 -- connector is made again. The spec is one platform per planet.
@@ -591,6 +630,11 @@ local function ensure_all()
 
     local made = {}
     if role() == "planet" then
+        for _, platform in pairs(force().platforms or {}) do
+            if platform.valid and platform.name == LEGACY_PLANET_PLATFORM_NAME then
+                pcall(function() platform.name = PLANET_PLATFORM_NAME end)
+            end
+        end
         local connector = create_platform(INSTANCE())
         if connector then
             made[#made + 1] = connector.name
@@ -602,6 +646,7 @@ local function ensure_all()
         end
         for _, platform in pairs(force().platforms or {}) do
             if is_connector(platform) then
+                migrate_group_names(platform, INSTANCE())
                 protect(platform)
                 queue_base_grid(platform)
                 enforce_platform(platform, {}, INSTANCE())
@@ -646,9 +691,11 @@ local function ensure_all()
         -- nothing else is pruned on the space server.
         for _, platform in pairs(force().platforms or {}) do
             if is_connector(platform) then
+                local planet = planet_of(platform)
+                migrate_group_names(platform, planet)
                 protect(platform)
                 queue_base_grid(platform)
-                enforce_platform(platform, {}, planet_of(platform))
+                enforce_platform(platform, {}, planet)
             end
         end
     end

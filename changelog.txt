@@ -1,4 +1,12 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.39.6
+Date: 2026-11-06
+  Changed:
+    - generated connector platforms use a leading tilde (~Space Platforms) and all generated request groups use a leading tilde, so they sort below player-created items.
+    - existing connector platforms and groups are renamed in place.
+  Notes:
+    - no routing or request semantics changed.
+---------------------------------------------------------------------------------------------------
 Version: 0.39.5
 Date: 2026-11-06
   Added:
