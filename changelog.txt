@@ -1,4 +1,12 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.39.5
+Date: 2026-11-06
+  Added:
+    - solo mode: an identified server with an empty topology behaves as a Single Server. It keeps UPS/RAM/player/speed telemetry and set_speed/set_paused, but creates no planet connectors, server selector, custom surfaces or fleet research.
+  Fixed:
+    - the identity push and configuration change no longer run fleet surface conversion on a solo save.
+    - the solo branch of the server menu no longer calls close_checks before it is defined.
+---------------------------------------------------------------------------------------------------
 Version: 0.39.4
 Date: 2026-11-05
   Added:
