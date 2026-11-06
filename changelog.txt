@@ -1,4 +1,9 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.39.8
+Date: 2026-11-06
+  Added:
+    - connector hubs enforce `providing_to_other_platforms = true` every second, so every planet connector supplies the other platforms.
+---------------------------------------------------------------------------------------------------
 Version: 0.39.7
 Date: 2026-11-06
   Fixed:

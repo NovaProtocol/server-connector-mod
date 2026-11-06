@@ -92,6 +92,8 @@ every(60, "the asteroid sweep", when_multi(convert.sweep_asteroids))
 -- The surface check, once a second: a body standing where this instance does not own it is
 -- put back, a queued space body is removed when the server is empty, and the spawn point is
 -- re-asserted if it drifted. Every one of these is a no-op in the common case.
+every(60, "the connector material provision", when_multi(connector.enforce_providing))
+
 every(60, "the surface check", when_multi(function()
     for _, player in pairs(game.connected_players) do
         server.enforce_surface(player)

@@ -622,6 +622,25 @@ end
 -- A platform that is not the connector for its planet is a duplicate: a starter pack that
 -- was launched, an older copy, or a platform made before this design. It goes, and the
 -- connector is made again. The spec is one platform per planet.
+-- A connector hub must be a provider for the other platforms, not just a requester.
+-- The checkbox is a player-facing property, so a player can uncheck it; the mod restores
+-- it on the next pass. This is deliberately a timer rather than relying on a GUI event:
+-- the property can also be changed by blueprints, migration or another mod.
+local function enforce_providing()
+    if not known() then
+        return
+    end
+    for _, platform in pairs(force().platforms or {}) do
+        if platform.valid and platform.hub and platform.hub.valid and is_connector(platform) then
+            pcall(function()
+                if platform.hub.providing_to_other_platforms ~= true then
+                    platform.hub.providing_to_other_platforms = true
+                end
+            end)
+        end
+    end
+end
+
 local function ensure_all()
     if not known() then
         return {ok = false, skipped = "no identity"}
@@ -655,6 +674,7 @@ local function ensure_all()
         for _, pad in ipairs(pads()) do
             quiet_trash(pad)
         end
+        enforce_providing()
     else
         -- Without a topology there is no list of planets to keep, and pruning on an empty
         -- list would remove every platform on the space server -- including the connectors
@@ -698,6 +718,7 @@ local function ensure_all()
                 enforce_platform(platform, {}, planet)
             end
         end
+        enforce_providing()
     end
 
     storage.demand_pending = "ensure"
@@ -811,6 +832,7 @@ local function read_state(platform, with_cargo, with_shape)
             exists = true,
             hub = false,
             clock = storage.connector_clock or 0,
+            providing = false,
             weight = nil,
             cargo = with_cargo and {} or nil,
             has_cargo = with_cargo or false,
@@ -837,6 +859,7 @@ local function read_state(platform, with_cargo, with_shape)
         exists = true,
         hub = true,
         clock = storage.connector_clock or 0,
+        providing = platform.hub.providing_to_other_platforms == true,
         weight = inventory and inventory.weight or nil,
         -- A request or bay edit deliberately carries no cargo. Sending a stale full list
         -- with a request edit is how a request change would undo a pod that landed between
@@ -1994,6 +2017,7 @@ return {
     pad_point = pad_point,
     quiet_trash = quiet_trash,
     set_groups = set_groups,
+    enforce_providing = enforce_providing,
     read_groups = read_groups,
     read_cargo = read_cargo,
     read_layout = read_layout,
