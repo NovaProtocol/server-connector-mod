@@ -8,6 +8,15 @@ manager: where each player's body is, and what the other servers are. The mod is
 interface to Lua and holds no policy of its own — what it does is report what only it
 can see, and execute what the manager asks.
 
+## Solo mode
+
+The manager withholds the fleet topology from a **Single Server** profile. An identified
+server with no topology is therefore solo: the connector still reports UPS, RAM, players
+and speed over UDP, and still accepts `set_speed` / `set_paused`, but it creates no
+planet connectors, server selector, custom surfaces or fleet research. A multi-server
+profile receives `set_topology` and behaves exactly as before. This keeps one copy of the
+mod for both kinds of profile while leaving a solo world an ordinary Factorio game.
+
 ## Getting the manager's calls in
 
 Two channels, both over RCON, both pushed rather than read from a setting:

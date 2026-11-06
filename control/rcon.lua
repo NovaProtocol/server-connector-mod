@@ -118,7 +118,7 @@ local calls = {
         end
         state.ensure_storage()
         if storage.instance == id then
-            if state.empty() then
+            if state.empty() and state.is_multi() then
                 convert.ensure_surfaces()
                 -- A restart keeps the identity in the save, so this is the branch that runs
                 -- on every fleet start. The connector still has to be ensured here.
@@ -131,11 +131,13 @@ local calls = {
             return {instance = state.instance(), skipped = "somebody is connected"}
         end
         state.set_instance(id)
-        convert.ensure_surfaces()
-        connector.ensure_all()
-        -- The identity is what lets the map window exist: without this the button stays
-        -- removed from anybody who joined before it arrived.
-        map.refresh_all()
+        if state.is_multi() then
+            convert.ensure_surfaces()
+            connector.ensure_all()
+            -- The identity is what lets the map window exist: without this the button stays
+            -- removed from anybody who joined before it arrived.
+            map.refresh_all()
+        end
         debug.boot()
         return {instance = state.instance()}
     end,

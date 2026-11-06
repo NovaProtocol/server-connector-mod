@@ -55,6 +55,8 @@ local function destroy_button(player)
     end
 end
 
+local close_checks
+
 local function ensure_button(player)
     if not player or not player.valid then
         return
@@ -91,7 +93,7 @@ local function ensure_button(player)
     end
 end
 
-local function close_checks(player)
+close_checks = function(player)
     local frame = player.gui.screen[CHECKS_WINDOW]
     if frame then
         frame.destroy()
