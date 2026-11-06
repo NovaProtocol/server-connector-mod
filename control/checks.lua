@@ -56,12 +56,20 @@ local function run()
         if groups and groups.exists and groups.hub then
             local down = items_of(groups.incoming)
             local up = items_of(groups.outgoing)
+            local buffered = items_of(groups.buffer)
             local platform = connector.find_connector(planet)
             local label = (platform and platform.name) or planet
             local names = {}
             for name in pairs(down) do
                 if up[name] then
-                    names[#names + 1] = name
+                    names[#names + 1] = name .. " (incoming and outgoing)"
+                elseif buffered[name] then
+                    names[#names + 1] = name .. " (incoming and buffer)"
+                end
+            end
+            for name in pairs(up) do
+                if buffered[name] and not down[name] then
+                    names[#names + 1] = name .. " (outgoing and buffer)"
                 end
             end
             table.sort(names)

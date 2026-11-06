@@ -1,4 +1,9 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.39.9
+Date: 2026-11-06
+  Fixed:
+    - the in-game Checks window now reports items present in Buffer as well as Incoming/Outgoing, so a buffer/incoming duplicate no longer goes undetected.
+---------------------------------------------------------------------------------------------------
 Version: 0.39.8
 Date: 2026-11-06
   Added:
