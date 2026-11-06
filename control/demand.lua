@@ -235,22 +235,27 @@ local function collect()
 end
 
 local function same(a, b)
+    -- A hub dump is stacks, so the same item can appear several times. Counts have to be
+    -- summed before comparing; otherwise a correct cargo write never verifies and every
+    -- sweep retries it.
     local function keyed(list)
-        local map, count = {}, 0
+        local map = {}
         for _, entry in ipairs(list or {}) do
-            map[tostring(entry.item or entry.name) .. "|" .. tostring(entry.quality or "normal")] =
-                math.floor(tonumber(entry.count) or 0)
-            count = count + 1
+            local key = tostring(entry.item or entry.name) .. "|" ..
+                tostring(entry.quality or "normal")
+            map[key] = (map[key] or 0) + math.floor(tonumber(entry.count) or 0)
         end
-        return map, count
+        return map
     end
-    local left, left_count = keyed(a)
-    local right, right_count = keyed(b)
-    if left_count ~= right_count then
-        return false
-    end
+    local left = keyed(a)
+    local right = keyed(b)
     for key, count in pairs(left) do
         if right[key] ~= count then
+            return false
+        end
+    end
+    for key, count in pairs(right) do
+        if left[key] ~= count then
             return false
         end
     end

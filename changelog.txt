@@ -1,4 +1,9 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.39.7
+Date: 2026-11-06
+  Fixed:
+    - request/cargo read-back verification summed one stack per item instead of all repeated stacks, so a correct hub inventory could never verify and inventory sync retried forever.
+---------------------------------------------------------------------------------------------------
 Version: 0.39.6
 Date: 2026-11-06
   Changed:
