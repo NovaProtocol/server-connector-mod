@@ -1,4 +1,16 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.41.0
+Date: 2026-11-08
+  Major:
+    - runtime manager traffic now uses the generic udp-net library. The connector-call console
+      command and remote interface are removed.
+    - connector ledger support: absolute per-item startup application and a one-item-per-second
+      runtime probe.
+    - freshness reset is now every 1 second (60 ticks), still connector hubs only.
+    - narrow server-connector-bootstrap pause|unpause command for a save that opens tick-paused.
+  Fixed:
+    - the boot ready event is gated on the manager identity.
+---------------------------------------------------------------------------------------------------
 Version: 0.40.8
 Date: 2026-11-08
   Fixed:

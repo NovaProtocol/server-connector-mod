@@ -1901,9 +1901,9 @@ local function tick()
     -- without touching a healthy one.
 
     -- Tell the manager this instance is loaded. One datagram per boot, sent from the
-    -- server only (the RCON global exists there), after the identity has arrived. The
-    -- manager waits for every instance before it runs the startup pre-sync.
-    if (boot_pending or storage.connector_ready_pending) and rcon then
+    -- authoritative server only, after the identity has arrived. The manager waits for
+    -- every instance before it runs the startup pre-sync.
+    if (boot_pending or storage.connector_ready_pending) and bus.is_server() and known() then
         boot_pending = false
         storage.connector_ready_pending = nil
         local version = (script.active_mods and script.active_mods["server-connector-mod"]) or "unknown"
@@ -2044,6 +2044,48 @@ local function probe()
     return out
 end
 
+-- One cheap read for the runtime sync loop. It is deliberately a count, not a hub
+-- dump: the manager already has the canonical entry.
+local function item_count(planet, item, quality)
+    local platform = find_connector(planet)
+    if not platform or not platform.hub or not platform.hub.valid then
+        return 0
+    end
+    local total = 0
+    for _, entry in ipairs(cargo_of(platform)) do
+        if entry.item == item and (entry.quality or "normal") == quality then
+            total = total + (tonumber(entry.count) or 0)
+        end
+    end
+    return total
+end
+
+-- One key per 60 ticks. The key list comes from the manager's ledger manifest; it is
+-- not rebuilt from the hub, because an item missing from the hub must still be probed.
+local function tick_sync()
+    local keys = storage.sync_keys or {}
+    if #keys == 0 then
+        return
+    end
+    local index = (storage.sync_index or 0) % #keys + 1
+    storage.sync_index = index
+    local key = keys[index]
+    if type(key) ~= "table" or type(key.planet) ~= "string" or type(key.item) ~= "string" then
+        return
+    end
+    bus.push("sync_probe", {
+        instance = INSTANCE(),
+        planet = key.planet,
+        side = role(),
+        index = index,
+        revision = storage.sync_revision or 0,
+        item = key.item,
+        quality = key.quality or "normal",
+        count = item_count(key.planet, key.item, key.quality or "normal"),
+        tick = game.tick,
+    })
+end
+
 return {
     role = role,
     mark_boot = mark_boot,
@@ -2086,6 +2128,7 @@ return {
     write_section = write_section,
     pads = pads,
     probe = probe,
+    tick_sync = tick_sync,
     INCOMING = INCOMING,
     OUTGOING = OUTGOING,
 }

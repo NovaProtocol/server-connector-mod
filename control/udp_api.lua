@@ -1,14 +1,14 @@
--- server-connector-mod / control/rcon.lua
+-- server-connector-mod / control/udp_api.lua
 --
--- The surface the node and the manager drive over RCON: one remote interface and one
--- command. Each entry is either glue over two domains (set_instance, set_topology,
--- set_body_location, set_paused, settle) or a reference to the function that owns it
--- (research, convert, platforms, state).
+-- The surface the node and the manager drive over UDP. Each entry is either glue over
+-- two domains (set_instance, set_topology, set_body_location, set_paused, settle) or a
+-- reference to the function that owns it (research, convert, platforms, state).
 --
--- Required as "__server-connector-mod__.control.rcon". Required last: it is the only
+-- Required as "__server-connector-mod__.control.udp_api". Required last: it is the only
 -- module that reaches across all the others.
 
 local state = require("__server-connector-mod__.control.state")
+local net = require("__udp-net__.lib")
 local convert = require("__server-connector-mod__.control.convert")
 local chunks = require("__server-connector-mod__.control.chunks")
 local server = require("__server-connector-mod__.control.server")
@@ -98,17 +98,12 @@ local function merge_topology(topology)
 end
 
 --------------------------------------------------------------------------------
--- what the node and the manager drive over RCON
+-- what the node and the manager drive over UDP
 --------------------------------------------------------------------------------
 
--- The calls the node makes, registered both as a remote interface and as one plain
--- command -- and the node uses the command.
---
--- The obvious route is `/c remote.call(...)`, and that is what this started as.
--- It is wrong twice over: `/c` is a *script* command, which permanently marks the
--- save as cheated, and it echoes into the chat, so a manager polling every few
--- seconds fills the screen a player is trying to play on. A mod's own command does
--- neither, which is the whole reason the companion mod did it this way.
+-- The calls the manager drives over UDP. The obvious route was an RCON console command;
+-- this is a udp-net RPC handler table instead, so the game never needs a console command
+-- for data.
 local calls = {
     -- Which server this is. Pushed by the node at startup, because the
     -- mod-settings.json route is not read on a headless server (see state.instance()).
@@ -131,6 +126,7 @@ local calls = {
             return {instance = state.instance(), skipped = "somebody is connected"}
         end
         state.set_instance(id)
+        net.reset_epoch()
         if state.is_multi() then
             convert.ensure_surfaces()
             connector.ensure_all()
@@ -324,6 +320,36 @@ local calls = {
     connector_delete = connector.delete,
     connector_clear = connector.clear,
     connector_set_item = connector.hub_set_item,
+    -- One absolute item write used by the manager's startup ledger pass. Keeping this
+    -- separate from the bulk apply means one item can be corrected without re-reading or
+    -- rewriting the whole hub.
+    ledger_apply_item = function(args)
+        args = args or {}
+        return connector.hub_set_item(args)
+    end,
+    sync_set_manifest = function(args)
+        args = args or {}
+        state.ensure_storage()
+        storage.sync_keys = args.keys or {}
+        storage.sync_index = 0
+        storage.sync_revision = tonumber(args.revision) or 0
+        return {ok = true, count = #storage.sync_keys}
+    end,
+    ledger_total = function(args)
+        args = args or {}
+        local planet = args.planet
+        if connector.role() == "planet" then
+            planet = state.instance()
+        end
+        local total = 0
+        local platform = connector.find_connector(planet)
+        if platform and platform.hub and platform.hub.valid then
+            for _, entry in ipairs(platform_api.cargo(platform)) do
+                total = total + (tonumber(entry.count) or 0)
+            end
+        end
+        return {ok = true, planet = planet, total = total}
+    end,
     connector_cargo_page = connector.hub_cargo_page,
     connector_probe = connector.probe,
     connector_edit = connector.edit,
@@ -362,11 +388,30 @@ local calls = {
     report = state.report,
 }
 
-remote.add_interface(MOD, calls)
-
 --------------------------------------------------------------------------------
 -- commands
 --------------------------------------------------------------------------------
+
+commands.add_command(
+    MOD .. "-bootstrap",
+    "Internal: pause or unpause a server that cannot process UDP yet. Not for players.",
+    function(event)
+        if event.player_index then
+            return
+        end
+        local argument = (event.parameter or ""):lower()
+        if argument == "pause" then
+            game.tick_paused = true
+        elseif argument == "unpause" then
+            game.tick_paused = false
+        else
+            return
+        end
+        if rcon then
+            rcon.print(helpers.table_to_json({ok = true, paused = game.tick_paused}))
+        end
+    end
+)
 
 commands.add_command(
     MOD .. "-status",
@@ -374,11 +419,9 @@ commands.add_command(
     function(event)
         -- A command error is as fatal as a handler error, so it is contained here too.
         local ok, err = pcall(function()
-            local text = helpers.table_to_json(remote.call(MOD, "report"))
+            local text = helpers.table_to_json(state.report())
             if event.player_index and game.get_player(event.player_index) then
                 game.get_player(event.player_index).print(text)
-            elseif rcon then
-                rcon.print(text)
             end
         end)
         if not ok then
@@ -560,60 +603,8 @@ end
 
 calls.save = save
 
--- One entry point for everything above: the node sends {"fn": "...", "args": [...]}
--- and gets the result back as JSON. A single command rather than one per call, so
--- the surface the node depends on is one name that does not move.
-commands.add_command(
-    MOD .. "-call",
-    "Internal: how the node reaches this mod's interface. Not for use by players.",
-    function(event)
-        if event.player_index then
-            local caller = game.get_player(event.player_index)
-            if caller then
-                caller.print("This command is not available to players.")
-            end
-            return
-        end
-
-        -- The call itself is already wrapped. This is the last line: decoding the request and
-        -- encoding the answer are the game's own helpers, and neither may quit the server.
-        local handled, err = pcall(function()
-            local out = {ok = false}
-
-            local decodedOk, payload = pcall(function()
-                return helpers.json_to_table(event.parameter)
-            end)
-
-            if decodedOk and type(payload) == "table" and type(payload.fn) == "string" and calls[payload.fn] then
-                local called, result = pcall(calls[payload.fn], table.unpack(payload.args or {}))
-                if called then
-                    out = result or {ok = true}
-                else
-                    out = {ok = false, error = tostring(result)}
-                end
-            else
-                out = {ok = false, error = "unknown call"}
-            end
-
-            local calledName = "?"
-            local calledArgs = nil
-            if decodedOk and type(payload) == "table" then
-                calledName = payload.fn or "?"
-                calledArgs = payload.args
-            end
-            debug.call(calledName, calledArgs, out)
-
-            -- rcon.print reaches the RCON client and nobody else, which is the point.
-            if rcon then
-                -- A handler may answer with a plain value (set_server_status answers true);
-                -- table_to_json rejects anything that is not a table, which used to swallow
-                -- the whole reply and log a -call failure instead.
-                local encoded = type(out) == "table" and out or {ok = out}
-                rcon.print(helpers.table_to_json(encoded))
-            end
-        end)
-        if not handled then
-            log(string.format("[%s] -call failed: %s", MOD, tostring(err)))
-        end
-    end
-)
+-- Register every call after the table is complete. There is no console command and no
+-- remote interface: the manager's only entry point is the inbound UDP RPC channel.
+for fn, handler in pairs(calls) do
+    net.handle(fn, handler)
+end

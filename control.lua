@@ -10,18 +10,18 @@
 -- other servers are -- comes from the manager, because a mod cannot see past its
 -- own save. It is an interface to Lua: it holds no policy of its own.
 --
---   identity  remote.call("server-connector","set_instance", ...), pushed by the
---             node once this server is up. A headless server does not import
---             mod-settings.json, so a startup setting never arrives.
---   topology  remote.call("server-connector","set_topology", ...), pushed by the
---             manager: the other servers' ids, names and client addresses.
+--   identity  the manager's UDP set_instance call, pushed once this server is up. A
+--             headless server does not import mod-settings.json, so a startup setting
+--             never arrives.
+--   topology  the manager's UDP set_topology call: the other servers' ids, names and
+--             client addresses.
 --
 -- Nothing here is a script command, so using it never stops achievements.
 --
 -- The runtime is a package under control/, one file per concern; this file is only the
 -- index that loads them, in dependency order. state is the base every other module is
 -- built on, the domains follow it, and the last two arm the mod: events registers the
--- handlers and rcon opens the interface the node calls.
+-- handlers and udp_api opens the interface the manager calls.
 --
 --   control/state.lua      constants, storage, identity, topology, event notes, report
 --   control/convert.lua    surfaces: crash site, create, clear, spawn, settle, asteroid sweep, join fallback
@@ -36,7 +36,7 @@
 --   control/debug.lua      the one DEBUG switch, and the detail dumps it gates
 --   control/bus.lua        the UDP transport, below both platforms and outbound
 --   control/events.lua     every event handler
---   control/rcon.lua       the calls the node drives, and the two commands
+--   control/udp_api.lua    the calls the manager drives over UDP
 --
 -- Each module is required by its absolute path under the mod. Factorio caches a required
 -- file by the exact string it was asked for, so every require of a given module uses one
@@ -63,4 +63,4 @@ require("__server-connector-mod__.control.research")
 require("__server-connector-mod__.control.outbound")
 require("__server-connector-mod__.control.requests")
 require("__server-connector-mod__.control.events")
-require("__server-connector-mod__.control.rcon")
+require("__server-connector-mod__.control.udp_api")

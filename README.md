@@ -19,12 +19,18 @@ mod for both kinds of profile while leaving a solo world an ordinary Factorio ga
 
 ## Getting the manager's calls in
 
-Two channels, both over RCON, both pushed rather than read from a setting:
+Two channels, both over the generic `udp-net` library:
 
 | Call | Carries |
 |---|---|
 | `set_instance(id)` | Which planet (or `space`) this server handles |
 | `set_topology(servers)` | Every server's id, name and client address |
+
+The mod calls `helpers.recv_udp()` every tick through `udp-net`; the manager's calls are
+`udp-net` request/reply datagrams to this instance's Lua UDP port. The old
+`server-connector-call` console command and remote interface are gone. A single narrow
+`server-connector-bootstrap pause|unpause` command remains for a save that opens
+tick-paused, where UDP cannot be read; it carries no data.
 
 **Identity is pushed, not configured.** The intended carrier was the startup setting
 `server-connector-instance`, but a headless server does not import
@@ -38,13 +44,12 @@ safe direction: a wrong instance would send players to the wrong server.
 
 ## The call surface
 
-One command, `server-connector-call`, taking `{"fn": "...", "args": [...]}` and
-answering with JSON. One name that does not move as the interface grows.
+One UDP RPC surface, `{"fn": "...", "args": [...]}`, answering with JSON. One name that
+does not move as the interface grows.
 
 **Nothing here is a script command, so using it never stops achievements.** `/c` and
 `/sc` are script commands: they permanently mark the save as cheated and they echo
-into the chat. A manager polling every few seconds would fill the screen of anyone
-playing, which is why the node talks to this mod through its own command instead.
+into the chat. The manager talks to this mod through `udp-net` instead.
 
 | `fn` | Does |
 |---|---|

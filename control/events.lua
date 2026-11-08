@@ -30,6 +30,7 @@ local requests = require("__server-connector-mod__.control.requests")
 local debug = require("__server-connector-mod__.control.debug")
 local pod = require("__server-connector-mod__.control.pod")
 local outbound = require("__server-connector-mod__.control.outbound")
+local bus = require("__server-connector-mod__.control.bus")
 
 local MOD = state.MOD
 local SCHEMA = state.SCHEMA
@@ -111,7 +112,8 @@ every(3600, "the foreign chunks", when_multi(chunks.sweep))
 -- poll of the game.
 every(1, "the connector queue", when_multi(connector.tick))
 every(1, "the demand queue", when_multi(demand.tick))
-every(600, "the planet connector freshness", when_multi(connector.refresh_spoilage))
+every(60, "the planet connector freshness", when_multi(connector.refresh_spoilage))
+every(60, "the ledger probe", when_multi(connector.tick_sync))
 
 every(18000, "the demand audit", when_multi(function() demand.queue("audit") end))
 
@@ -163,9 +165,7 @@ end
 script.on_init(function()
     guard("on_init", function()
         state.ensure_storage()
-        if rcon then
-            storage.connector_ready_pending = true
-        end
+        storage.connector_ready_pending = true
         log("[" .. MOD .. "] instance=" .. state.instance())
         convert.disable_crash_site()
         convert.ensure_surfaces()
@@ -182,7 +182,7 @@ script.on_configuration_changed(function()
         -- A save written before this build can be older than the spoil timers of every egg
         -- in the connector hubs. Reset them here, while the save is being configured and
         -- before the first normal tick, rather than waiting for the 10-second sweep.
-        if rcon then
+        if bus.is_server() then
             connector.refresh_spoilage()
         end
         storage.schema = SCHEMA
@@ -196,9 +196,7 @@ script.on_configuration_changed(function()
 
         -- Connector hubs are not cleared on a mod update. Their contents are part of the
         -- world the player built; clearing them made an update look like items vanished.
-        if rcon then
-            storage.connector_ready_pending = true
-        end
+        storage.connector_ready_pending = true
         if state.is_multi() then
             convert.disable_crash_site()
             convert.ensure_surfaces()
@@ -219,9 +217,7 @@ end)
 -- server once the identity has arrived.
 script.on_load(function()
     guard("on_load", function()
-        if rcon then
-            connector.mark_boot()
-        end
+        connector.mark_boot()
     end)
 end)
 

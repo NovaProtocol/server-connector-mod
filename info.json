@@ -1,6 +1,6 @@
 {
   "name": "server-connector-mod",
-  "version": "0.40.8",
+  "version": "0.41.0",
   "title": "Server Connector",
   "author": "NovaProtocol",
   "contact": "https://github.com/NovaProtocol/server-connector-mod",
@@ -9,6 +9,7 @@
   "factorio_version": "2.1",
   "dependencies": [
     "base >= 2.0",
+    "udp-net >= 1.0.0",
     "? space-age"
   ]
 }
