@@ -116,7 +116,6 @@ every(3600, "the foreign chunks", when_multi(chunks.sweep))
 -- poll of the game.
 every(1, "the connector queue", when_multi(connector.tick))
 every(1, "the demand queue", when_multi(demand.tick))
-every(600, "the planet connector freshness", when_multi(connector.refresh_spoilage))
 
 -- The space save carries a Nauvis surface that is not a playable body. Clear whatever was
 -- generated on it at boot, once, after the topology has arrived. If a player is connected

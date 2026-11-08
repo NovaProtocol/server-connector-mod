@@ -1,4 +1,9 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.40.7
+Date: 2026-11-08
+  Fixed:
+    - the periodic freshness sweep is disabled. It could run while a client was still connecting (before connected_players included them) and caused a CRC desync on space join. Freshness is now reset only during configuration/startup and while the fleet is empty.
+---------------------------------------------------------------------------------------------------
 Version: 0.40.6
 Date: 2026-11-08
   Fixed:
