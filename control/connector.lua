@@ -658,8 +658,19 @@ local function refresh_platform(platform)
         local stack = inventory[index]
         if stack and stack.valid_for_read and stack.count > 0 then
             local percent = tonumber(stack.spoil_percent) or 0
-            if percent > 0 and pcall(function() stack.spoil_percent = 0 end) then
-                reset = reset + 1
+            if percent > 0 then
+                local total = tonumber(stack.prototype.spoil_ticks) or 0
+                local ok = pcall(function()
+                    -- percent alone is not enough: an old absolute spoil_tick can still
+                    -- convert the stack on the next engine pass. Give it a full fresh timer.
+                    stack.spoil_percent = 0
+                    if total > 0 then
+                        stack.spoil_tick = game.tick + total
+                    end
+                end)
+                if ok then
+                    reset = reset + 1
+                end
             end
         end
     end

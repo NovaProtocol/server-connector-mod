@@ -1,4 +1,9 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.40.4
+Date: 2026-11-08
+  Fixed:
+    - freshness reset now rewrites spoil_tick as well as spoil_percent. Resetting only the percentage left an expired absolute timer that could still convert the stack.
+---------------------------------------------------------------------------------------------------
 Version: 0.40.3
 Date: 2026-11-08
   Fixed:
