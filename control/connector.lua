@@ -641,15 +641,11 @@ local function enforce_providing()
     end
 end
 
--- Planet connector hubs keep their spoilable stock fresh. This is deliberately limited to
--- the planet-side connector: the space copies are views and must not acquire a different
--- spoil state from the hub they mirror. spoil_percent is the percent spoiled, so writing 0
--- is 100% freshness; only stacks that have already moved off fresh are written.
-local function refresh_spoilage()
-    if role() ~= "planet" or not known() then
-        return 0
-    end
-    local platform = find_connector(INSTANCE())
+-- Both copies of every planet connector keep their spoilable stock fresh. The planet
+-- server owns one connector; the space server owns one connector per planet. A real
+-- platform hub is not a connector and is not touched. spoil_percent is the percent
+-- spoiled, so writing 0 is 100% freshness; only stacks already off fresh are written.
+local function refresh_platform(platform)
     if not platform or not platform.hub or not platform.hub.valid then
         return 0
     end
@@ -670,38 +666,19 @@ local function refresh_spoilage()
     return reset
 end
 
--- Diagnostic read for the manager: which connector hubs carry spoilable stacks and how
--- spoiled each one is. It does not change anything.
-local function spoilage_report()
-    local out = {instance = INSTANCE(), role = role(), platforms = {}}
-    local ids = role() == "planet" and {INSTANCE()} or planets()
-    for _, planet in ipairs(ids) do
-        local platform = find_connector(planet)
-        local row = {planet = planet, stacks = {}}
-        if platform and platform.hub and platform.hub.valid then
-            local inventory = platform_api.hub_inventory(platform.hub)
-            if inventory then
-                for index = 1, #inventory do
-                    local stack = inventory[index]
-                    if stack and stack.valid_for_read and stack.count > 0 then
-                        local percent = tonumber(stack.spoil_percent) or 0
-                        if percent > 0 then
-                            row.stacks[#row.stacks + 1] = {
-                                item = stack.name,
-                                quality = platform_api.quality_name
-                                    and platform_api.quality_name(stack.quality) or "normal",
-                                count = stack.count,
-                                spoil_percent = percent,
-                                spoil_tick = stack.spoil_tick,
-                            }
-                        end
-                    end
-                end
-            end
-        end
-        out.platforms[#out.platforms + 1] = row
+local function refresh_spoilage()
+    if not known() then
+        return 0
     end
-    return out
+    local reset = 0
+    if role() == "planet" then
+        reset = refresh_platform(find_connector(INSTANCE()))
+    else
+        for _, planet in ipairs(planets()) do
+            reset = reset + refresh_platform(find_connector(planet))
+        end
+    end
+    return reset
 end
 
 local function ensure_all()

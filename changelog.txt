@@ -1,4 +1,9 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.40.2
+Date: 2026-11-08
+  Fixed:
+    - freshness reset now covers both copies of every planet connector: the planet hub and the matching space-side hub. Real platform hubs are untouched.
+---------------------------------------------------------------------------------------------------
 Version: 0.40.1
 Date: 2026-11-08
   Fixed:
