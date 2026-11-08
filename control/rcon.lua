@@ -327,6 +327,7 @@ local calls = {
     connector_cargo_page = connector.hub_cargo_page,
     connector_probe = connector.probe,
     connector_edit = connector.edit,
+    connector_spoilage = connector.spoilage_report,
 
     -- Pending platform requests named on the wrong planet server (requests).
     request_platform = requests.create,

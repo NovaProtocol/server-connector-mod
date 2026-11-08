@@ -670,6 +670,40 @@ local function refresh_spoilage()
     return reset
 end
 
+-- Diagnostic read for the manager: which connector hubs carry spoilable stacks and how
+-- spoiled each one is. It does not change anything.
+local function spoilage_report()
+    local out = {instance = INSTANCE(), role = role(), platforms = {}}
+    local ids = role() == "planet" and {INSTANCE()} or planets()
+    for _, planet in ipairs(ids) do
+        local platform = find_connector(planet)
+        local row = {planet = planet, stacks = {}}
+        if platform and platform.hub and platform.hub.valid then
+            local inventory = platform_api.hub_inventory(platform.hub)
+            if inventory then
+                for index = 1, #inventory do
+                    local stack = inventory[index]
+                    if stack and stack.valid_for_read and stack.count > 0 then
+                        local percent = tonumber(stack.spoil_percent) or 0
+                        if percent > 0 then
+                            row.stacks[#row.stacks + 1] = {
+                                item = stack.name,
+                                quality = platform_api.quality_name
+                                    and platform_api.quality_name(stack.quality) or "normal",
+                                count = stack.count,
+                                spoil_percent = percent,
+                                spoil_tick = stack.spoil_tick,
+                            }
+                        end
+                    end
+                end
+            end
+        end
+        out.platforms[#out.platforms + 1] = row
+    end
+    return out
+end
+
 local function ensure_all()
     if not known() then
         return {ok = false, skipped = "no identity"}
@@ -1838,38 +1872,10 @@ end
 local function tick()
     storage_ready()
 
-    -- One-shot: a hub that was over-delivered keeps its stock for ever, because nothing
-    -- spends it. Empty the connector hubs once per build, after identity is known, so the
-    -- request cap can be watched from zero. Ships are untouched.
-    -- Diagnostic reset: a connector rebuilt from scratch starts empty, which is the reliable
-    -- way to begin from zero. ensure_all makes a fresh one on the next pass.
-    local build = (script.active_mods or {})["server-connector-mod"]
-    if build and storage.connectors_rebuilt ~= build then
-        local seen, removed = 0, 0
-        for _, platform in pairs(force().platforms or {}) do
-            if platform.valid and is_connector(platform) then
-                seen = seen + 1
-                pcall(function()
-                    if platform.hub and platform.hub.valid then
-                        platform.hub.destructible = true
-                        platform.hub.minable_flag = true
-                    end
-                    platform.cancel_deletion()
-                    platform.destroy(2)
-                end)
-                removed = removed + 1
-            end
-        end
-        -- Done once a connector was removed, and also on an instance that has none: a server
-        -- with no connector must not retry and log every tick.
-        if removed > 0 or seen == 0 then
-            storage.connectors_rebuilt = build
-            storage.base_grid_done = nil
-            storage.connector_retry = nil
-            log(string.format("[%s] connector reset: build=%s seen=%d removed=%d",
-                INSTANCE(), tostring(build), seen, removed))
-        end
-    end
+    -- Connector hubs represent a player's work and stock. A mod update must not rebuild
+    -- them: the old per-build diagnostic reset did exactly that and wiped every bay and
+    -- inventory item. Missing or hubless connectors are repaired by ensure_all/create_platform
+    -- without touching a healthy one.
 
     -- Tell the manager this instance is loaded. One datagram per boot, sent from the
     -- server only (the RCON global exists there), after the identity has arrived. The
@@ -2048,6 +2054,7 @@ return {
     set_groups = set_groups,
     enforce_providing = enforce_providing,
     refresh_spoilage = refresh_spoilage,
+    spoilage_report = spoilage_report,
     read_groups = read_groups,
     read_cargo = read_cargo,
     read_layout = read_layout,

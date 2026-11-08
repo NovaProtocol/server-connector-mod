@@ -1,4 +1,11 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.40.1
+Date: 2026-11-08
+  Fixed:
+    - a mod update no longer destroys and recreates every connector platform, and no longer clears connector hub inventories. That reset wiped the cargo-bay layout and every item in the hub, which looked like a random loss.
+  Added:
+    - connector_spoilage is a read-only diagnostic for reproducing freshness issues.
+---------------------------------------------------------------------------------------------------
 Version: 0.40.0
 Date: 2026-11-07
   Added:
