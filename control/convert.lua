@@ -601,6 +601,54 @@ local function clear_body_chunks()
     return removed
 end
 
+-- Drop the space server's copy of Nauvis on every process start. This is not the surface
+-- deletion the API refuses: every entity is destroyed and every generated chunk is then
+-- deleted, leaving no buildings, resources or terrain behind. A connected player defers it,
+-- because deleting a surface's chunks under a client is a desync; the startup retry runs
+-- until the server is empty.
+local function clear_nauvis_on_space()
+    if instance() ~= "space" then
+        return true
+    end
+    if not empty() then
+        return false
+    end
+
+    local surface = body()
+    if not surface or not surface.valid then
+        return true
+    end
+
+    local entities = 0
+    local ok, list = pcall(function() return surface.find_entities_filtered{} end)
+    if ok and type(list) == "table" then
+        for _, entity in ipairs(list) do
+            if entity.valid and pcall(function() entity.destroy() end) then
+                entities = entities + 1
+            end
+        end
+    end
+
+    local positions = {}
+    local okc = pcall(function()
+        for chunk in surface.get_chunks() do
+            positions[#positions + 1] = {x = chunk.x, y = chunk.y}
+        end
+    end)
+    local chunks = 0
+    if okc then
+        for _, position in ipairs(positions) do
+            if pcall(function() surface.delete_chunk(position) end) then
+                chunks = chunks + 1
+            end
+        end
+    end
+
+    log(string.format("[%s] cleared %s on startup: %d entity/entities, %d chunk(s)",
+        instance(), BODY, entities, chunks))
+    return true
+end
+
 return {
     disable_crash_site = disable_crash_site,
     ensure_surfaces = ensure_surfaces,
@@ -608,6 +656,7 @@ return {
     sweep_asteroids = sweep_asteroids,
     keep_body_calm = keep_body_calm,
     clear_body_chunks = clear_body_chunks,
+    clear_nauvis_on_space = clear_nauvis_on_space,
     spawn_on_owned_surface = spawn_on_owned_surface,
 
     create_custom_surfaces = create_custom_surfaces,

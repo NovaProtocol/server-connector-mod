@@ -641,6 +641,35 @@ local function enforce_providing()
     end
 end
 
+-- Planet connector hubs keep their spoilable stock fresh. This is deliberately limited to
+-- the planet-side connector: the space copies are views and must not acquire a different
+-- spoil state from the hub they mirror. spoil_percent is the percent spoiled, so writing 0
+-- is 100% freshness; only stacks that have already moved off fresh are written.
+local function refresh_spoilage()
+    if role() ~= "planet" or not known() then
+        return 0
+    end
+    local platform = find_connector(INSTANCE())
+    if not platform or not platform.hub or not platform.hub.valid then
+        return 0
+    end
+    local inventory = platform_api.hub_inventory(platform.hub)
+    if not inventory then
+        return 0
+    end
+    local reset = 0
+    for index = 1, #inventory do
+        local stack = inventory[index]
+        if stack and stack.valid_for_read and stack.count > 0 then
+            local percent = tonumber(stack.spoil_percent) or 0
+            if percent > 0 and pcall(function() stack.spoil_percent = 0 end) then
+                reset = reset + 1
+            end
+        end
+    end
+    return reset
+end
+
 local function ensure_all()
     if not known() then
         return {ok = false, skipped = "no identity"}
@@ -2018,6 +2047,7 @@ return {
     quiet_trash = quiet_trash,
     set_groups = set_groups,
     enforce_providing = enforce_providing,
+    refresh_spoilage = refresh_spoilage,
     read_groups = read_groups,
     read_cargo = read_cargo,
     read_layout = read_layout,

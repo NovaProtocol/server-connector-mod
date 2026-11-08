@@ -1,4 +1,12 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.40.0
+Date: 2026-11-07
+  Added:
+    - planet connector hubs reset every spoilable stack to 100% freshness every 10 seconds. The space-side copies are not touched.
+    - the space server clears every entity and generated chunk from its unused Nauvis surface on startup, once no player is connected.
+  Changed:
+    - platform requests with no import planet (missing, empty, any or all) are no longer copied into every planet's automatic Outgoing group.
+---------------------------------------------------------------------------------------------------
 Version: 0.39.9
 Date: 2026-11-06
   Fixed:

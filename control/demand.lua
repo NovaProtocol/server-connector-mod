@@ -128,15 +128,10 @@ local function planets_for(entry, totals)
     local target = entry.import_from
     local lowered = target ~= nil and string.lower(target) or nil
     if target == nil or target == "" or lowered == "any" or lowered == "all" then
-        local all = {}
-        for planet in pairs(totals) do
-            all[#all + 1] = planet
-        end
-        table.sort(all)
-        if #all == 0 then
-            return nil, "no planets"
-        end
-        return all
+        -- A request with no import planet is not a fleet request. It can be a personal
+        -- item the platform keeps, but it must not be copied into every planet's
+        -- automatic Outgoing group.
+        return nil, "no import planet"
     end
     if not totals[target] then
         return nil, "no hub for " .. tostring(target)

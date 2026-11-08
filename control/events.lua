@@ -35,6 +35,11 @@ local MOD = state.MOD
 local SCHEMA = state.SCHEMA
 local instance = state.instance
 
+-- Module-local on purpose: on_load cannot touch storage, and this has to run once after
+-- every process start rather than once per save. Set on the server only; a client's load
+-- must not run a world change.
+local space_nauvis_clear_pending = false
+
 -- Everything a handler does is wrapped in this.
 --
 -- An error raised from an event handler is non-recoverable in Factorio: the server quits,
@@ -111,6 +116,16 @@ every(3600, "the foreign chunks", when_multi(chunks.sweep))
 -- poll of the game.
 every(1, "the connector queue", when_multi(connector.tick))
 every(1, "the demand queue", when_multi(demand.tick))
+every(600, "the planet connector freshness", when_multi(connector.refresh_spoilage))
+
+-- The space save carries a Nauvis surface that is not a playable body. Clear whatever was
+-- generated on it at boot, once, after the topology has arrived. If a player is connected
+-- the helper returns false and this retries on the next tick rather than desyncing them.
+every(1, "the space nauvis reset", when_multi(function()
+    if space_nauvis_clear_pending and convert.clear_nauvis_on_space() then
+        space_nauvis_clear_pending = false
+    end
+end))
 every(18000, "the demand audit", when_multi(function() demand.queue("audit") end))
 
 -- Research progress is pushed over UDP only when it moved, once a second.
@@ -170,6 +185,9 @@ script.on_init(function()
         convert.keep_body_calm()
         connector.ensure_all()
         restore_speed()
+        if rcon then
+            space_nauvis_clear_pending = true
+        end
         debug.boot()
     end)
 end)
@@ -218,6 +236,9 @@ script.on_configuration_changed(function()
             connector.ensure_all()
         end
         restore_speed()
+        if rcon then
+            space_nauvis_clear_pending = true
+        end
         -- Every player in the save gets the new one-button server menu, and the old
         -- per-server frame is removed if this save still has one.
         map.refresh_all()
@@ -233,6 +254,7 @@ script.on_load(function()
     guard("on_load", function()
         if rcon then
             connector.mark_boot()
+            space_nauvis_clear_pending = true
         end
     end)
 end)
