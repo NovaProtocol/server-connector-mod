@@ -1,4 +1,9 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.40.6
+Date: 2026-11-08
+  Fixed:
+    - automatic request-group writes are deferred while any player is connected, and the freshness sweep also waits for an empty fleet. Live script writes to hub groups/inventories were not client-replicated and caused space joins to desync after a landing-pad edit.
+---------------------------------------------------------------------------------------------------
 Version: 0.40.5
 Date: 2026-11-08
   Fixed:

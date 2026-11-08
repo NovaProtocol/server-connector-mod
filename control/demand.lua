@@ -296,6 +296,11 @@ local function tick()
     if not why or not state.known() then
         return
     end
+    -- Request-group writes are script world changes and are not replicated to a client.
+    -- Defer them while anybody is connected; the queue survives until the fleet is empty.
+    if not state.empty() then
+        return
+    end
     if game.tick < (storage.demand_not_before or 0) then
         return
     end
