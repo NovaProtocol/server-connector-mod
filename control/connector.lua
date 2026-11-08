@@ -681,6 +681,38 @@ local function refresh_spoilage()
     return reset
 end
 
+-- Read-only diagnostic for the manager: spoilable stacks in the connector hubs and their
+-- current spoil percentages.
+local function spoilage_report()
+    local out = {instance = INSTANCE(), role = role(), platforms = {}}
+    local ids = role() == "planet" and {INSTANCE()} or planets()
+    for _, planet in ipairs(ids) do
+        local platform = find_connector(planet)
+        local row = {planet = planet, stacks = {}}
+        if platform and platform.hub and platform.hub.valid then
+            local inventory = platform_api.hub_inventory(platform.hub)
+            if inventory then
+                for index = 1, #inventory do
+                    local stack = inventory[index]
+                    if stack and stack.valid_for_read and stack.count > 0 then
+                        local percent = tonumber(stack.spoil_percent) or 0
+                        if percent > 0 then
+                            row.stacks[#row.stacks + 1] = {
+                                item = stack.name,
+                                count = stack.count,
+                                spoil_percent = percent,
+                                spoil_tick = stack.spoil_tick,
+                            }
+                        end
+                    end
+                end
+            end
+        end
+        out.platforms[#out.platforms + 1] = row
+    end
+    return out
+end
+
 local function ensure_all()
     if not known() then
         return {ok = false, skipped = "no identity"}

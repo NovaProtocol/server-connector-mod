@@ -195,6 +195,12 @@ end)
 script.on_configuration_changed(function()
     guard("on_configuration_changed", function()
         state.ensure_storage()
+        -- A save written before this build can be older than the spoil timers of every egg
+        -- in the connector hubs. Reset them here, while the save is being configured and
+        -- before the first normal tick, rather than waiting for the 10-second sweep.
+        if rcon then
+            connector.refresh_spoilage()
+        end
         storage.schema = SCHEMA
         storage.platform_streams = nil
         storage.meta_seen = nil

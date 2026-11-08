@@ -1,4 +1,11 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.40.3
+Date: 2026-11-08
+  Fixed:
+    - the first configuration change after loading an older save resets connector freshness immediately, before the first normal spoilage tick, instead of waiting up to 10 seconds.
+  Added:
+    - connector_spoilage diagnostic returns the spoil percentages from both copies of every planet connector.
+---------------------------------------------------------------------------------------------------
 Version: 0.40.2
 Date: 2026-11-08
   Fixed:
