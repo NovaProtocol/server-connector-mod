@@ -659,7 +659,10 @@ local function refresh_platform(platform)
         if stack and stack.valid_for_read and stack.count > 0 then
             local percent = tonumber(stack.spoil_percent) or 0
             if percent > 0 then
-                local total = tonumber(stack.prototype.spoil_ticks) or 0
+                -- spoil_ticks is optional on item prototypes; reading it directly throws for
+                -- every non-spoiling item in the hub and aborted the whole sweep.
+                local okp, total = pcall(function() return stack.prototype.spoil_ticks end)
+                total = okp and tonumber(total) or 0
                 local ok = pcall(function()
                     -- percent alone is not enough: an old absolute spoil_tick can still
                     -- convert the stack on the next engine pass. Give it a full fresh timer.

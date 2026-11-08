@@ -1,4 +1,9 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.40.5
+Date: 2026-11-08
+  Fixed:
+    - freshness reset no longer aborts on the first non-spoiling item. `spoil_ticks` is optional and is now read defensively, so the sweep actually reaches the eggs and other spoilables.
+---------------------------------------------------------------------------------------------------
 Version: 0.40.4
 Date: 2026-11-08
   Fixed:
