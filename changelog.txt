@@ -1,4 +1,10 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.40.8
+Date: 2026-11-08
+  Fixed:
+    - removed the space-server Nauvis startup clear. The server log shows it deleting 3312 entities and 113 chunks on the same tick the client was catching up, immediately before the first CRC failure.
+    - reverted the 0.40.6 live-write gate and the 0.40.7 periodic-sweep removal; neither was the cause.
+---------------------------------------------------------------------------------------------------
 Version: 0.40.7
 Date: 2026-11-08
   Fixed:

@@ -681,7 +681,7 @@ local function refresh_platform(platform)
 end
 
 local function refresh_spoilage()
-    if not known() or not state.empty() then
+    if not known() then
         return 0
     end
     local reset = 0
