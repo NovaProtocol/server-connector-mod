@@ -1,4 +1,13 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.41.2
+Date: 2026-11-14
+  Fixed:
+    - the connector's nth-tick dispatcher now calls net.poll(). udp-net registers its own
+      on_nth_tick(1) poll, but Factorio keeps one handler per interval and the connector's
+      dispatcher is registered afterwards, replacing it. helpers.recv_udp() was therefore
+      never called: inbound manager RPCs sat unread in the game's UDP socket and every call
+      timed out, while outbound connector events kept working.
+---------------------------------------------------------------------------------------------------
 Version: 0.41.1
 Date: 2026-11-09
   Fixed:

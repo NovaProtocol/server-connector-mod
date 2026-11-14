@@ -37,6 +37,7 @@ return {
     UDP_PORT = UDP_PORT,
     epoch = epoch,
     push = push,
+    poll = net.poll,
     is_server = net.is_server,
     mark_server = net.mark_server,
     reset_epoch = net.reset_epoch,

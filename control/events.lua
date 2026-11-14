@@ -107,6 +107,11 @@ end))
 -- body in it is kept: that is the joining player or a copy from another save.
 every(3600, "the foreign chunks", when_multi(chunks.sweep))
 
+-- The UDP transport owns an nth_tick poll of its own, but Factorio keeps one handler per
+-- interval and this dispatcher is registered after it. Drain the socket here or no inbound
+-- request is ever read: the game's receive queue grows while every manager call times out.
+every(1, "the udp transport", bus.poll)
+
 -- The connector queue: one pass per tick, and it does nothing unless an edit, a build or
 -- a refund is waiting. The queue is empty in the common case, so this is a dispatch, not a
 -- poll of the game.
